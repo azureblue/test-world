@@ -1,5 +1,36 @@
 import {Matrix3, Matrix4, Matrix4x4} from "./matrixgl/matrix.js"
 
+class Face {
+    constructor(vertices, indices) {
+        this.vertices = new Float32Array(vertices);
+        this.indices = new Int16Array(indices);
+    }
+}
+class CubeSpec {    
+    
+    static vertices = new Float32Array([
+        //front face
+        0, 0, 0, // 0
+        0, 1, 0, // 1
+        1, 1, 0, // 2
+        1, 0, 0, // 3
+        //back face
+        0, 0, 1, // 4
+        0, 1, 1, // 5
+        1, 1, 1, // 6
+        1, 0, 1  // 7
+    ]);
+    static frontFaceIds = new Uint16Array([
+        0, 1, 2, 0, 2, 3
+    ]);
+    static backFaceIds = new Uint16Array([
+        0 + 4, 2 + 4, 1 + 4, 0 + 4, 3 + 4, 2 + 4
+    ]);
+    static leftFaceIds = new Uint16Array([
+        0, 4, 5, 0, 5, 1
+    ]);
+}
+
 export function start() {
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
@@ -7,11 +38,12 @@ export function start() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     gl.viewport(0, 0, canvas.width, canvas.height);
+    const canvasAspect = canvas.width / canvas.height;
 
     gl.clearColor(0.2, 0.2, 0.2, 1);
     gl.enable(gl.DEPTH_TEST);
-    gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.BACK);
+    // gl.enable(gl.CULL_FACE);
+    // gl.cullFace(gl.BACK);
 
     document.body.style.margin = "0";
     document.body.style.overflow = "hidden";
@@ -69,7 +101,9 @@ void main() {
 
     const vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, squareVertices, gl.STATIC_DRAW);
+    // gl.bufferData(gl.ARRAY_BUFFER, squareVertices, gl.STATIC_DRAW);
+    const cubeVxs = CubeSpec.vertices;
+    gl.bufferData(gl.ARRAY_BUFFER, cubeVxs, gl.STATIC_DRAW);
 
     const aPosition = gl.getAttribLocation(program, "a_position");
     gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
@@ -77,7 +111,11 @@ void main() {
 
     const ibo = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, squareIndices, gl.STATIC_DRAW);
+    
+    // const cuveIdx = Uint16Array.from([...CubeSpec.frontFaceIds, ...CubeSpec.backFaceIds, ...CubeSpec.leftFaceIds]);
+    const cuveIdx = Uint16Array.from([...CubeSpec.leftFaceIds]);
+    // gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, squareIndices, gl.STATIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cuveIdx, gl.STATIC_DRAW);
 
     // const aColor = gl.getAttribLocation(program, "a_color");
     // gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, 24, 12);
@@ -85,16 +123,29 @@ void main() {
     
     
     const uMatrix = gl.getUniformLocation(program, "u_matrix");
+    let time = 0;
     //const mat = Matrix4.translation(-1, -1, 0).mulByMatrix4( Matrix4.scaling(0.5, 0.5, 1));
-    const mat = Matrix4.scaling(0.5, 0.5, 1).mulByMatrix4(Matrix4.translation(-1, -1, 0));
-
+    
     function draw() {
+        time++;
+        const mat = Matrix4.identity()
+        .scale(0.5, 0.5 * canvasAspect, 0.5)        
+        .translate(-0.5, -0.5, -0.5)
+        // .rotateX((time % 360) / 360 * Math.PI * 2)
+               
+        .rotateY(time / 360 * Math.PI * 2)
+        
+            
+            // .mulByMatrix4(Matrix4.rotationX(((time / 2) % 360) / 360 * Math.PI * 2))
+            // .mulByMatrix4(Matrix4.rotationY((time % 360) / 360 * Math.PI * 2));
+            ;
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // modelViewMatrix[14] = -3;
+        
 
         gl.uniformMatrix4fv(uMatrix, false, mat.values);
-        gl.drawElements(gl.TRIANGLES, squareIndices.length, gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, cuveIdx.length, gl.UNSIGNED_SHORT, 0);
         requestAnimationFrame(draw);
     }
 
