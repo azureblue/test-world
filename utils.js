@@ -6,8 +6,10 @@ class ArrayBuffer {
      * @param {Function} ArrayClass
      * @param {number} initialSize 
      */
-    constructor(ArrayClass, initialSize) {        
+    constructor(ArrayClass, initialSize) {
         this.#pos = 0;
+        if (initialSize === undefined) 
+            initialSize = 4;
         this.#array = new ArrayClass(initialSize);
     }
 
@@ -16,32 +18,82 @@ class ArrayBuffer {
      */
     add(elements) {
         if (this.#array.length - this.#pos < elements.length) {
-            const tmp = this.#array;
-            this.#array.slice
-            this.#array = new this.#array.constructor(tmp.length * 2);
-            this.#array.set(tmp);
+            this.extendSize();
             this.add(elements);
         } else {
             this.#array.set(elements, this.#pos);
             this.#pos += elements.length;
-        }        
+        }
     }
 
+    extendSize() {
+        const tmp = this.#array;
+        this.#array.slice;
+        this.#array = new this.#array.constructor(tmp.length * 2);
+        this.#array.set(tmp);
+    }
+
+    /**
+     * @param {ArrayLike<number>} elements
+     * @param {number} [firstCoord]  
+     * @param {number} [secondCoord]  
+     * @param {number} [thirdCoord]  
+     */
+    addTranslated(elements, firstCoord = 0, secondCoord, thirdCoord) {
+        if (this.#array.length - this.#pos < elements.length) {
+            this.extendSize();
+            this.addTranslated(elements, firstCoord, secondCoord, thirdCoord);
+        } else {
+            this.#array.set(elements, this.#pos);
+            let stride = 1;
+            if (secondCoord !== undefined)
+                stride++;
+            if (thirdCoord !== undefined)
+                stride++;
+
+            if (stride == 1) {
+                for (let i = 0; i < elements.length; i++) {
+                    this.#array[this.#pos + i] += firstCoord;
+                }
+            } else if (stride == 2) {
+                for (let i = 0; i < elements.length; i+=2) {
+                    this.#array[this.#pos + i] += firstCoord;
+                    this.#array[this.#pos + i + 1] += secondCoord;
+                }
+            } else if (stride == 3) {
+                for (let i = 0; i < elements.length; i+=3) {
+                    this.#array[this.#pos + i] += firstCoord;
+                    this.#array[this.#pos + i + 1] += secondCoord;
+                    this.#array[this.#pos + i + 2] += thirdCoord;
+                }
+            }
+            this.#pos += elements.length;
+        }
+    }
+
+    /**
+     * 
+     * @returns {Float32Array | Uint16Array}
+     */
     trimmed() {
         return this.#array.subarray(0, this.#pos);
     }
+
+    get length() {
+        return this.#pos;
+    }
 }
 
-class Float32Buffer extends ArrayBuffer{
+class Float32Buffer extends ArrayBuffer {
     /**
-     * @param {number} initialSize 
+     * @param {number} [initialSize]
      */
     constructor(initialSize) {
         super(Float32Array, initialSize);
     }
 }
 
-class UInt16Buffer extends ArrayBuffer{
+class UInt16Buffer extends ArrayBuffer {
     /**
      * @param {number} initialSize 
      */
