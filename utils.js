@@ -102,6 +102,12 @@ class UInt16Buffer extends ArrayBuffer {
     }
 }
 
+class Resources {
+    static async loadText(src) {
+        return await fetch(src).then(r => r.text())
+    }
+}
+
 export {
-    Float32Buffer, UInt16Buffer
+    Float32Buffer, UInt16Buffer, Resources
 }
