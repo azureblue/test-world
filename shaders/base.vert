@@ -1,14 +1,9 @@
 attribute vec3 a_position;
-attribute vec3 a_color;
-attribute vec2 aTextureCoord;
-varying vec3 v_color;
-uniform mat4 u_matrix;
+attribute vec2 a_tex_coord;
+uniform mat4 u_matat;
 uniform mat4 r_matrix;
-varying highp vec2 vTextureCoord;
-
+varying highp vec2 a_tex_coord;
 void main() {
-    gl_Position = r_matrix * u_matrix * vec4(a_position, 1.0);
-    v_color = a_color; //vec3(0.5, 0.0, 0.8);
-    
-    vTextureCoord = aTextureCoord;
+    gl_Position = r_matrix * u_matrix * vec4(a_position, 1.0);        
+    vTextureCoord = a_tex_coord
 }
