@@ -4,12 +4,8 @@ import { Mat4, Vec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { Float32Buffer, Resources, UInt16Buffer } from "./utils.js";
 
-export function start() {
-    const img = new Image();
-    img.onload = () => start2(img);
-    img.src = "./images/textures.png";
-}
-async function start2(img) {
+export async function start() {
+    const textures = await Resources.loadImage("./images/textures.png");
 
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
@@ -29,6 +25,8 @@ async function start2(img) {
 
 
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -36,9 +34,9 @@ async function start2(img) {
     const canvasAspect = canvas.width / canvas.height;
 
     gl.clearColor(0.2, 0.2, 0.2, 1);
-    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.DEPTH_TEST) ; 
     gl.frontFace(gl.CCW);
-    // gl.enable(gl.CULL_FACE);
+    gl.enable(gl.CULL_FACE);  
     gl.cullFace(gl.BACK);
 
 
@@ -46,7 +44,7 @@ async function start2(img) {
     document.body.style.overflow = "hidden";
 
     baseProgram.use();
-    const atlas = new TextureAtlas(img, 16);
+    const atlas = new TextureAtlas(textures, 16);
     atlas.prepare(gl);
     atlas.bind(gl, 0);
 
@@ -58,15 +56,27 @@ async function start2(img) {
     const cubeUVs = new Float32Buffer();
     const cubeIdxs = new UInt16Buffer();
 
-    const offset = new Vec3(-0.5, -0.5, -0.5);
+    let offset = new Vec3(0, 0, 0)
+    atlas.uvRect(float8, 2);
     cubeGen.genFace(Direction.FRONT, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
     cubeGen.genFace(Direction.LEFT, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
-    // cubeGen.genFace(Direction.BACK, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
-    // cubeGen.genFace(Direction.RIGHT, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    cubeGen.genFace(Direction.BACK, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    cubeGen.genFace(Direction.RIGHT, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
     atlas.uvRect(float8, 0);
     cubeGen.genFace(Direction.UP, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
     atlas.uvRect(float8, 1);
-    // cubeGen.genFace(Direction.DOWN, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    cubeGen.genFace(Direction.DOWN, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+
+    offset = new Vec3(2, 0, 0)
+    atlas.uvRect(float8, 2);
+    cubeGen.genFace(Direction.FRONT, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    cubeGen.genFace(Direction.LEFT, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    cubeGen.genFace(Direction.BACK, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    cubeGen.genFace(Direction.RIGHT, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    atlas.uvRect(float8, 0);
+    cubeGen.genFace(Direction.UP, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
+    atlas.uvRect(float8, 1);
+    cubeGen.genFace(Direction.DOWN, cubeVs, undefined, cubeUVs, cubeIdxs, offset, float8);
 
 
     const texCoordBuffer = gl.createBuffer();
@@ -98,24 +108,21 @@ async function start2(img) {
     const aTexCoord = baseProgram.getAttribLocation("a_tex_coord");
     const attrCoordLines = coordsProgram.getAttribLocation("a_position");
     const attrCoordLinesColors = coordsProgram.getAttribLocation("a_color");
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.enableVertexAttribArray(aPosition);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.bufferData(gl.ARRAY_BUFFER, cubeVs.trimmed(), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(aPosition);
     gl.enableVertexAttribArray(attrCoordLines);
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, cbo);
-    gl.bufferData(gl.ARRAY_BUFFER, CubeSpec.colors, gl.STATIC_DRAW);
 
     const ibo = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeIdxs.trimmed(), gl.STATIC_DRAW);
 
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0,);
-    gl.enableVertexAttribArray(aTexCoord);
+
 
     const uMatrix = baseProgram.getUniformLocation("u_matrix");
     const rMatrix = baseProgram.getUniformLocation("r_matrix");
@@ -144,12 +151,33 @@ async function start2(img) {
     function draw() {
         if (run)
             time++;
+        const fieldOfView = (70 * Math.PI) / 180; // in radians
+        const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+        const zNear = 0.1;
+        const zFar = 1000.0;
+        const matP = Mat4.perspective({
+            aspectRatio: aspect,
+            fovYRadian: fieldOfView,
+            far: zFar,
+            near: zNear
+        });
+        // const matP = Mat4.orthographic({
+        //         bottom: -4,
+        //         left: -4,
+        //         right: 4,
+        //         top: 4,
+        //         far: -8,
+        //         near: 8
+        //     });
+
+        const modelM = Mat4.translation(0, 0, -15).rotateAround(new Vec3(0.5, 1, 0).normalize(), (time % 360) / 360 * Math.PI * 2);
+
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
         gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
 
         const mat = Mat4.identity()
             //  .translate(-0.5, -0.5, -0.5)
-            // .scale(0.5, 0.5, 0.5);
+             .scale(0.5, 0.5, 0.5);
 
 
             // .rotateX((time % 360) / 360 * Math.PI * 2)
@@ -165,13 +193,15 @@ async function start2(img) {
             //.rotateY((time % 360) / 360 * Math.PI * 2)
             // .rotateX((time % 360) / 360 * Math.PI * 2)
             ;
-        const worlds = Mat4.perspective({
-            aspectRatio: 1,
-            near: 0.1,
-            far: 1000,
-            fovYRadian: Math.PI
+        // const worlds = Mat4.orthographic({
+        //     bottom: -8,
+        //     left: -8,
+        //     right: 8,
+        //     top: 8,
+        //     far: 8,
+        //     near: -8
+        // });
 
-        });
         // const mat_r = Matrix4.rotationY((time % 360) / 360 * Math.PI * 2);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -181,18 +211,22 @@ async function start2(img) {
 
 
         baseProgram.use();
-        gl.uniformMatrix4fv(uMatrix, false, mat.values);
-        gl.uniformMatrix4fv(rMatrix, false, mat_r.values);
+        gl.uniformMatrix4fv(uMatrix, false, modelM.values);
+        // gl.uniformMatrix4fv(uMatrix, false, mat.values);
+        gl.uniformMatrix4fv(rMatrix, false, matP.values);
+        // gl.uniformMatrix4fv(rMatrix, false, mat_r.values);
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo)
         gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, cbo)
-        gl.vertexAttribPointer(aColor, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo)
 
         gl.drawElements(gl.TRIANGLES, cubeIdxs.length, gl.UNSIGNED_SHORT, 0);
         coordsProgram.use();
-        gl.uniformMatrix4fv(cuMatrix, false, mat.values);
-        gl.uniformMatrix4fv(crMatrix, false, mat_r.values);
+        gl.uniformMatrix4fv(cuMatrix, false, modelM.values);
+        // gl.uniformMatrix4fv(uMatrix, false, mat.values);
+        gl.uniformMatrix4fv(crMatrix, false, matP.values);
+        // gl.uniformMatrix4fv(rMatrix, false, mat_r.values);
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
         gl.vertexAttribPointer(attrCoordLines, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
