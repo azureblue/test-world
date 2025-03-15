@@ -22,8 +22,9 @@ class ArrayBuffer {
             this.add(elements);
         } else {
             this.#array.set(elements, this.#pos);
-            this.#pos += elements.length;
+            this.#pos += elements.length;            
         }
+        
     }
 
     extendSize() {
@@ -106,7 +107,55 @@ class Resources {
     static async loadText(src) {
         return await fetch(src).then(r => r.text())
     }
+
+    static loadImage(src) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = (err) => reject(err);
+            img.src = src;
+        });
+    }
 }
+
+class ImagePixels {
+
+    #width; #height;
+    #rowLength;
+    #data;
+    #stride = 4;
+    /**
+     * @param {HTMLImageElement} image 
+     */
+    constructor(image) {
+        this.#width = image.width;
+        this.#height = image.height;        
+        let canvas = new OffscreenCanvas(this.#width, this.#height);
+        let ctx = canvas.getContext("2d");
+        ctx.drawImage(image,0, 0);
+        this.data = ctx.getImageData(0, 0, this.#width, this.#height);
+        this.#rowLength = this.#stride * this.#width;
+    }
+
+    get width() {
+        return this.#width;
+    }
+
+    get height() {
+        return this.#height;
+    }
+
+    /**
+     * 
+     * @param {number} x 
+     * @param {number} y 
+     */
+    getR(x, y) {
+        return this.data.data[this.#rowLength * y + x * this.#stride];
+    }
+}
+
+
 
 export {
     Float32Buffer, UInt16Buffer, Resources
