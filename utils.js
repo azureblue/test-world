@@ -108,9 +108,14 @@ class Resources {
         return await fetch(src).then(r => r.text())
     }
 
+    /**
+     * 
+     * @param {string} src 
+     * @returns {Promise<HTMLImageElement>}
+     */
     static loadImage(src) {
         return new Promise((resolve, reject) => {
-            const img = new Image();
+            const img = new Image();            
             img.onload = () => resolve(img);
             img.onerror = (err) => reject(err);
             img.src = src;
@@ -120,29 +125,39 @@ class Resources {
 
 class ImagePixels {
 
-    #width; #height;
     #rowLength;
     #data;
     #stride = 4;
+
+    /**
+     * 
+     * @param {ImageData} data 
+     */
+    constructor(data) {
+        this.#data = data;        
+        this.#rowLength = this.width * this.#stride;
+    }
+
     /**
      * @param {HTMLImageElement} image 
+     * @returns {ImagePixels}
      */
-    constructor(image) {
-        this.#width = image.width;
-        this.#height = image.height;        
-        let canvas = new OffscreenCanvas(this.#width, this.#height);
+    static from(image) {
+        const width = image.width;
+        const height = image.height;                
+        let canvas = new OffscreenCanvas(width, height);
         let ctx = canvas.getContext("2d");
         ctx.drawImage(image,0, 0);
-        this.data = ctx.getImageData(0, 0, this.#width, this.#height);
-        this.#rowLength = this.#stride * this.#width;
+        let data = ctx.getImageData(0, 0, width, height);
+        return new ImagePixels(data, width, height);
     }
 
     get width() {
-        return this.#width;
+        return this.#data.width;
     }
 
     get height() {
-        return this.#height;
+        return this.#data.height;
     }
 
     /**
@@ -151,12 +166,12 @@ class ImagePixels {
      * @param {number} y 
      */
     getR(x, y) {
-        return this.data.data[this.#rowLength * y + x * this.#stride];
+        return this.#data.data[this.#rowLength * y + x * this.#stride];
     }
 }
 
 
 
 export {
-    Float32Buffer, UInt16Buffer, Resources
+    Float32Buffer, UInt16Buffer, ImagePixels, Resources
 }
