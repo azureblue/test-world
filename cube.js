@@ -1,160 +1,49 @@
+import { Vec3 } from "./geom.js";
 import { Float32Buffer, UInt16Buffer } from "./utils.js";
-import { Vec2, Vec3 } from "./geom.js";
-import { Float32Vector3, Vector3 } from "./matrixgl/float32vector.js";
 
-class Face {    
+class Face {
+
+    static TEXTURE_COORDS = new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]);
+    static VERTEX_INDICES = new Float32Array([0, 1, 2, 0, 2, 3]);
     static FRONT = new Face(
-        [
-            -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0
-            // 0, 0, 1, // 0
-            // 0, 1, 1, // 1
-            // 1, 1, 1, // 2
-            // 1, 0, 1, // 3
-        ],
-        [
-            0, 0, 1, // 0
-            0, 0, 1, // 1
-            0, 0, 1, // 2
-            0, 0, 1, // 3
-        ],
-        [
-            0, 0,
-            0, 1,
-            1, 1,
-            1, 0
-        ],
-        [0, 1, 2, 0, 2, 3]
+        [-1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0],
+        [0, 0, 1],
     );
 
     static LEFT = new Face(
-        [
-            -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0,
-            // 0, 0, 1, // 0
-            // 0, 1, 1, // 1
-            // 0, 1, 0, // 2
-            // 0, 0, 0, // 3
-        ],
-        [
-            -1, 0, -1,
-            -1, 0, -1,
-            -1, 0, -1,
-            -1, 0, -1
-        ],
-        [
-            0, 0,
-            0, 1,
-            1, 1,
-            1, 0
-        ],
-        [0, 1, 2, 0, 2, 3]
+        [-1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0],
+        [1, 0, 0],
     );
 
     static BACK = new Face(
-        [
-            1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0
-            // 1, 0, 1, // 3
-            // 1, 1, 1, // 2
-            // 0, 1, 1, // 1
-            // 0, 0, 1, // 0
-        ],
-        [
-            0, 0, 1, // 0
-            0, 0, 1, // 1
-            0, 0, 1, // 2
-            0, 0, 1, // 3
-        ],
-        [
-            0, 0,
-            0, 1,
-            1, 1,
-            1, 0
-        ],
-        [0, 1, 2, 0, 2, 3]
+        [1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0],
+        [0, 0, -1],
     );
 
     static RIGHT = new Face(
-        [
-            1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0,
-            // 1, 0, 0, // 3
-            // 1, 1, 0, // 2
-            // 1, 1, 1, // 1
-            // 1, 0, 1, // 0
-        ],
-        [
-            1, 0, -1,
-            1, 0, -1,
-            1, 0, -1,
-            1, 0, -1
-        ],
-        [
-            0, 0,
-            0, 1,
-            1, 1,
-            1, 0
-        ],
-        [0, 1, 2, 0, 2, 3]
+        [1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0],
+        [1, 0, 0],
     );
 
     static UP = new Face(
-        [
-            -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, -1.0,
-
-            // 0, 1, 0, // 0
-            // 0, 1, 1, // 1
-            // 1, 1, 1, // 2
-            // 1, 1, 0, // 3
-        ],
-        [
-            0, 0, -1, // 0
-            0, 0, -1, // 1
-            0, 0, -1, // 2
-            0, 0, -1, // 3
-        ],
-        [
-            0, 0,
-            0, 1,
-            1, 1,
-            1, 0
-        ],
-        [0, 1, 2, 0, 2, 3]
+        [-1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, -1.0],
+        [0, 1, 0],
     );
 
     static DOWN = new Face(
-        [
-            -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0,
-            // 1, 0, 0, // 3
-            // 1, 0, 1, // 2
-            // 0, 0, 1, // 1
-            // 0, 0, 0, // 0
-        ],
-        [
-            0, 0, -1, // 0
-            0, 0, -1, // 1
-            0, 0, -1, // 2
-            0, 0, -1, // 3
-        ],
-        [
-            0, 0,
-            0, 1,
-            1, 1,
-            1, 0
-        ],
-        [0, 1, 2, 0, 2, 3]
+        [-1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0],
+        [0, -1, 0],
     );
 
 
     /**
      * 
      * @param {Array<number>} vertices 
-     * @param {*} normals 
-     * @param {*} uvs 
-     * @param {*} idxs 
+     * @param {*} normal 
      */
-    constructor(vertices, normals, uvs, idxs) {
+    constructor(vertices, normal) {
         this.vertices = new Float32Array(vertices);
-        this.normals = new Float32Array(normals);
-        this.uvs = new Float32Array(uvs);
-        this.idxs = new Float32Array(idxs);
+        this.normal = new Float32Array(normal);
     }
 }
 
@@ -186,14 +75,12 @@ class Direction {
 class CubeGen {
 
     static #faces = [Face.FRONT, Face.LEFT, Face.BACK, Face.RIGHT, Face.UP, Face.DOWN];
-    /**
-     * 
-     * @param {Vec3} offset 
-     * @param {number} size 
-     */
-    constructor(offset, size) {
-        this.offset = offset;
-        this.size = size
+    #workBuffer = new ArrayBuffer(32 * 32)
+    #workBufferUInt6 = new Uint16Array(this.#workBuffer, 0, 6);
+    #workBufferFloat8 = new Float32Array(this.#workBuffer, 0, 8);
+    #workBufferFloat12 = new Float32Array(this.#workBuffer, 0, 12);
+    #workBufferFloat18 = new Float32Array(this.#workBuffer, 0, 18);    
+    constructor() {
     }
 
     /**
@@ -207,21 +94,32 @@ class CubeGen {
      * @param {Float32Array} uvs 8 element array
      * 
      */
-    genFace(direction, outVertices, outNormals, outUVs, outIdxs, cubePos, uvs) {
+    genFace(direction, outVertices, outNormals, outUVs, outIdxs, cubePos) {
         const face = CubeGen.#faces[direction];
         const indexed = (outIdxs !== undefined);
-        if (indexed) {            
+        if (indexed) {
             const vn = outVertices.length / 3;
-            if (outVertices !== undefined) {                                
+            if (outVertices !== undefined) {
                 outVertices.addTranslated(face.vertices, cubePos.x, cubePos.y, cubePos.z);
             }
             if (outNormals !== undefined) {
-                outNormals.add(face.normals)
+                this.#workBufferFloat12.set(face.normal, 0);
+                this.#workBufferFloat12.set(face.normal, 3);
+                this.#workBufferFloat12.set(face.normal, 6);
+                this.#workBufferFloat12.set(face.normal, 9);
+                outNormals.add(this.#workBufferFloat12);
             }
-            if (outUVs !== undefined) {
-                outUVs.add(uvs);
+            if (outUVs !== undefined) {                
+                outUVs.add(Face.TEXTURE_COORDS);
             }
-            outIdxs.add(face.idxs.map(x => x + vn));
+            this.#workBufferUInt6.set(Face.VERTEX_INDICES);
+            for (let i = 0; i < 6; i++)
+                this.#workBufferUInt6[i] += vn;
+            outIdxs.add(this.#workBufferUInt6);
+        } else {
+            if (outVertices !== undefined) {
+                outVertices.addTranslated(face.vertexArray, cubePos.x, cubePos.y, cubePos.z);
+            }
         }
     }
 
@@ -265,6 +163,5 @@ class CubeSpec {
     ]);
 }
 
-export {
-    Face, Direction, CubeGen, CubeSpec
-}
+export { CubeGen, CubeSpec, Direction, Face };
+
