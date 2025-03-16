@@ -1,4 +1,4 @@
-class ArrayBuffer {
+class DataBuffer {
     #pos
     #array
 
@@ -85,7 +85,7 @@ class ArrayBuffer {
     }
 }
 
-class Float32Buffer extends ArrayBuffer {
+class Float32Buffer extends DataBuffer {
     /**
      * @param {number} [initialSize]
      */
@@ -94,7 +94,7 @@ class Float32Buffer extends ArrayBuffer {
     }
 }
 
-class UInt16Buffer extends ArrayBuffer {
+class UInt16Buffer extends DataBuffer {
     /**
      * @param {number} initialSize 
      */
