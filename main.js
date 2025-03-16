@@ -12,7 +12,7 @@ export async function start() {
 
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
-    const gl = canvas.getContext("webgl");
+    const gl = canvas.getContext("webgl2");
 
     const baseProgram = new Program(
         gl,
@@ -65,6 +65,8 @@ export async function start() {
     const cubeDGUVs = new Float32Buffer();
     const cubeDGIdxs = new UInt16Buffer();
 
+    
+
 
     let offset = new Vec3(0, 0, 0)
     atlas.uvRect(float8, 1);
@@ -89,13 +91,13 @@ export async function start() {
         }
     }
 
-    for (let x = -50; x < 50; x++)
-        for (let z = -50; z < 50; z++) {
-            const h = heightmapPixels.getR(724 + x, 724 + z);
-            for (let y = h - 1; y < h - 1; y++) {
+    for (let x = -30; x < 30; x++)
+        for (let z = - 30; z < 30; z++) {
+            const h = heightmapPixels.getR(124 + x, 124 + z);
+            for (let y = h - 5; y < h - 1; y++) {
                 addBlock(x, y - 100, z, false);
             }
-            addBlock(x, h - 100, z, true);
+            addBlock(x, h - 50, z, true);
         }
 
     const vboD = gl.createBuffer();
@@ -139,29 +141,55 @@ export async function start() {
     gl.enableVertexAttribArray(attrCoordLines);
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
+    const vaD = gl.createVertexArray();
+    gl.bindVertexArray(vaD);
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.enableVertexAttribArray(aPosition);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboD);    
+    gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tboD);
+    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboD);    
+    gl.bindVertexArray(null);
+    
     gl.bindBuffer(gl.ARRAY_BUFFER, vboD);
     gl.bufferData(gl.ARRAY_BUFFER, cubeDVs.trimmed(), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, vboG);
-    gl.bufferData(gl.ARRAY_BUFFER, cubeGVs.trimmed(), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, vboDG);
-    gl.bufferData(gl.ARRAY_BUFFER, cubeDGVs.trimmed(), gl.STATIC_DRAW);
-
-
-
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboD);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeDIdxs.trimmed(), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboG);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeGIdxs.trimmed(), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboDG);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeDGIdxs.trimmed(), gl.STATIC_DRAW);
-
     gl.bindBuffer(gl.ARRAY_BUFFER, tboD);
     gl.bufferData(gl.ARRAY_BUFFER, cubeDUVs.trimmed(), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboD);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeDIdxs.trimmed(), gl.STATIC_DRAW);
+    
+    const vaG = gl.createVertexArray();
+    gl.bindVertexArray(vaG);    
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.enableVertexAttribArray(aPosition);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboG);
+    gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tboG);
+    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboG);
+    gl.bindVertexArray(null);
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboG);
+    gl.bufferData(gl.ARRAY_BUFFER, cubeGVs.trimmed(), gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, tboG);
     gl.bufferData(gl.ARRAY_BUFFER, cubeGUVs.trimmed(), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboG);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeGIdxs.trimmed(), gl.STATIC_DRAW);
+    
+    const vaDG = gl.createVertexArray();
+    gl.bindVertexArray(vaDG);    
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.enableVertexAttribArray(aPosition);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vboDG);
+    gl.bufferData(gl.ARRAY_BUFFER, cubeDGVs.trimmed(), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, tboDG);
     gl.bufferData(gl.ARRAY_BUFFER, cubeDGUVs.trimmed(), gl.STATIC_DRAW);
-
+    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboDG);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cubeDGIdxs.trimmed(), gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
 
     const uMatrix = baseProgram.getUniformLocation("u_matrix");
     const rMatrix = baseProgram.getUniformLocation("r_matrix");
@@ -333,28 +361,17 @@ export async function start() {
         gl.uniformMatrix4fv(rMatrix, false, matP.values);
         // gl.uniformMatrix4fv(rMatrix, false, mat_r.values);
         atlas.bind(gl, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vboG)
-        gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, tboG);
-        gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboG);
+        gl.bindVertexArray(vaG);
         gl.drawElements(gl.TRIANGLES, cubeGIdxs.length, gl.UNSIGNED_SHORT, 0);
 
         atlas.bind(gl, 0, 2);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vboDG)
-        gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, tboDG);
-        gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboDG);
+        gl.bindVertexArray(vaDG);
         gl.drawElements(gl.TRIANGLES, cubeDGIdxs.length, gl.UNSIGNED_SHORT, 0);
 
         atlas.bind(gl, 0, 1);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vboD)
-        gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, tboD);
-        gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, iboD);
+        gl.bindVertexArray(vaD);
         gl.drawElements(gl.TRIANGLES, cubeDIdxs.length, gl.UNSIGNED_SHORT, 0);
+        gl.bindVertexArray(null);
 
         coordsProgram.use();
         gl.uniformMatrix4fv(cuMatrix, false, modelM.values);
