@@ -36,7 +36,7 @@ export async function start() {
     gl.viewport(0, 0, canvas.width, canvas.height);
     const canvasAspect = canvas.width / canvas.height;
 
-    gl.clearColor(0.2, 0.2, 0.2, 1);
+    gl.clearColor(136 / 255, 198 / 255, 252 / 255, 1);
     gl.enable(gl.DEPTH_TEST);
     gl.frontFace(gl.CCW);
     gl.enable(gl.CULL_FACE);
@@ -62,13 +62,13 @@ export async function start() {
     const chunk2 = new Chunk(new Vec2(16, 0));
     const mesher = new ChunkMesher();
 
-    const heightmapPos = new Vec2(200, 200);
+    const heightmapPos = new Vec2(2, 2);
     /**
      * @type {Array<Mesh>}
      */
     const meshes = [];
-    for (let cx = 0; cx < 30; cx++)
-        for (let cy = 0; cy < 30; cy++) {
+    for (let cx = 0; cx < 50; cx++)
+        for (let cy = 0; cy < 50; cy++) {
             const chunk = new Chunk(new Vec2(cx * 16, cy * 16));
             for (let x = 0; x < 16; x++)
                 for (let z = 0; z < 16; z++) {
