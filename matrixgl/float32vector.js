@@ -1,157 +1,179 @@
-// src/vector_base.ts
-var VectorBase = class {
-  get values() {
-    return this._values;
-  }
-  get magnitude() {
-    let sumSq = 0;
-    for (const val of this._values) {
-      sumSq += val ** 2;
+import { Vector2Base, Vector3Base, Vector4Base } from './vector_base.js';
+/**
+ * A 2-dimensional vector of single-precision float numbers.
+ */
+export class Float32Vector2 extends Vector2Base {
+    constructor(x, y) {
+        super();
+        this._values = new Float32Array([x, y]);
     }
-    return Math.sqrt(sumSq);
-  }
-  toString() {
-    const dimension = this._values.length;
-    return `Vector${dimension}(${this._values.join(", ")})`;
-  }
-};
-var Vector2Base = class extends VectorBase {
-  get x() {
-    return this._values[0];
-  }
-  get y() {
-    return this._values[1];
-  }
-  set x(value) {
-    this._values[0] = value;
-  }
-  set y(value) {
-    this._values[1] = value;
-  }
-};
-var Vector3Base = class extends VectorBase {
-  get x() {
-    return this._values[0];
-  }
-  get y() {
-    return this._values[1];
-  }
-  get z() {
-    return this._values[2];
-  }
-  set x(value) {
-    this._values[0] = value;
-  }
-  set y(value) {
-    this._values[1] = value;
-  }
-  set z(value) {
-    this._values[2] = value;
-  }
-};
-var Vector4Base = class extends VectorBase {
-  get x() {
-    return this._values[0];
-  }
-  get y() {
-    return this._values[1];
-  }
-  get z() {
-    return this._values[2];
-  }
-  get w() {
-    return this._values[3];
-  }
-  set x(value) {
-    this._values[0] = value;
-  }
-  set y(value) {
-    this._values[1] = value;
-  }
-  set z(value) {
-    this._values[2] = value;
-  }
-  set w(value) {
-    this._values[3] = value;
-  }
-};
-
-// src/float32vector.ts
-var Float32Vector2 = class extends Vector2Base {
-  constructor(x, y) {
-    super();
-    this._values = new Float32Array([x, y]);
-  }
-  add(other) {
-    return new Float32Vector2(this.x + other.x, this.y + other.y);
-  }
-  sub(other) {
-    return new Float32Vector2(this.x - other.x, this.y - other.y);
-  }
-  mulByScalar(scalar) {
-    return new Float32Vector2(this.x * scalar, this.y * scalar);
-  }
-};
-var Float32Vector3 = class extends Vector3Base {
-  constructor(x, y, z) {
-    super();
-    this._values = new Float32Array([x, y, z]);
-  }
-  add(other) {
-    return new Float32Vector3(this.x + other.x, this.y + other.y, this.z + other.z);
-  }
-  sub(other) {
-    return new Float32Vector3(this.x - other.x, this.y - other.y, this.z - other.z);
-  }
-  mulByScalar(scalar) {
-    return new Float32Vector3(this.x * scalar, this.y * scalar, this.z * scalar);
-  }
-  dot(other) {
-    return this.x * other.x + this.y * other.y + this.z * other.z;
-  }
-  cross(other) {
-    const cx = this.y * other.z - this.z * other.y;
-    const cy = this.z * other.x - this.x * other.z;
-    const cz = this.x * other.y - this.y * other.x;
-    return new Float32Vector3(cx, cy, cz);
-  }
-  normalize() {
-    const mag = this.magnitude;
-    if (mag === 0) {
-      return this;
+    /**
+     * Add `other` to the vector and returns new `Float32Vector2`.
+     *
+     * This method does not mutate the vector.
+     * @param {Float32Vector2} other
+     * @returns {Float32Vector2}
+     */
+    add(other) {
+        return new Float32Vector2(this.x + other.x, this.y + other.y);
     }
-    return new Float32Vector3(this.x / mag, this.y / mag, this.z / mag);
-  }
-  get xy() {
-    return new Float32Vector2(this.x, this.y);
-  }
-};
-var Float32Vector4 = class extends Vector4Base {
-  constructor(x, y, z, w) {
-    super();
-    this._values = new Float32Array([x, y, z, w]);
-  }
-  add(other) {
-    return new Float32Vector4(this.x + other.x, this.y + other.y, this.z + other.z, this.w + other.w);
-  }
-  sub(other) {
-    return new Float32Vector4(this.x - other.x, this.y - other.y, this.z - other.z, this.w - other.w);
-  }
-  mulByScalar(scalar) {
-    return new Float32Vector4(this.x * scalar, this.y * scalar, this.z * scalar, this.w * scalar);
-  }
-  get xyz() {
-    return new Float32Vector3(this.x, this.y, this.z);
-  }
-};
-var Vector2 = Float32Vector2;
-var Vector3 = Float32Vector3;
-var Vector4 = Float32Vector4;
-export {
-  Float32Vector2,
-  Float32Vector3,
-  Float32Vector4,
-  Vector2,
-  Vector3,
-  Vector4
-};
+    /**
+     * Subtract `other` from the vector and returns new `Float32Vector2`.
+     *
+     * This method does not mutate the vector.
+     * @param {Float32Vector2} other
+     * @returns {Float32Vector2}
+     */
+    sub(other) {
+        return new Float32Vector2(this.x - other.x, this.y - other.y);
+    }
+    /**
+     * Multiply the vector by `scalar` and returns new `Float32Vector2`.
+     *
+     * This method does not mutate the vector.
+     * @param {number} scalar
+     * @returns {Float32Vector2}
+     */
+    mulByScalar(scalar) {
+        return new Float32Vector2(this.x * scalar, this.y * scalar);
+    }
+}
+/**
+ * A 3-dimensional vector of single-precision float numbers.
+ */
+export class Float32Vector3 extends Vector3Base {
+    constructor(x, y, z) {
+        super();
+        this._values = new Float32Array([x, y, z]);
+    }
+    /**
+     * Add `other` to the vector and returns new `Float32Vector3`.
+     *
+     * This method does not mutate the vector.
+     * @param {Float32Vector3} other
+     * @returns {Float32Vector3}
+     */
+    add(other) {
+        return new Float32Vector3(this.x + other.x, this.y + other.y, this.z + other.z);
+    }
+    /**
+     * Subtract `other` from the vector and returns new `Float32Vector3`.
+     *
+     * This method does not mutate the vector.
+     * @param {Float32Vector3} other
+     * @returns {Float32Vector3}
+     */
+    sub(other) {
+        return new Float32Vector3(this.x - other.x, this.y - other.y, this.z - other.z);
+    }
+    /**
+     * Multiply the vector by `scalar` and returns new `Float32Vector3`.
+     *
+     * This method does not mutate the vector.
+     * @param {number} scalar
+     * @returns {Float32Vector3}
+     */
+    mulByScalar(scalar) {
+        return new Float32Vector3(this.x * scalar, this.y * scalar, this.z * scalar);
+    }
+    /**
+     * Calculate dot product.
+     * @param {Float32Vector3} other
+     * @returns {number}
+     */
+    dot(other) {
+        return this.x * other.x + this.y * other.y + this.z * other.z;
+    }
+    /**
+     * Calculate cross product.
+     * @param {Float32Vector3} other
+     * @returns {Float32Vector3}
+     */
+    cross(other) {
+        const cx = this.y * other.z - this.z * other.y;
+        const cy = this.z * other.x - this.x * other.z;
+        const cz = this.x * other.y - this.y * other.x;
+        return new Float32Vector3(cx, cy, cz);
+    }
+    /**
+     * Normalize the vector and returns new `Float32Vector3`.
+     *
+     * This method does not mutate the vector.
+     * @returns {Float32Vector3}
+     */
+    normalize() {
+        const mag = this.magnitude;
+        if (mag === 0) {
+            return this;
+        }
+        return new Float32Vector3(this.x / mag, this.y / mag, this.z / mag);
+    }
+    /**
+     * Returns xy values of the vector as `Float32Vector2`.
+     * @returns {Float32Vector2}
+     */
+    get xy() {
+        return new Float32Vector2(this.x, this.y);
+    }
+}
+/**
+ * A 4-dimensional vector of single-precision float numbers.
+ */
+export class Float32Vector4 extends Vector4Base {
+    constructor(x, y, z, w) {
+        super();
+        this._values = new Float32Array([x, y, z, w]);
+    }
+    /**
+     * Add `other` to the vector and returns new `Float32Vector4`.
+     *
+     * This method does not mutate the vector.
+     * @param {Float32Vector4} other
+     * @returns {Float32Vector4}
+     */
+    add(other) {
+        return new Float32Vector4(this.x + other.x, this.y + other.y, this.z + other.z, this.w + other.w);
+    }
+    /**
+     * Subtract `other` from the vector and returns new `Float32Vector4`.
+     *
+     * This method does not mutate the vector.
+     * @param {Float32Vector4} other
+     * @returns {Float32Vector4}
+     */
+    sub(other) {
+        return new Float32Vector4(this.x - other.x, this.y - other.y, this.z - other.z, this.w - other.w);
+    }
+    /**
+     * Multiply the vector by `scalar` and returns new `Float32Vector4`.
+     *
+     * This method does not mutate the vector.
+     * @param {number} scalar
+     * @returns {Float32Vector4}
+     */
+    mulByScalar(scalar) {
+        return new Float32Vector4(this.x * scalar, this.y * scalar, this.z * scalar, this.w * scalar);
+    }
+    /**
+     * Returns xyz values of the vector as `Float32Vector3`.
+     * @returns {Float32Vector3}
+     */
+    get xyz() {
+        return new Float32Vector3(this.x, this.y, this.z);
+    }
+}
+/**
+ * An alias for `Float32Vector2`.
+ * @type {Float32Vector2}
+ */
+export const Vector2 = Float32Vector2;
+/**
+ * An alias for `Float32Vector3`.
+ * @type {Float32Vector3}
+ */
+export const Vector3 = Float32Vector3;
+/**
+ * An alias for `Float32Vector4`.
+ * @type {Float32Vector4}
+ */
+export const Vector4 = Float32Vector4;
