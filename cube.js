@@ -12,7 +12,7 @@ class Face {
 
     static LEFT = new Face(
         [-1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0].map(v => v * 0.5),
-        [1, 0, 0],
+        [-1, 0, 0],
     );
 
     static BACK = new Face(
