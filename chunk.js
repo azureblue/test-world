@@ -148,6 +148,10 @@ class Chunk {
     }
 }
 
+class ChunkManager {
+
+}
+
 class ChunkMesher {
 
     /**
@@ -160,6 +164,7 @@ class ChunkMesher {
      * @returns {Array<Mesh>}
      */
     createMeshes(chunk) {
+        const now = performance.now();
         this.#buffers.fill(null);
         const H = CHUNK_HEIGHT;
         const S = CHUNK_SIZE;
@@ -201,8 +206,8 @@ class ChunkMesher {
         const translation = new Vec3(chunk.position.x + 0.5, 0.5, chunk.position.y + 0.5);
         for (let id = 0; id < 128; id++) {
             const buf = this.#buffers[id];
-            if (buf !== null) {
-                meshes.push(new Mesh(Mat4.translation(translation.), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
+            if (buf !== null) {                
+                meshes.push(new Mesh(Mat4.translation(translation.x, translation.y, translation.z), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
             }
         }
         return meshes;
