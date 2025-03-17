@@ -62,6 +62,9 @@ export async function start() {
     const mesher = new ChunkMesher();
 
     const heightmapPos = new Vec2(200, 200);
+    /**
+     * @type {Array<Mesh>}
+     */
     const meshes = [];
     for (let cx = 0; cx < 30; cx++)
         for (let cy = 0; cy < 30; cy++) {
@@ -222,7 +225,7 @@ export async function start() {
         for (let mesh of meshes) {
             mesh.bindVA();
             atlas.bind(gl, 0, mesh.textureId);
-            const modelMat = Mat4.translation(mesh.translation.x, mesh.translation.y, mesh.translation.z);
+            const modelMat = mesh.modelMatrix;
             gl.uniformMatrix4fv(uModel, false, modelMat.values);
             gl.drawElements(gl.TRIANGLES, mesh.idxsLen, gl.UNSIGNED_SHORT, 0);
             gl.bindVertexArray(null);
