@@ -27,6 +27,7 @@ class Mesh {
     /** @type {WebGL2RenderingContext} */
     static #gl;
     static #a_pos;
+    static #a_norm;
     static #a_uv;
 
     /** @type {Array<WebGLVertexArrayObject>} */
@@ -50,14 +51,18 @@ class Mesh {
         const gl = Mesh.#gl;
         this.#va = gl.createVertexArray();
         const vb = gl.createBuffer();
+        const vn = gl.createBuffer();
         const uvb = gl.createBuffer();
         const ib = gl.createBuffer();
 
         gl.bindVertexArray(this.#va);
         gl.enableVertexAttribArray(Mesh.#a_pos);
         gl.enableVertexAttribArray(Mesh.#a_uv);
+        gl.enableVertexAttribArray(Mesh.#a_norm);
         gl.bindBuffer(gl.ARRAY_BUFFER, vb);
         gl.vertexAttribPointer(Mesh.#a_pos, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vn);
+        gl.vertexAttribPointer(Mesh.#a_norm, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, uvb);
         gl.vertexAttribPointer(Mesh.#a_uv, 2, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
@@ -67,6 +72,8 @@ class Mesh {
         gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, uvb);
         gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vn);
+        gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxs, gl.STATIC_DRAW);
         
@@ -93,9 +100,10 @@ class Mesh {
      * 
      * @param {WebGL2RenderingContext} gl 
      */
-    static setGL(gl, a_pos, a_uv) {
+    static setGL(gl, a_pos, a_norm, a_uv) {
         Mesh.#gl = gl;
         Mesh.#a_pos = a_pos;
+        Mesh.#a_norm = a_norm;
         Mesh.#a_uv = a_uv;
     }
 }
@@ -202,12 +210,11 @@ class ChunkMesher {
                         this.#cubeGen.genFace(Direction.FRONT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
                 }
-        const meshes = [];
-        const translation = new Vec3(chunk.position.x + 0.5, 0.5, chunk.position.y + 0.5);
+        const meshes = [];        
         for (let id = 0; id < 128; id++) {
             const buf = this.#buffers[id];
             if (buf !== null) {                
-                meshes.push(new Mesh(Mat4.translation(translation.x, translation.y, translation.z), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
+                meshes.push(new Mesh(Mat4.translation(chunk.position.x + 0.5, 0.5, chunk.position.y + 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
             }
         }
         return meshes;

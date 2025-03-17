@@ -47,13 +47,14 @@ export async function start() {
     document.body.style.overflow = "hidden";
     const aPosition = baseProgram.getAttribLocation("a_position");
     const aTexCoord = baseProgram.getAttribLocation("a_tex_coord");
+    const aNormal = baseProgram.getAttribLocation("a_normal");
     const attrCoordLines = coordsProgram.getAttribLocation("a_position");
     const attrCoordLinesColors = coordsProgram.getAttribLocation("a_color");
     gl.enableVertexAttribArray(attrCoordLines);
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
 
-    Mesh.setGL(gl, aPosition, aTexCoord);
+    Mesh.setGL(gl, aPosition, aNormal, aTexCoord);
     baseProgram.use();
     const atlas = TextureAtlas.create(gl, textures, 16);
 
