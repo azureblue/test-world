@@ -38,11 +38,11 @@ class TextureAtlas {
                 gl.UNSIGNED_BYTE,
                 ctx.getImageData(c * size, 0, size, size)
             );
-            const ext = gl.getExtension("EXT_texture_filter_anisotropic");                
-            const max = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);        
+            // const ext = gl.getExtension("EXT_texture_filter_anisotropic");                
+            // const max = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);        
             
             gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texParameterf(gl.TEXTURE_2D, ext.TEXTURE_MAX_ANISOTROPY_EXT, max);
+            // gl.texParameterf(gl.TEXTURE_2D, ext.TEXTURE_MAX_ANISOTROPY_EXT, max);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
             gl.generateMipmap(gl.TEXTURE_2D);
