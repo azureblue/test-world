@@ -67,8 +67,8 @@ export async function start() {
      * @type {Array<Mesh>}
      */
     const meshes = [];
-    for (let cx = 0; cx < 50; cx++)
-        for (let cy = 0; cy < 50; cy++) {
+    for (let cx = 0; cx < 10; cx++)
+        for (let cy = 0; cy < 10; cy++) {
             const chunk = new Chunk(new Vec2(cx * 16, cy * 16));
             for (let x = 0; x < 16; x++)
                 for (let z = 0; z < 16; z++) {
