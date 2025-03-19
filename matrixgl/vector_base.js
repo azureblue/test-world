@@ -21,6 +21,10 @@ export class VectorBase {
         const dimension = this._values.length;
         return `Vector${dimension}(${this._values.join(', ')})`;
     }
+
+    toPosString() {
+        return `(${this._values.join(', ')})`;
+    }
 }
 /**
  * A base abstract class for 2-dimensional vectors.
