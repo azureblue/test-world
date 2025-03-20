@@ -95,6 +95,7 @@ export class Float32Vector3 extends Vector3Base {
         const cz = this.x * other.y - this.y * other.x;
         return new Float32Vector3(cx, cy, cz);
     }
+    
     /**
      * Normalize the vector and returns new `Float32Vector3`.
      *
@@ -107,6 +108,19 @@ export class Float32Vector3 extends Vector3Base {
             return this;
         }
         return new Float32Vector3(this.x / mag, this.y / mag, this.z / mag);
+    }
+
+    /**
+     * Normalize the vector in place.
+     */
+    normalizeInPlace() {
+        const mag = this.magnitude;
+        if (mag === 0) {
+            return this;
+        }
+        this.x /= mag;
+        this.y /= mag;
+        this.z /= mag;
     }
     /**
      * Returns xy values of the vector as `Float32Vector2`.
