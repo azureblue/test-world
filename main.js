@@ -1,5 +1,6 @@
 import { TextureAtlas } from "./atlas.js";
-import { BLOCK_DIRT, BLOCK_DIRT_GRASS, Chunk, ChunkMesher, Mesh } from "./chunk.js";
+import { ChunkDataLoader, ChunkManager, ChunkMesher, Mesh } from "./chunk.js";
+import { PixelDataChunkGenerator } from "./generator.js";
 import { Mat4, Vec2, Vec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { ImagePixels, Resources } from "./utils.js";
@@ -7,12 +8,12 @@ import { ImagePixels, Resources } from "./utils.js";
 export async function start() {
     const textures = await Resources.loadImage("./images/textures.png");
     const heightmap = await Resources.loadImage("./images/heightmap.png");
-
     const heightmapPixels = ImagePixels.from(heightmap);
 
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
     const gl = canvas.getContext("webgl2");
+    gl.lineWidth(2);
 
     const baseProgram = new Program(
         gl,
@@ -56,30 +57,24 @@ export async function start() {
 
     Mesh.setGL(gl, aPosition, aNormal, aTexCoord);
     baseProgram.use();
+    const tmp8Ar = new Uint8Array(9);
+    const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
+    // const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(0, 16));
     const atlas = TextureAtlas.create(gl, textures, 16);
+    const chunkManager = new ChunkManager(new ChunkDataLoader(
+        (cx, cy) => {
+            return generator.generateChunk(new Vec2(cx, cy));
+        }), new ChunkMesher()
+    );
 
-    const chunk = new Chunk(new Vec2(0, 0));
-    const chunk2 = new Chunk(new Vec2(16, 0));
-    const mesher = new ChunkMesher();
-
-    const heightmapPos = new Vec2(2, 2);
     /**
      * @type {Array<Mesh>}
      */
     const meshes = [];
-    for (let cx = 0; cx < 10; cx++)
-        for (let cy = 0; cy < 10; cy++) {
-            const chunk = new Chunk(new Vec2(cx * 16, cy * 16));
-            for (let x = 0; x < 16; x++)
-                for (let z = 0; z < 16; z++) {
-                    const h = Math.max(heightmapPixels.getR(heightmapPos.x + (x + cx * 16) * 2, heightmapPos.y + (z + cy * 16) * 2) - 32, 1);
-                    for (let y = 0; y < h; y++) {
-                        chunk.set(y, x, z, BLOCK_DIRT);
-                    }
-                    chunk.set(h, x, z, BLOCK_DIRT_GRASS);
-                }
+    for (let cx = -20; cx < 20; cx++)
+        for (let cy = -20; cy < 20; cy++) {
 
-            meshes.push(...mesher.createMeshes(chunk));
+            meshes.push(... await chunkManager.meshFor(cx, cy));
         }
 
 
@@ -87,20 +82,20 @@ export async function start() {
     const vCoordsLines = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-        0, 0, 0, 1, 0, 0,
-        0, 0, 0, 0, 1, 0,
-        0, 0, 0, 0, 0, 1,
+        0, 0, 0, 10, 0, 0,
+        0, 0, 0, 0, 10, 0,
+        0, 0, 0, 0, 0, 10,
     ]), gl.STATIC_DRAW);
 
     const vCoordsColors = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-        1, 0, 0,
-        1, 0, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 0, 1,
-        0, 0, 1
+        0.8, 0.0, 0.0,
+        0.8, 0.0, 0.0,
+        0, 0.8, 0.0,
+        0, 0.8, 0.0,
+        0.0, 0, 0.8,
+        0.0, 0, 0.8
     ]), gl.STATIC_DRAW);
 
 

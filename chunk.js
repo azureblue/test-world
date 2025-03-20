@@ -1,5 +1,5 @@
 import { CubeGen, Direction } from "./cube.js";
-import { Vec2, Vec3, Mat4 } from "./geom.js";
+import { Mat4, Vec2, Vec3 } from "./geom.js";
 import { Float32Buffer, UInt16Buffer } from "./utils.js";
 
 const MAX_IDX_VALUE = 65535;
@@ -179,8 +179,7 @@ class ChunkDataLoader {
      * @returns {ChunkData}
      */
     async getChunk(x, y) {
-        const key = x << 15 + y;
-        this.#generator()
+        const key = (x << 15) + y;        
         let chunkData = this.#cache.get(key);
         if (chunkData === undefined) {
             chunkData = this.#generator(x, y);
@@ -196,7 +195,7 @@ class ChunkManager {
     #chunkMesher
 
     /**
-     * @param {chunkLoader} chunkLoader 
+     * @param {ChunkDataLoader} chunkLoader 
      * @param {ChunkMesher} chunkMesher 
      */
     constructor(chunkLoader, chunkMesher) {
@@ -204,8 +203,14 @@ class ChunkManager {
         this.#chunkMesher = chunkMesher;
     }
 
-    meshFor(x, y) {
-
+    async meshFor(x, y) {
+        return this.#chunkMesher.createMeshes(
+            await this.#chunkLoader.getChunk(x, y),
+            await this.#chunkLoader.getChunk(x - 1, y),
+            await this.#chunkLoader.getChunk(x + 1, y),
+            await this.#chunkLoader.getChunk(x, y + 1),
+            await this.#chunkLoader.getChunk(x, y - 1)
+        )
     }
 }
 
@@ -220,12 +225,12 @@ class ChunkMesher {
      * @param {ChunkData} chunk 
      * @param {ChunkData} chunkLeft
      * @param {ChunkData} chunkRight
-     * @param {ChunkData} chunkFront
-     * @param {ChunkData} chunkBack
+     * @param {ChunkData} chunkUp
+     * @param {ChunkData} chunkDown
      * 
      * @returns {Array<Mesh>}
      */
-    createMeshes(chunk, chunkLeft, chunkRight, chunkFront, chunkBack) {
+    createMeshes(chunk, chunkLeft, chunkRight, chunkUp, chunkDown) {
         const now = performance.now();
         this.#buffers.fill(null);
         const H = CHUNK_HEIGHT;
@@ -236,39 +241,48 @@ class ChunkMesher {
             for (let y = 0; y < S; y++)
                 for (let x = 0; x < S; x++) {
                     const blockType = chunk.atCheck(i, x, y);
-                    pos.x = x; pos.y = i; pos.z = y;
+                    pos.x = x; pos.y = i; pos.z = -y;
                     if (blockType == BLOCK_EMPTY)
                         continue;
                     const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
                     const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
-                    const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2]
-                    if (chunk.atCheck(i + 1, x, y) === BLOCK_EMPTY) {
+                    const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
+                    const above = chunk.atCheck(i + 1, x, y);
+                    const below = chunk.atCheck(i - 1, x, y);
+                    if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
                         const buf = this.#bufferAt(blockTextureUp);
                         this.#cubeGen.genFace(Direction.UP, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
-                    if (chunk.atCheck(i - 1, x, y) === BLOCK_EMPTY) {
+                    if (below === BLOCK_EMPTY || below === BLOCK_CHUNK_EDGE) {
                         const buf = this.#bufferAt(blockTextureDown);
                         this.#cubeGen.genFace(Direction.DOWN, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
                     const buf = this.#bufferAt(blockTextureSide);
-                    if (chunk.atCheck(i, x + 1, y) === BLOCK_EMPTY) {
+                    const right = (x == CHUNK_SIZE - 1 ? chunkRight.at(i, 0, y) : chunk.at(i, x + 1, y));
+                    if (right === BLOCK_EMPTY) {
                         this.#cubeGen.genFace(Direction.RIGHT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
-                    if (chunk.atCheck(i, x - 1, y) === BLOCK_EMPTY) {
+
+                    const left = (x == 0 ? chunkLeft.at(i, CHUNK_SIZE - 1, y) : chunk.at(i, x - 1, y));
+                    if (left === BLOCK_EMPTY) {
                         this.#cubeGen.genFace(Direction.LEFT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
-                    if (chunk.atCheck(i, x, y - 1) === BLOCK_EMPTY) {
-                        this.#cubeGen.genFace(Direction.BACK, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
-                    }
-                    if (chunk.atCheck(i, x, y + 1) === BLOCK_EMPTY) {
+
+                    const down = (y == 0 ? chunkDown.at(i, x, CHUNK_SIZE - 1) : chunk.at(i, x, y - 1));
+                    if (down === BLOCK_EMPTY) {
                         this.#cubeGen.genFace(Direction.FRONT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
+                    }
+
+                    const up = (y == CHUNK_SIZE - 1 ? chunkUp.at(i, x, 0) : chunk.at(i, x, y + 1));
+                    if (up === BLOCK_EMPTY) {
+                        this.#cubeGen.genFace(Direction.BACK, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
                 }
         const meshes = [];
         for (let id = 0; id < 128; id++) {
             const buf = this.#buffers[id];
             if (buf !== null) {
-                meshes.push(new Mesh(Mat4.translation(chunk.position.x + 0.5, 0.5, chunk.position.y + 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
+                meshes.push(new Mesh(Mat4.translation(chunk.position.x * CHUNK_SIZE + 0.5, 0.5, -chunk.position.y * CHUNK_SIZE - 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
             }
         }
         console.debug("chunk " + chunk.position.toPosString() + " gen time: " + (performance.now() - now));
@@ -283,5 +297,8 @@ class ChunkMesher {
     }
 }
 
-export { ChunkData as Chunk, ChunkMesher, Mesh, BLOCK_EMPTY, BLOCK_DIRT, BLOCK_GRASS, BLOCK_DIRT_GRASS };
+export {
+    CHUNK_SIZE,
+    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, ChunkData as Chunk, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh
+};
 
