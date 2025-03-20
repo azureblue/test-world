@@ -56,6 +56,17 @@ class ChunkData {
         return this.data[CHUNK_PLANE_SIZE * h + y * CHUNK_SIZE + x];
     }
 
+    /**
+     * @param {number} x 
+     * @param {number} y 
+     * @returns {number}
+     */
+    peak(x, y) {
+        for (let peek = CHUNK_HEIGHT - 1; peek > 0; peek--)
+            if (this.at(peek, x, y) !== BLOCK_EMPTY)
+                return peek;
+
+    }
 
     set(h, x, y, id) {
         this.data[CHUNK_PLANE_SIZE * h + y * CHUNK_SIZE + x] = id;
@@ -179,7 +190,7 @@ class ChunkDataLoader {
      * @returns {ChunkData}
      */
     async getChunk(x, y) {
-        const key = (x << 15) + y;        
+        const key = (x << 15) + y;
         let chunkData = this.#cache.get(key);
         if (chunkData === undefined) {
             chunkData = this.#generator(x, y);
@@ -188,6 +199,28 @@ class ChunkDataLoader {
         return chunkData;
     }
 
+}
+
+class Chunk {
+    #data
+    #meshes
+
+    /**
+     * @param {ChunkData} data 
+     * @param {Array<Mesh>} meshes
+     */
+    constructor(data, meshes) {
+        this.#data = data;
+        this.#meshes = meshes;
+    }
+
+    get meshes() {
+        return this.#meshes;
+    }
+
+    get data() {
+        return this.#data;
+    }
 }
 
 class ChunkManager {
@@ -203,14 +236,16 @@ class ChunkManager {
         this.#chunkMesher = chunkMesher;
     }
 
-    async meshFor(x, y) {
-        return this.#chunkMesher.createMeshes(
-            await this.#chunkLoader.getChunk(x, y),
+    async loadChunk(x, y) {
+        const data = await this.#chunkLoader.getChunk(x, y);
+        const meshes = this.#chunkMesher.createMeshes(
+            data,
             await this.#chunkLoader.getChunk(x - 1, y),
             await this.#chunkLoader.getChunk(x + 1, y),
             await this.#chunkLoader.getChunk(x, y + 1),
             await this.#chunkLoader.getChunk(x, y - 1)
-        )
+        );
+        return new Chunk(data, meshes);
     }
 }
 
@@ -298,7 +333,6 @@ class ChunkMesher {
 }
 
 export {
-    CHUNK_SIZE,
-    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, ChunkData as Chunk, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh
+    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh
 };
 

@@ -9,6 +9,7 @@ export async function start() {
     const textures = await Resources.loadImage("./images/textures.png");
     const heightmap = await Resources.loadImage("./images/heightmap.png");
     const heightmapPixels = ImagePixels.from(heightmap);
+    const statsDiv = document.getElementById("stats");
 
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
@@ -35,7 +36,6 @@ export async function start() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     gl.viewport(0, 0, canvas.width, canvas.height);
-    const canvasAspect = canvas.width / canvas.height;
 
     gl.clearColor(136 / 255, 198 / 255, 252 / 255, 1);
     gl.enable(gl.DEPTH_TEST);
@@ -61,11 +61,8 @@ export async function start() {
     const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
     // const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(0, 16));
     const atlas = TextureAtlas.create(gl, textures, 16);
-    const chunkManager = new ChunkManager(new ChunkDataLoader(
-        (cx, cy) => {
-            return generator.generateChunk(new Vec2(cx, cy));
-        }), new ChunkMesher()
-    );
+    const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
+    const chunkManager = new ChunkManager(chunkLoader, new ChunkMesher());
 
     /**
      * @type {Array<Mesh>}
@@ -73,11 +70,9 @@ export async function start() {
     const meshes = [];
     for (let cx = -20; cx < 20; cx++)
         for (let cy = -20; cy < 20; cy++) {
-
-            meshes.push(... await chunkManager.meshFor(cx, cy));
+            const chunk = await chunkManager.loadChunk(cx, cy)
+            meshes.push(...chunk.meshes);
         }
-
-
 
     const vCoordsLines = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
@@ -112,20 +107,11 @@ export async function start() {
             run = !run;
     })
 
-    function rY(angleInRadians) {
-        var c = Math.cos(angleInRadians);
-        var s = Math.sin(angleInRadians);
-
-        return [
-            c, 0, -s, 0,
-            0, 1, 0, 0,
-            s, 0, c, 0,
-            0, 0, 0, 1,
-        ];
-    }
-
+    const chunkData00 = await chunkLoader.getChunk(0, 0);
+    const peak = chunkData00.peak(0, 0);
     const cameraSpeed = 1;
-    let pos = new Vec3(0, 20, 5);
+
+    let pos = new Vec3(0, peak + 2, 0);
 
     const keys = {
         up: false,
@@ -143,6 +129,10 @@ export async function start() {
 
     document.body.addEventListener("mousemove", (me) => {
         look.yaw += me.movementX / 8;
+        if (look.yaw > 360)
+            look.yaw -= 360;
+        if (look.yaw < 0)
+            look.yaw += 360
         look.pitch -= me.movementY / 8;
         if (look.pitch > 89) {
             look.pitch = 89;
@@ -184,13 +174,13 @@ export async function start() {
         dir.y = Math.sin(look.pitch / 360 * Math.PI * 2);
         dir.z = Math.sin(look.yaw / 360 * Math.PI * 2) * Math.cos(look.pitch / 360 * Math.PI * 2);
 
+        dir.normalizeInPlace();
+
         const up = new Vec3(0, 1, 0);
         const cameraRight = up.cross(dir).normalize();
         const cameraUp = new Vec3(0, 1, 0);
-        const cameraFront = dir.normalize();
+        const cameraFront = dir;
         // const cameraUp = dir.cross(cameraRight);
-
-        pos.add(cameraFront)
 
         const lookAt = Mat4.lookAt(pos, pos.add(cameraFront), cameraUp);
         if (run)
@@ -213,6 +203,9 @@ export async function start() {
             far: zFar,
             near: zNear
         });
+
+        statsDiv.textContent = `position x:${pos.x.toFixed(1)} z: ${pos.z.toFixed(1)} y: ${pos.y.toFixed(1)} ` +
+        `direction x:${dir.x.toFixed(1)} z: ${dir.z.toFixed(1)} y: ${dir.y.toFixed(1)}`;
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         baseProgram.use();
