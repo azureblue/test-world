@@ -168,7 +168,25 @@ class ImagePixels {
     getR(x, y) {
         return this.#data.data[this.#rowLength * y + x * this.#stride];
     }
+
+
+    /**
+     * 
+     * @param {number} x 
+     * @param {number} y 
+     * @param {number} w
+     * @param {number} h
+     * @param {ArrayLike} out
+     * 
+     */
+    getRectR(x, y, w, h, out) {        
+        for (let oy = 0; oy < h; oy++) 
+            for (let ox = 0; ox < w; ox++) 
+                out[oy * w + ox] = this.#data.data[this.#rowLength * y + x * this.#stride];
+    }
 }
+
+
 
 
 
