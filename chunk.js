@@ -320,7 +320,9 @@ class ChunkMesher {
                 meshes.push(new Mesh(Mat4.translation(chunk.position.x * CHUNK_SIZE + 0.5, 0.5, -chunk.position.y * CHUNK_SIZE - 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
             }
         }
-        console.debug("chunk " + chunk.position.toPosString() + " gen time: " + (performance.now() - now));
+        const meshTime = performance.now() - now;
+
+        // console.debug("chunk " + chunk.position.toPosString() + " gen time: " + (performance.now() - now));
         return meshes;
     }
 
