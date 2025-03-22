@@ -1,0 +1,13 @@
+body {
+    margin: 0;
+    overflow: hidden;
+}
+
+#stats {
+    position: absolute;
+    top: 0;
+    left: 0;
+    font-family: monospace;
+    font-weight: bold;
+    background-color: rgba(0, 0, 0, 0.151);
+}

@@ -59,7 +59,6 @@ export async function start() {
     baseProgram.use();
     const tmp8Ar = new Uint8Array(9);
     const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
-    // const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(0, 16));
     const atlas = TextureAtlas.create(gl, textures, 16);
     const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
     const chunkManager = new ChunkManager(chunkLoader, new ChunkMesher());
@@ -166,7 +165,7 @@ export async function start() {
     }, true);
 
     canvas.addEventListener("click", async () => {
-        await canvas.requestPointerLock();
+        canvas.requestPointerLock();
     });
 
     function draw() {
@@ -182,7 +181,7 @@ export async function start() {
         const cameraFront = dir;
         // const cameraUp = dir.cross(cameraRight);
 
-        const lookAt = Mat4.lookAt(pos, pos.add(cameraFront), cameraUp);
+        const mView = Mat4.lookAt(pos, pos.add(cameraFront), cameraUp);
         if (run)
             time++;
         if (keys.up)
@@ -197,7 +196,7 @@ export async function start() {
         const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
         const zNear = 0.1;
         const zFar = 1000.0;
-        const matP = Mat4.perspective({
+        const mProjection = Mat4.perspective({
             aspectRatio: aspect,
             fovYRadian: fieldOfView,
             far: zFar,
@@ -209,8 +208,8 @@ export async function start() {
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         baseProgram.use();
-        gl.uniformMatrix4fv(uView, false, lookAt.values);
-        gl.uniformMatrix4fv(uProjection, false, matP.values);
+        gl.uniformMatrix4fv(uView, false, mView.values);
+        gl.uniformMatrix4fv(uProjection, false, mProjection.values);
         for (let mesh of meshes) {
             mesh.bindVA();
             atlas.bind(gl, 0, mesh.textureId);
@@ -221,10 +220,9 @@ export async function start() {
         }
 
         coordsProgram.use();
-        gl.uniformMatrix4fv(cuMatrix, false, lookAt.values);
-        // gl.uniformMatrix4fv(uMatrix, false, mat.values);
-        gl.uniformMatrix4fv(crMatrix, false, matP.values);
-        // gl.uniformMatrix4fv(rMatrix, false, mat_r.values);        
+        
+        gl.uniformMatrix4fv(cuMatrix, false, mView.values);
+        gl.uniformMatrix4fv(crMatrix, false, mProjection.values);
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
         gl.vertexAttribPointer(attrCoordLines, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
