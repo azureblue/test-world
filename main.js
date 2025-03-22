@@ -133,6 +133,7 @@ export async function start() {
     
 
     const uModel = baseProgram.getUniformLocation("m_matrix");
+    const uTranslation = baseProgram.getUniformLocation("m_translation");
 
     let run = true;
     let time = 0;
@@ -161,8 +162,11 @@ export async function start() {
     }
 
     const dir = new Vec3(0, 0, 0);
+    let pause = false;
 
     document.body.addEventListener("mousemove", (me) => {
+        if (pause)
+            return;
         look.yaw += me.movementX / 8;
         if (look.yaw > 360)
             look.yaw -= 360;
@@ -179,6 +183,14 @@ export async function start() {
     })
 
     document.body.addEventListener("keydown", (ev) => {
+        if (ev.key == " ") {
+            if (!pause) {
+                pause = true;
+            } else {
+                pause = false;
+                draw();
+            }
+        }
         if (ev.key == "w")
             keys.up = true;
         if (ev.key == "a")
@@ -200,14 +212,16 @@ export async function start() {
             keys.right = false;
     }, true);
 
-    canvas.addEventListener("click", async () => {
-        canvas.requestPointerLock();
-    });
+    canvas.addEventListener("click", async () => canvas.requestPointerLock());
+
+    const PI_2_360 = 1 / 360 * Math.PI * 2;
 
     function draw() {
-        dir.x = Math.cos(look.yaw / 360 * Math.PI * 2) * Math.cos(look.pitch / 360 * Math.PI * 2);
-        dir.y = Math.sin(look.pitch / 360 * Math.PI * 2);
-        dir.z = Math.sin(look.yaw / 360 * Math.PI * 2) * Math.cos(look.pitch / 360 * Math.PI * 2);
+        const yawRads = look.yaw * PI_2_360;
+        const pitchRads = look.pitch * PI_2_360;
+        dir.x = Math.cos(yawRads) * Math.cos(pitchRads);
+        dir.y = Math.sin(pitchRads);
+        dir.z = Math.sin(yawRads) * Math.cos(pitchRads);
 
         dir.normalizeInPlace();
 
@@ -215,9 +229,9 @@ export async function start() {
         const cameraRight = up.cross(dir).normalize();
         const cameraUp = new Vec3(0, 1, 0);
         const cameraFront = dir;
-        // const cameraUp = dir.cross(cameraRight);
 
         const mView = Mat4.lookAt(pos, pos.add(cameraFront), cameraUp);
+
         if (run)
             time++;
         if (keys.up)
@@ -238,15 +252,17 @@ export async function start() {
         gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-
+        gl.uniformMatrix4fv(uModel, false, mView.values);
         for (let mesh of meshes) {
             mesh.bindVA();
             atlas.bind(gl, 0, mesh.textureId);
-            const modelMat = mesh.modelMatrix;
-            gl.uniformMatrix4fv(uModel, false, modelMat.values);
-            gl.drawElements(gl.TRIANGLES, mesh.idxsLen, gl.UNSIGNED_SHORT, 0);
-            gl.bindVertexArray(null);
+            // const modelMat = mesh.modelMatrix;
+            const modelTranslation = mesh.modelTranslation;
+            gl.uniform3f(uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z) ;
+            // gl.uniformMatrix4fv(uModel, false, modelMat.values);
+            gl.drawElements(gl.TRIANGLES, mesh.idxsLen, gl.UNSIGNED_SHORT, 0);           
         }
+        gl.bindVertexArray(null);
 
         coordsProgram.use();
         
@@ -255,7 +271,8 @@ export async function start() {
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
         gl.vertexAttribPointer(attrCoordLinesColors, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.LINES, 0, 6);
-        requestAnimationFrame(draw);
+        if (!pause)
+            requestAnimationFrame(draw);
     }
 
     draw();
