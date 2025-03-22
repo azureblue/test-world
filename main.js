@@ -93,11 +93,47 @@ export async function start() {
     ]), gl.STATIC_DRAW);
 
 
-    const uView = baseProgram.getUniformLocation("v_matrix");
-    const uProjection = baseProgram.getUniformLocation("p_matrix");
+    const uCamera = gl.getUniformBlockIndex(baseProgram.program, "Camera");
+    const uCameraSize = gl.getActiveUniformBlockParameter(baseProgram.program, uCamera, gl.UNIFORM_BLOCK_DATA_SIZE);
+    const uCameraBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
+    gl.bufferData(gl.UNIFORM_BUFFER, uCameraSize, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+    gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, uCameraBuffer);
+    const uCameraIndices = gl.getUniformIndices(baseProgram.program, ["proj", "view"]);
+    const uCameraOffsets = gl.getActiveUniforms(baseProgram.program, uCameraIndices, gl.UNIFORM_OFFSET);
+
+    const uCameraVariableInfo = {
+        proj: {
+            index: uCameraIndices[0],
+            offset: uCameraOffsets[0]
+        },
+        view: {
+            index: uCameraIndices[1],
+            offset: uCameraOffsets[1]
+        }        
+    };
+
+    gl.uniformBlockBinding(baseProgram.program, gl.getUniformBlockIndex(baseProgram.program, "Camera"), 0);
+    gl.uniformBlockBinding(coordsProgram.program, gl.getUniformBlockIndex(coordsProgram.program, "Camera"), 0);
+
+    const fieldOfView = (70 * Math.PI) / 180; // in radians
+    const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+    const zNear = 0.1;
+    const zFar = 1000.0;
+    const mProjection = Mat4.perspective({
+        aspectRatio: aspect,
+        fovYRadian: fieldOfView,
+        far: zFar,
+        near: zNear
+    });
+
+    gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
+    gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.proj.offset, mProjection._values, 0);
+    
+
     const uModel = baseProgram.getUniformLocation("m_matrix");
-    const cuMatrix = coordsProgram.getUniformLocation("u_matrix");
-    const crMatrix = coordsProgram.getUniformLocation("r_matrix");
+
     let run = true;
     let time = 0;
 
@@ -192,24 +228,17 @@ export async function start() {
             pos = pos.add(cameraRight.mulByScalar(cameraSpeed));
         if (keys.right)
             pos = pos.add(cameraRight.mulByScalar(-1 * cameraSpeed));
-        const fieldOfView = (70 * Math.PI) / 180; // in radians
-        const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-        const zNear = 0.1;
-        const zFar = 1000.0;
-        const mProjection = Mat4.perspective({
-            aspectRatio: aspect,
-            fovYRadian: fieldOfView,
-            far: zFar,
-            near: zNear
-        });
+
 
         statsDiv.textContent = `position x:${pos.x.toFixed(1)} z: ${pos.z.toFixed(1)} y: ${pos.y.toFixed(1)} ` +
         `direction x:${dir.x.toFixed(1)} z: ${dir.z.toFixed(1)} y: ${dir.y.toFixed(1)}`;
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         baseProgram.use();
-        gl.uniformMatrix4fv(uView, false, mView.values);
-        gl.uniformMatrix4fv(uProjection, false, mProjection.values);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
+        gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+
         for (let mesh of meshes) {
             mesh.bindVA();
             atlas.bind(gl, 0, mesh.textureId);
@@ -221,8 +250,6 @@ export async function start() {
 
         coordsProgram.use();
         
-        gl.uniformMatrix4fv(cuMatrix, false, mView.values);
-        gl.uniformMatrix4fv(crMatrix, false, mProjection.values);
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
         gl.vertexAttribPointer(attrCoordLines, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
