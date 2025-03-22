@@ -89,19 +89,19 @@ class Mesh {
     #va = [];
     #textureId;
     #idxsLen;
-    #mModel;
+    #mTranslation;
 
     /**
      * 
-     * @param {Mat4} mModel 
+     * @param {Vec3} mTranslation 
      * @param {number} textureId 
      * @param {Float32Array} verts 
      * @param {Float32Array} uvs 
      * @param {Float32Array} normals 
      * @param {Uint16Array} idxs
      */
-    constructor(mModel, textureId, verts, uvs, normals, idxs) {
-        this.#mModel = mModel;
+    constructor(mTranslation, textureId, verts, uvs, normals, idxs) {
+        this.#mTranslation = mTranslation;
         this.#textureId = textureId;
         const gl = Mesh.#gl;
         this.#va = gl.createVertexArray();
@@ -147,8 +147,8 @@ class Mesh {
         return this.#idxsLen;
     }
 
-    get modelMatrix() {
-        return this.#mModel;
+    get modelTranslation() {
+        return this.#mTranslation;
     }
 
     /**
@@ -317,7 +317,7 @@ class ChunkMesher {
         for (let id = 0; id < 128; id++) {
             const buf = this.#buffers[id];
             if (buf !== null) {
-                meshes.push(new Mesh(Mat4.translation(chunk.position.x * CHUNK_SIZE + 0.5, 0.5, -chunk.position.y * CHUNK_SIZE - 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
+                meshes.push(new Mesh(new Vec3(chunk.position.x * CHUNK_SIZE + 0.5, 0.5, -chunk.position.y * CHUNK_SIZE - 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
             }
         }
         const meshTime = performance.now() - now;
