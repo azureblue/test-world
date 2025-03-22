@@ -1,10 +1,12 @@
+#version 300 es
 precision mediump float;
 uniform sampler2D u_sampler;
-varying highp vec2 v_tex_coord;
-varying vec3 o_norm;
-
+in highp vec2 v_tex_coord;
+in vec3 o_norm;
+out vec4 color_out;
 void main() {
-    vec4 tex = texture2D(u_sampler, v_tex_coord);
+    
+    vec4 tex = texture(u_sampler, v_tex_coord);
     if (o_norm.y == 1.0)
         tex = vec4(tex.xyz * 1.0, 1.0);
     else if (o_norm.x == 1.0)
@@ -14,6 +16,6 @@ void main() {
     else
         tex = vec4(tex.xyz * 0.68, 1.0);
 
-    gl_FragColor = tex;
+    color_out = tex;
     //gl_FragColor = texture2D(u_sampler, v_tex_coord);    
 }
