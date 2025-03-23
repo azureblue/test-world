@@ -1,5 +1,5 @@
 import { TextureAtlas } from "./atlas.js";
-import { ChunkDataLoader, ChunkManager, ChunkMesher, Mesh } from "./chunk.js";
+import { ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh} from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
 import { Mat4, Vec2, Vec3 } from "./geom.js";
 import { Program } from "./gl.js";
@@ -20,6 +20,12 @@ export async function start() {
         gl,
         await Resources.loadText("shaders/base.vert"),
         await Resources.loadText("shaders/base.frag")
+    );
+
+    const chunk0Program = new Program(
+        gl,
+        await Resources.loadText("shaders/chunk0.vert"),
+        await Resources.loadText("shaders/chunk0.frag")
     );
 
     const coordsProgram = new Program(
@@ -49,26 +55,28 @@ export async function start() {
     const aPosition = baseProgram.getAttribLocation("a_position");
     const aTexCoord = baseProgram.getAttribLocation("a_tex_coord");
     const aNormal = baseProgram.getAttribLocation("a_normal");
+    const aIn = chunk0Program.getAttribLocation("a_in");
     const attrCoordLines = coordsProgram.getAttribLocation("a_position");
     const attrCoordLinesColors = coordsProgram.getAttribLocation("a_color");
     gl.enableVertexAttribArray(attrCoordLines);
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
 
-    Mesh.setGL(gl, aPosition, aNormal, aTexCoord);
+    UIntMesh.setGL(gl, aPosition, aNormal, aTexCoord);
     baseProgram.use();
     const tmp8Ar = new Uint8Array(9);
     const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
     const atlas = TextureAtlas.create(gl, textures, 16);
     const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
-    const chunkManager = new ChunkManager(chunkLoader, new ChunkMesher());
+    const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
 
     /**
-     * @type {Array<Mesh>}
+     * @type {Array<UIntChunkMesher>}
      */
+   
     const meshes = [];
-    for (let cx = -20; cx < 20; cx++)
-        for (let cy = -20; cy < 20; cy++) {
+    for (let cx = -40; cx < 40; cx++)
+        for (let cy = -40; cy < 40; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
             meshes.push(...chunk.meshes);
         }
@@ -111,11 +119,12 @@ export async function start() {
         view: {
             index: uCameraIndices[1],
             offset: uCameraOffsets[1]
-        }        
+        }
     };
 
     gl.uniformBlockBinding(baseProgram.program, gl.getUniformBlockIndex(baseProgram.program, "Camera"), 0);
     gl.uniformBlockBinding(coordsProgram.program, gl.getUniformBlockIndex(coordsProgram.program, "Camera"), 0);
+    gl.uniformBlockBinding(chunk0Program.program, gl.getUniformBlockIndex(chunk0Program.program, "Camera"), 0);
 
     const fieldOfView = (70 * Math.PI) / 180; // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
@@ -128,12 +137,22 @@ export async function start() {
         near: zNear
     });
 
+    // const mProjection = Mat4.orthographic({
+    //     top: 0,
+    //     bottom: 100,
+    //     left: 0,
+    //     right: 100,
+    //     near: 0.1,
+    //     far: 100
+    // });
+
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
     gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.proj.offset, mProjection._values, 0);
-    
 
-    const uModel = baseProgram.getUniformLocation("m_matrix");
+
+    // const uModel = baseProgram.getUniformLocation("m_matrix");
     const uTranslation = baseProgram.getUniformLocation("m_translation");
+    const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
 
     let run = true;
     let time = 0;
@@ -245,27 +264,36 @@ export async function start() {
 
 
         statsDiv.textContent = `position x:${pos.x.toFixed(1)} z: ${pos.z.toFixed(1)} y: ${pos.y.toFixed(1)} ` +
-        `direction x:${dir.x.toFixed(1)} z: ${dir.z.toFixed(1)} y: ${dir.y.toFixed(1)}`;
+            `direction x:${dir.x.toFixed(1)} z: ${dir.z.toFixed(1)} y: ${dir.y.toFixed(1)}`;
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        baseProgram.use();
+        chunk0Program.use()
         gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-        gl.uniformMatrix4fv(uModel, false, mView.values);
+        // gl.uniformMatrix4fv(uModel, false, mView.values);
+        // for (let mesh of meshes) {
+        //     mesh.bindVA();
+        //     atlas.bind(gl, 0, mesh.textureId);
+        //     // const modelMat = mesh.modelMatrix;
+        //     const modelTranslation = mesh.modelTranslation;
+        //     gl.uniform3f(uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+        //     // gl.uniformMatrix4fv(uModel, false, modelMat.values);
+        //     gl.drawElements(gl.TRIANGLES, mesh.idxsLen, gl.UNSIGNED_SHORT, 0);
+        // }
         for (let mesh of meshes) {
             mesh.bindVA();
             atlas.bind(gl, 0, mesh.textureId);
             // const modelMat = mesh.modelMatrix;
             const modelTranslation = mesh.modelTranslation;
-            gl.uniform3f(uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z) ;
+            gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
             // gl.uniformMatrix4fv(uModel, false, modelMat.values);
-            gl.drawElements(gl.TRIANGLES, mesh.idxsLen, gl.UNSIGNED_SHORT, 0);           
+            gl.drawArrays(gl.TRIANGLES, 0, mesh.len)
         }
         gl.bindVertexArray(null);
 
         coordsProgram.use();
-        
+
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
         gl.vertexAttribPointer(attrCoordLines, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);

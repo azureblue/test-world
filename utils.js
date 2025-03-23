@@ -103,6 +103,15 @@ class UInt16Buffer extends DataBuffer {
     }
 }
 
+class UInt32Buffer extends DataBuffer {
+    /**
+     * @param {number} initialSize 
+     */
+    constructor(initialSize) {
+        super(Uint32Array, initialSize);
+    }
+}
+
 class Resources {
     static async loadText(src) {
         return await fetch(src).then(r => r.text())
@@ -191,5 +200,5 @@ class ImagePixels {
 
 
 export {
-    Float32Buffer, UInt16Buffer, ImagePixels, Resources
+    UInt32Buffer, Float32Buffer, UInt16Buffer, ImagePixels, Resources
 }

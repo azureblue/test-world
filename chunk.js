@@ -1,6 +1,6 @@
 import { CubeGen, Direction } from "./cube.js";
-import { Mat4, Vec2, Vec3 } from "./geom.js";
-import { Float32Buffer, UInt16Buffer } from "./utils.js";
+import { Vec2, Vec3 } from "./geom.js";
+import { Float32Buffer, UInt16Buffer, UInt32Buffer } from "./utils.js";
 
 const MAX_IDX_VALUE = 65535;
 const CHUNK_SIZE = 16;
@@ -65,6 +65,7 @@ class ChunkData {
         for (let peek = CHUNK_HEIGHT - 1; peek > 0; peek--)
             if (this.at(peek, x, y) !== BLOCK_EMPTY)
                 return peek;
+        return 0;
 
     }
 
@@ -86,7 +87,7 @@ class Mesh {
     static #a_uv;
 
     /** @type {Array<WebGLVertexArrayObject>} */
-    #va = [];
+    #va;
     #textureId;
     #idxsLen;
     #mTranslation;
@@ -163,6 +164,69 @@ class Mesh {
     }
 }
 
+class UIntMesh {
+
+    /** @type {WebGL2RenderingContext} */
+    static #gl;
+    static #a_in;
+
+    /** @type {Array<WebGLVertexArrayObject>} */
+    #va = [];
+    #textureId;
+    #mTranslation;
+    #len;
+
+    /**
+     * 
+     * @param {Vec3} mTranslation 
+     * @param {number} textureId 
+     * @param {Uint32Array} input 
+     */
+    constructor(mTranslation, textureId, input) {
+        this.#mTranslation = mTranslation;
+        this.#textureId = textureId;
+        const gl = UIntMesh.#gl;
+        this.#va = gl.createVertexArray();
+        const vb = gl.createBuffer();
+
+
+        gl.bindVertexArray(this.#va);
+        gl.enableVertexAttribArray(UIntMesh.#a_in);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+        gl.vertexAttribIPointer(UIntMesh.#a_in, 1, gl.UNSIGNED_INT, false, 0, 0);
+        gl.bindVertexArray(null);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+        gl.bufferData(gl.ARRAY_BUFFER, input, gl.STATIC_DRAW);
+        this.#len = input.length;
+    }
+
+    bindVA() {
+        UIntMesh.#gl.bindVertexArray(this.#va);
+    }
+
+    get textureId() {
+        return this.#textureId;
+    }
+
+    get modelTranslation() {
+        return this.#mTranslation;
+    }
+
+    get len() {
+        return this.#len;
+    }
+
+    /**
+     * 
+     * @param {WebGL2RenderingContext} gl 
+     */
+    static setGL(gl, a_in) {
+        UIntMesh.#gl = gl;
+        UIntMesh.#a_in = a_in;
+    }
+}
+
 class Buffer {
     constructor() {
         this.vs = new Float32Buffer();
@@ -207,7 +271,7 @@ class Chunk {
 
     /**
      * @param {ChunkData} data 
-     * @param {Array<Mesh>} meshes
+     * @param {Array<UIntMesh>} meshes
      */
     constructor(data, meshes) {
         this.#data = data;
@@ -229,7 +293,7 @@ class ChunkManager {
 
     /**
      * @param {ChunkDataLoader} chunkLoader 
-     * @param {ChunkMesher} chunkMesher 
+     * @param {UIntChunkMesher} chunkMesher 
      */
     constructor(chunkLoader, chunkMesher) {
         this.#chunkLoader = chunkLoader;
@@ -334,7 +398,121 @@ class ChunkMesher {
     }
 }
 
+class UIntChunkMesher {
+
+    /**
+     * @type {Array<UInt32Buffer>}
+     */
+    #buffers = new Array(128);
+    #cubeGen = new CubeGen();
+    #tmpArr = new Uint32Array(6);
+
+    /*
+               ppnnnzzzzzzzzxxxxyyyy
+    01234567890123456789012345678901
+    */
+
+    /**
+     * 
+     * @param {number} bufferId
+     * @param {number} h 
+     * @param {number} x 
+     * @param {number} y 
+     * @param {number} direction 
+     */
+    encode(bufferId, h, x, y, direction) {
+        const ending = (Direction.directions[direction].bits << 16) | ((h & 0b11111111) << 8) | ((x & 0b1111) << 4) | (y & 0b1111);
+        const buf = this.#bufferAt(bufferId);
+        this.#tmpArr[0] = ((0b00 << 19) | ending);
+        this.#tmpArr[1] = ((0b01 << 19) | ending);
+        this.#tmpArr[2] = ((0b10 << 19) | ending);
+        this.#tmpArr[3] = ((0b00 << 19) | ending);
+        this.#tmpArr[4] = ((0b10 << 19) | ending);
+        this.#tmpArr[5] = ((0b11 << 19) | ending);
+        buf.add(this.#tmpArr);
+    }
+
+    /**
+     * @param {ChunkData} chunk 
+     * @param {ChunkData} chunkLeft
+     * @param {ChunkData} chunkRight
+     * @param {ChunkData} chunkUp
+     * @param {ChunkData} chunkDown
+     * 
+     * @returns {Array<UIntMesh>}
+     */
+    createMeshes(chunk, chunkLeft, chunkRight, chunkUp, chunkDown) {
+        const now = performance.now();
+        this.#buffers.fill(null);
+        const H = CHUNK_HEIGHT;
+        const S = CHUNK_SIZE;
+
+        for (let i = 0; i < H; i++)
+            for (let y = 0; y < S; y++)
+                for (let x = 0; x < S; x++) {
+                    const blockType = chunk.atCheck(i, x, y);
+                    if (blockType == BLOCK_EMPTY)
+                        continue;
+                    const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
+                    const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
+                    const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
+                    const above = chunk.atCheck(i + 1, x, y);
+                    const below = chunk.atCheck(i - 1, x, y);
+                    if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
+                        this.encode(blockTextureUp, i, x, y, Direction.UP);
+                    }
+                    if (below === BLOCK_EMPTY || below === BLOCK_CHUNK_EDGE) {
+                        this.encode(blockTextureDown, i, x, y, Direction.DOWN);
+                    }
+
+                    const right = (x == CHUNK_SIZE - 1 ? chunkRight.at(i, 0, y) : chunk.at(i, x + 1, y));
+                    if (right === BLOCK_EMPTY) {
+                        this.encode(blockTextureSide, i, x, y, Direction.RIGHT);
+                    }
+
+                    const left = (x == 0 ? chunkLeft.at(i, CHUNK_SIZE - 1, y) : chunk.at(i, x - 1, y));
+                    if (left === BLOCK_EMPTY) {
+                        this.encode(blockTextureSide, i, x, y, Direction.LEFT);
+                    }
+
+                    const down = (y == 0 ? chunkDown.at(i, x, CHUNK_SIZE - 1) : chunk.at(i, x, y - 1));
+                    if (down === BLOCK_EMPTY) {
+                        this.encode(blockTextureSide, i, x, y, Direction.FRONT);
+                    }
+
+                    const up = (y == CHUNK_SIZE - 1 ? chunkUp.at(i, x, 0) : chunk.at(i, x, y + 1));
+                    if (up === BLOCK_EMPTY) {
+                        this.encode(blockTextureSide, i, x, y, Direction.BACK);
+                    }
+                }
+        const meshes = [];
+        for (let id = 0; id < 128; id++) {
+            const buf = this.#buffers[id];
+            if (buf !== null) {
+                meshes.push(new UIntMesh(new Vec3(chunk.position.x * CHUNK_SIZE + 0.5, 0.5, -chunk.position.y * CHUNK_SIZE - 0.5),
+                    id, buf.trimmed()));
+            }
+        }
+        const meshTime = performance.now() - now;
+
+        // console.debug("chunk " + chunk.position.toPosString() + " gen time: " + (performance.now() - now));
+        return meshes;
+    }
+
+    #bufferAt(idx) {
+        if (this.#buffers[idx] == null)
+            return this.#buffers[idx] = new UInt32Buffer();
+        else
+            return this.#buffers[idx];
+    }
+}
+
 export {
-    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh
+    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, UIntChunkMesher, UIntMesh, Mesh
 };
+/*
+            ppnnzzzzzzzzxxxxyyyy
+01234567890123456789012345678901
+
+ */
 
