@@ -35,6 +35,16 @@ class Face {
         [0, -1, 0],
     );
 
+    /** @type {Array<Face>} */
+    static faces = [
+        Face.FRONT,
+        Face.LEFT,
+        Face.BACK,
+        Face.RIGHT,
+        Face.UP,
+        Face.DOWN
+    ]
+
 
     /**
      * 
@@ -54,21 +64,25 @@ class Direction {
     static RIGHT = 3;
     static UP = 4;
     static DOWN = 5;
-    static vectors = [
-        new Direction(new Vec3(0, 0, 1)), //front
-        new Direction(new Vec3(-1, 0, 0)), //left
-        new Direction(new Vec3(0, 0, -1)), //back
-        new Direction(new Vec3(1, 0, 0)), //right
-        new Direction(new Vec3(0, 1, 0)), //up
-        new Direction(new Vec3(0, -1, 0)) //down
+    /** @type {Array<Direction>} */
+    static directions = [
+        new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b000), //front
+        new Direction(Direction.LEFT, new Vec3(-1, 0, 0), 0b001), //left
+        new Direction(Direction.BACK, new Vec3(0, 0, -1), 0b010), //back
+        new Direction(Direction.RIGHT, new Vec3(1, 0, 0), 0b011), //right
+        new Direction(Direction.UP, new Vec3(0, 1, 0), 0b100), //up
+        new Direction(Direction.DOWN, new Vec3(0, -1, 0), 0b101) //down
     ];
 
     /**
      * 
      * @param {Vec3} direction 
+     * @param {number} bits 
      */
-    constructor(direction) {
+    constructor(id, direction, bits) {
+        this.id = id;
         this.v = direction;
+        this.bits = bits;
     }
 }
 
