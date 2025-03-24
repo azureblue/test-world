@@ -58,7 +58,8 @@ class TextureAtlas {
      * @param {number} idx
      */
     bind(gl, textureUnit, idx) {
-        gl.activeTexture(gl.TEXTURE0 + textureUnit);
+        //TODO check
+        // gl.activeTexture(gl.TEXTURE0 + textureUnit);
         gl.bindTexture(gl.TEXTURE_2D, this.#textures[idx]);
     }
 }
