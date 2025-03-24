@@ -37,6 +37,42 @@ export class Float32Vector2 extends Vector2Base {
     mulByScalar(scalar) {
         return new Float32Vector2(this.x * scalar, this.y * scalar);
     }
+        
+    /**
+     * Normalize the vector and returns new `Float32Vector2`.
+     *
+     * This method does not mutate the vector.
+     * @returns {Float32Vector2}
+     */
+    normalize() {
+        const mag = this.magnitude;
+        if (mag === 0) {
+            return this;
+        }
+        return new Float32Vector2(this.x / mag, this.y / mag);
+    }
+
+        /**
+     * Normalize the vector in place.
+     */
+        normalizeInPlace() {
+            const mag = this.magnitude;
+            if (mag === 0) {
+                return this;
+            }
+            this.x /= mag;
+            this.y /= mag;
+        }
+        /**
+
+    /**
+     * Calculate dot product.
+     * @param {Float32Vector2} other
+     * @returns {number}
+     */
+    dot(other) {
+        return this.x * other.x + this.y * other.y;
+    }
 }
 /**
  * A 3-dimensional vector of single-precision float numbers.
@@ -128,6 +164,14 @@ export class Float32Vector3 extends Vector3Base {
      */
     get xy() {
         return new Float32Vector2(this.x, this.y);
+    }
+
+    /**
+     * Returns xz values of the vector as `Float32Vector2`.
+     * @returns {Float32Vector2}
+     */
+    get xz() {
+        return new Float32Vector2(this.x, this.z);
     }
 }
 /**
