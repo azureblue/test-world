@@ -22,9 +22,9 @@ uniform vec3 m_translation;
 out highp vec2 v_tex_coord;
 flat out uint o_norm;
 void main() {
-    uint x = (a_in >> 4) & 0xFu;
-    uint z = (a_in) & 0xFu;
-    uint y = (a_in >> 8) & 0xFFu;
+    uint x = (a_in >> 4) & 15u;
+    uint z = (a_in) & 15u;
+    uint y = (a_in >> 8) & 255u;
     uint n = (a_in >> 16) & 7u;
     uint p = (a_in >> 19) & 3u;
     vec3 pos = vec3(x, y, -float(z)) + vertex_offest_map[n * 4u + p];
