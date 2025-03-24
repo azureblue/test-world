@@ -508,7 +508,8 @@ class UIntChunkMesher {
 }
 
 export {
-    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, UIntChunkMesher, UIntMesh, Mesh
+    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, UIntChunkMesher, UIntMesh, Mesh,
+    Chunk
 };
 /*
             ppnnzzzzzzzzxxxxyyyy

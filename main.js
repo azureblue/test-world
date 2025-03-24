@@ -1,5 +1,5 @@
 import { TextureAtlas } from "./atlas.js";
-import { ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh} from "./chunk.js";
+import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
 import { Mat4, Vec2, Vec3 } from "./geom.js";
 import { Program } from "./gl.js";
@@ -33,6 +33,14 @@ export async function start() {
         await Resources.loadText("shaders/coords.vert"),
         await Resources.loadText("shaders/coords.frag")
     );
+
+    let fps = "";
+    let fpsCounter = 0;
+
+    const fpsTimer = window.setInterval(() => {
+        fps = "" + fpsCounter;
+        fpsCounter = 0;
+    }, 1000);
 
 
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -71,14 +79,13 @@ export async function start() {
     const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
 
     /**
-     * @type {Array<UIntChunkMesher>}
+     * @type {Array<Chunk>}
      */
-   
-    const meshes = [];
+    const chunks = [];
     for (let cx = -40; cx < 40; cx++)
         for (let cy = -40; cy < 40; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
-            meshes.push(...chunk.meshes);
+            chunks.push(chunk);
         }
 
     const vCoordsLines = gl.createBuffer();
@@ -126,7 +133,8 @@ export async function start() {
     gl.uniformBlockBinding(coordsProgram.program, gl.getUniformBlockIndex(coordsProgram.program, "Camera"), 0);
     gl.uniformBlockBinding(chunk0Program.program, gl.getUniformBlockIndex(chunk0Program.program, "Camera"), 0);
 
-    const fieldOfView = (70 * Math.PI) / 180; // in radians
+    const fieldOfViewDeg = 70;
+    const fieldOfView = (fieldOfViewDeg * Math.PI) / 180; // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const zNear = 0.1;
     const zFar = 1000.0;
@@ -164,7 +172,7 @@ export async function start() {
 
     const chunkData00 = await chunkLoader.getChunk(0, 0);
     const peak = chunkData00.peak(0, 0);
-    const cameraSpeed = 1;
+    const cameraSpeed = 0.2;
 
     let pos = new Vec3(0, peak + 2, 0);
 
@@ -181,6 +189,7 @@ export async function start() {
     }
 
     const dir = new Vec3(0, 0, 0);
+    const dir2 = new Vec2(0, 0);
     let pause = false;
 
     document.body.addEventListener("mousemove", (me) => {
@@ -242,7 +251,11 @@ export async function start() {
         dir.y = Math.sin(pitchRads);
         dir.z = Math.sin(yawRads) * Math.cos(pitchRads);
 
+        dir2.x = Math.cos(yawRads);
+        dir2.y = Math.sin(yawRads);
+
         dir.normalizeInPlace();
+        dir2.normalizeInPlace();
 
         const up = new Vec3(0, 1, 0);
         const cameraRight = up.cross(dir).normalize();
@@ -263,8 +276,8 @@ export async function start() {
             pos = pos.add(cameraRight.mulByScalar(-1 * cameraSpeed));
 
 
-        statsDiv.textContent = `position x:${pos.x.toFixed(1)} z: ${pos.z.toFixed(1)} y: ${pos.y.toFixed(1)} ` +
-            `direction x:${dir.x.toFixed(1)} z: ${dir.z.toFixed(1)} y: ${dir.y.toFixed(1)}`;
+    
+        
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         chunk0Program.use()
@@ -281,14 +294,35 @@ export async function start() {
         //     // gl.uniformMatrix4fv(uModel, false, modelMat.values);
         //     gl.drawElements(gl.TRIANGLES, mesh.idxsLen, gl.UNSIGNED_SHORT, 0);
         // }
-        for (let mesh of meshes) {
-            mesh.bindVA();
-            atlas.bind(gl, 0, mesh.textureId);
-            // const modelMat = mesh.modelMatrix;
-            const modelTranslation = mesh.modelTranslation;
-            gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-            // gl.uniformMatrix4fv(uModel, false, modelMat.values);
-            gl.drawArrays(gl.TRIANGLES, 0, mesh.len)
+
+        const downConeDeg = (Math.max(-look.pitch - 90 + (fieldOfViewDeg / 2), 0)) * PI_2_360;
+        const cosDownConeDeg = Math.cos(downConeDeg);
+        const _v = pos.y / cosDownConeDeg;
+        const backoff = Math.sqrt(_v * _v - pos.y * pos.y);
+        let chunkCulled = 0;
+        for (let chunk of chunks) {
+
+            const pos2d = dir2.mulByScalar(backoff);
+            const pos2 =  new Vec2(pos.x - pos2d.x, pos.z - pos2d.y);
+            const chunkPos1 = new Vec2(chunk.data.position.x * 16 - pos2.x, -chunk.data.position.y * 16 - pos2.y).normalize();
+            const chunkPos2 = new Vec2(chunk.data.position.x * 16 + 16 - pos2.x, -chunk.data.position.y * 16 - pos2.y).normalize();
+            const chunkPos3 = new Vec2(chunk.data.position.x * 16 + 16 - pos2.x, -chunk.data.position.y * 16 - 16 - pos2.y).normalize();
+            const chunkPos4 = new Vec2(chunk.data.position.x * 16 - pos2.x, -chunk.data.position.y * 16 - 16 - pos2.y).normalize();            
+
+            if (chunkPos1.dot(dir.xz) < 0 && chunkPos2.dot(dir.xz) < 0 && chunkPos3.dot(dir.xz) < 0 && chunkPos4.dot(dir.xz) < 0) {
+                chunkCulled++;
+                continue;
+            }
+
+            for (let mesh of chunk.meshes) {
+                mesh.bindVA();
+                atlas.bind(gl, 0, mesh.textureId);
+                // const modelMat = mesh.modelMatrix;
+                const modelTranslation = mesh.modelTranslation;
+                gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+                // gl.uniformMatrix4fv(uModel, false, modelMat.values);
+                gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
+            }
         }
         gl.bindVertexArray(null);
 
@@ -299,6 +333,11 @@ export async function start() {
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
         gl.vertexAttribPointer(attrCoordLinesColors, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.LINES, 0, 6);
+        statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
+        `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
+        ` pitch:${look.pitch.toFixed(1)} yaw:${look.yaw.toFixed(1)} fps: ${fps} chunk culled: ${chunkCulled} cone down: ${downConeDeg}`;
+    
+        fpsCounter++;
         if (!pause)
             requestAnimationFrame(draw);
     }
