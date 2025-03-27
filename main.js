@@ -83,8 +83,8 @@ export async function start() {
      * @type {Array<Chunk>}
      */
     const chunks = [];
-    for (let cx = -40; cx < 40; cx++)
-        for (let cy = -40; cy < 40; cy++) {
+    for (let cx = -16; cx < 16; cx++)
+        for (let cy = -16; cy < 16; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
             chunks.push(chunk);
         }
@@ -232,9 +232,9 @@ export async function start() {
         if (keys.down)
             camera.moveForward(-cameraSpeed);
         if (keys.left)
-            camera.moveRight(cameraSpeed);
-        if (keys.right)
             camera.moveRight(-cameraSpeed);
+        if (keys.right)
+            camera.moveRight(cameraSpeed);
 
         camera.setLookAtMatrix(mView);
 

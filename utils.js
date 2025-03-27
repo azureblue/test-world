@@ -23,8 +23,7 @@ class DataBuffer {
         } else {
             this.#array.set(elements, this.#pos);
             this.#pos += elements.length;            
-        }
-        
+        }        
     }
 
     extendSize() {
@@ -178,7 +177,6 @@ class ImagePixels {
         return this.#data.data[this.#rowLength * y + x * this.#stride];
     }
 
-
     /**
      * 
      * @param {number} x 
@@ -194,10 +192,6 @@ class ImagePixels {
                 out[oy * w + ox] = this.#data.data[this.#rowLength * y + x * this.#stride];
     }
 }
-
-
-
-
 
 export {
     UInt32Buffer, Float32Buffer, UInt16Buffer, ImagePixels, Resources
