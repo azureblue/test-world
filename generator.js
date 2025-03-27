@@ -24,7 +24,7 @@ class PixelDataChunkGenerator {
         const startY = this.#originPosition.y + ((-chunkPos.y - 1) * CHUNK_SIZE);
         const w = this.#pixels.width;
         const h = this.#pixels.height;
-        const chunk = new ChunkData(chunkPos);
+        const chunk = new ChunkData();
 
         for (let y = 0; y < CHUNK_SIZE; y++)
             for (let x = 0; x < CHUNK_SIZE; x++) {
@@ -32,7 +32,7 @@ class PixelDataChunkGenerator {
                 const cy = startY + y;
                 if (cx < 0 || cy < 0 || cx >= w || cy >= h)
                     continue;
-                const height = this.#pixels.getR(cx, cy);
+                const height = 1; this.#pixels.getR(cx, cy);
                 for (let e = 0; e < height - 1; e++)
                     chunk.set(e, x, CHUNK_SIZE - y - 1, BLOCK_DIRT);
                 if (height > 0)

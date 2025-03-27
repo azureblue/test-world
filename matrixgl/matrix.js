@@ -66,6 +66,27 @@ export class Matrix4x4 {
             m14, m24, m34, m44
         ]);
     }
+
+    
+    setValues(m11, m21, m31, m41, m12, m22, m32, m42, m13, m23, m33, m43, m14, m24, m34, m44) {
+        this._values[0] = m11;
+        this._values[1] = m21;
+        this._values[2] = m31;
+        this._values[3] = m41;
+        this._values[4] = m12;
+        this._values[5] = m22;
+        this._values[6] = m32;
+        this._values[7] = m42;
+        this._values[8] = m13;
+        this._values[9] = m23;
+        this._values[10] = m33;
+        this._values[11] = m43;
+        this._values[12] = m14;
+        this._values[13] = m24;
+        this._values[14] = m34;
+        this._values[15] = m44;
+    }
+
     /**
      * Returns an identity matrix.
      * @returns {Matrix4x4}
@@ -138,13 +159,14 @@ export class Matrix4x4 {
      * @param {Float32Vector3} cameraPosition
      * @param {Float32Vector3} lookAtPosition
      * @param {Float32Vector3} cameraUp
-     * @returns {Matrix4x4}
+     * @param {Matrix4x4} result
      */
-    static lookAt(cameraPosition, lookAtPosition, cameraUp) {
+    static lookAt(cameraPosition, lookAtPosition, cameraUp, result) {
         const zAxis = cameraPosition.sub(lookAtPosition).normalize();
         const xAxis = cameraUp.cross(zAxis).normalize();
         const yAxis = zAxis.cross(xAxis).normalize();
-        return new Matrix4x4(xAxis.x, yAxis.x, zAxis.x, 0.0, xAxis.y, yAxis.y, zAxis.y, 0.0, xAxis.z, yAxis.z, zAxis.z, 0.0, -cameraPosition.dot(xAxis), -cameraPosition.dot(yAxis), -cameraPosition.dot(zAxis), 1.0);
+        
+        result.setValues(xAxis.x, yAxis.x, zAxis.x, 0.0, xAxis.y, yAxis.y, zAxis.y, 0.0, xAxis.z, yAxis.z, zAxis.z, 0.0, -cameraPosition.dot(xAxis), -cameraPosition.dot(yAxis), -cameraPosition.dot(zAxis), 1.0);
     }
     /**
      * Returns an orthographic projection matrix.

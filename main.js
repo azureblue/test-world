@@ -1,4 +1,5 @@
 import { TextureAtlas } from "./atlas.js";
+import { Camera } from "./camera.js";
 import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
 import { Mat4, Vec2, Vec3 } from "./geom.js";
@@ -145,14 +146,9 @@ export async function start() {
         near: zNear
     });
 
-    // const mProjection = Mat4.orthographic({
-    //     top: 0,
-    //     bottom: 100,
-    //     left: 0,
-    //     right: 100,
-    //     near: 0.1,
-    //     far: 100
-    // });
+    const mView = Mat4.identity();
+
+    const hFov = Math.atan(aspect * Math.tan(fieldOfView));
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
     gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.proj.offset, mProjection._values, 0);
@@ -174,8 +170,6 @@ export async function start() {
     const peak = chunkData00.peak(0, 0);
     const cameraSpeed = 0.2;
 
-    let pos = new Vec3(0, peak + 2, 0);
-
     const keys = {
         up: false,
         down: false,
@@ -183,31 +177,15 @@ export async function start() {
         right: false,
     }
 
-    const look = {
-        yaw: 0,
-        pitch: 0
-    }
-
-    const dir = new Vec3(0, 0, 0);
-    const dir2 = new Vec2(0, 0);
     let pause = false;
+
+    const camera = new Camera(new Vec3(0, peak + 2, 0));
 
     document.body.addEventListener("mousemove", (me) => {
         if (pause)
             return;
-        look.yaw += me.movementX / 8;
-        if (look.yaw > 360)
-            look.yaw -= 360;
-        if (look.yaw < 0)
-            look.yaw += 360
-        look.pitch -= me.movementY / 8;
-        if (look.pitch > 89) {
-            look.pitch = 89;
-        }
-
-        if (look.pitch < -89) {
-            look.pitch = -89;
-        }
+        camera.changeYaw(me.movementX * 0.2);
+        camera.changePitch(-me.movementY * 0.2);
     })
 
     document.body.addEventListener("keydown", (ev) => {
@@ -242,77 +220,57 @@ export async function start() {
 
     canvas.addEventListener("click", async () => canvas.requestPointerLock());
 
-    const PI_2_360 = 1 / 360 * Math.PI * 2;
+    const tempVec2_0 = new Vec2(0, 0);
+    const tempVec2_1 = new Vec2(0, 0);
 
     function draw() {
-        const yawRads = look.yaw * PI_2_360;
-        const pitchRads = look.pitch * PI_2_360;
-        dir.x = Math.cos(yawRads) * Math.cos(pitchRads);
-        dir.y = Math.sin(pitchRads);
-        dir.z = Math.sin(yawRads) * Math.cos(pitchRads);
-
-        dir2.x = Math.cos(yawRads);
-        dir2.y = Math.sin(yawRads);
-
-        dir.normalizeInPlace();
-        dir2.normalizeInPlace();
-
-        const up = new Vec3(0, 1, 0);
-        const cameraRight = up.cross(dir).normalize();
-        const cameraUp = new Vec3(0, 1, 0);
-        const cameraFront = dir;
-
-        const mView = Mat4.lookAt(pos, pos.add(cameraFront), cameraUp);
 
         if (run)
             time++;
         if (keys.up)
-            pos = pos.add(dir.mulByScalar(cameraSpeed));
+            camera.moveForward(cameraSpeed);
         if (keys.down)
-            pos = pos.add(dir.mulByScalar(-1 * cameraSpeed));
+            camera.moveForward(-cameraSpeed);
         if (keys.left)
-            pos = pos.add(cameraRight.mulByScalar(cameraSpeed));
+            camera.moveRight(cameraSpeed);
         if (keys.right)
-            pos = pos.add(cameraRight.mulByScalar(-1 * cameraSpeed));
+            camera.moveRight(-cameraSpeed);
 
-
-    
-        
+        camera.setLookAtMatrix(mView);
 
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         chunk0Program.use()
         gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-        // gl.uniformMatrix4fv(uModel, false, mView.values);
-        // for (let mesh of meshes) {
-        //     mesh.bindVA();
-        //     atlas.bind(gl, 0, mesh.textureId);
-        //     // const modelMat = mesh.modelMatrix;
-        //     const modelTranslation = mesh.modelTranslation;
-        //     gl.uniform3f(uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-        //     // gl.uniformMatrix4fv(uModel, false, modelMat.values);
-        //     gl.drawElements(gl.TRIANGLES, mesh.idxsLen, gl.UNSIGNED_SHORT, 0);
-        // }
 
-        const downConeDeg = (Math.max(-look.pitch - 90 + (fieldOfViewDeg / 2), 0)) * PI_2_360;
-        const cosDownConeDeg = Math.cos(downConeDeg);
-        const _v = pos.y / cosDownConeDeg;
-        const backoff = Math.sqrt(_v * _v - pos.y * pos.y);
+        const downConeRads = Math.max(-camera.pitch / 180 * Math.PI - Math.PI / 2 + (fieldOfView / 2), 0);
+        const halfDegRads = hFov / 1.5;
+        const cosDownConeRads = Math.cos(downConeRads);
+        const camY = camera.position.y;
+        const _v = camY / cosDownConeRads;
+        const backoff = Math.sqrt(_v * _v - camY * camY) * 2 + 32;
+        const pos = camera.position;
+        const dir2 = camera.directionXZ;
+        const dir = camera.direction;
+        tempVec2_0.set(pos.x - dir2.x * backoff, pos.z - dir2.y * backoff);
         let chunkCulled = 0;
         for (let chunk of chunks) {
 
-            const pos2d = dir2.mulByScalar(backoff);
-            const pos2 =  new Vec2(pos.x - pos2d.x, pos.z - pos2d.y);
-            const chunkPos1 = new Vec2(chunk.data.position.x * 16 - pos2.x, -chunk.data.position.y * 16 - pos2.y).normalize();
-            const chunkPos2 = new Vec2(chunk.data.position.x * 16 + 16 - pos2.x, -chunk.data.position.y * 16 - pos2.y).normalize();
-            const chunkPos3 = new Vec2(chunk.data.position.x * 16 + 16 - pos2.x, -chunk.data.position.y * 16 - 16 - pos2.y).normalize();
-            const chunkPos4 = new Vec2(chunk.data.position.x * 16 - pos2.x, -chunk.data.position.y * 16 - 16 - pos2.y).normalize();            
-
-            if (chunkPos1.dot(dir.xz) < 0 && chunkPos2.dot(dir.xz) < 0 && chunkPos3.dot(dir.xz) < 0 && chunkPos4.dot(dir.xz) < 0) {
+            let cull = true;
+            for (const cornerPos of chunk.worldCoordCorners) {
+                tempVec2_1.set(cornerPos.x - tempVec2_0.x, cornerPos.y - tempVec2_0.y);
+                tempVec2_1.normalizeInPlace();
+                cull &&= (Math.acos(tempVec2_1.dot(dir2)) > halfDegRads);
+                // tempVec2_1.set(cornerPos.x - pos.x, cornerPos.y - pos.y);
+                // tempVec2_1.normalizeInPlace();
+                // cull &&= (tempVec2_1.dot(dir2) < 0);
+            }
+            if (cull) {
                 chunkCulled++;
                 continue;
             }
+
 
             for (let mesh of chunk.meshes) {
                 mesh.bindVA();
@@ -334,9 +292,9 @@ export async function start() {
         gl.vertexAttribPointer(attrCoordLinesColors, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.LINES, 0, 6);
         statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
-        `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
-        ` pitch:${look.pitch.toFixed(1)} yaw:${look.yaw.toFixed(1)} fps: ${fps} chunk culled: ${chunkCulled} cone down: ${downConeDeg}`;
-    
+            `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
+            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} fps: ${fps} chunk culled: ${chunkCulled} backoff: ${backoff}`;
+
         fpsCounter++;
         if (!pause)
             requestAnimationFrame(draw);
