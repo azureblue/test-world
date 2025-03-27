@@ -1,3 +1,4 @@
+import { Vec3 } from '../geom.js';
 import { Vector2Base, Vector3Base, Vector4Base } from './vector_base.js';
 /**
  * A 2-dimensional vector of single-precision float numbers.
@@ -37,7 +38,19 @@ export class Float32Vector2 extends Vector2Base {
     mulByScalar(scalar) {
         return new Float32Vector2(this.x * scalar, this.y * scalar);
     }
-        
+
+
+    /**
+     * 
+     * @param {number} x
+     * @param {number} y
+     * 
+     */
+    set(x, y) {
+        this._values[0] = x;
+        this._values[1] = y;
+    }
+
     /**
      * Normalize the vector and returns new `Float32Vector2`.
      *
@@ -52,24 +65,24 @@ export class Float32Vector2 extends Vector2Base {
         return new Float32Vector2(this.x / mag, this.y / mag);
     }
 
-        /**
-     * Normalize the vector in place.
-     */
-        normalizeInPlace() {
-            const mag = this.magnitude;
-            if (mag === 0) {
-                return this;
-            }
-            this.x /= mag;
-            this.y /= mag;
-        }
-        /**
-
     /**
-     * Calculate dot product.
-     * @param {Float32Vector2} other
-     * @returns {number}
-     */
+ * Normalize the vector in place.
+ */
+    normalizeInPlace() {
+        const mag = this.magnitude;
+        if (mag === 0) {
+            return this;
+        }
+        this.x /= mag;
+        this.y /= mag;
+    }
+    /**
+
+/**
+ * Calculate dot product.
+ * @param {Float32Vector2} other
+ * @returns {number}
+ */
     dot(other) {
         return this.x * other.x + this.y * other.y;
     }
@@ -82,6 +95,18 @@ export class Float32Vector3 extends Vector3Base {
         super();
         this._values = new Float32Array([x, y, z]);
     }
+
+    /**
+     * @param {number} x 
+     * @param {number} y 
+     * @param {number} z 
+     */
+    set(x, y, z) {
+        this._values[0] = x;
+        this._values[1] = y;
+        this._values[2] = z;
+    }
+
     /**
      * Add `other` to the vector and returns new `Float32Vector3`.
      *
@@ -91,6 +116,15 @@ export class Float32Vector3 extends Vector3Base {
      */
     add(other) {
         return new Float32Vector3(this.x + other.x, this.y + other.y, this.z + other.z);
+    }
+
+    /**
+     * Add `other` to the vector.
+     *
+     * @param {Float32Vector3} other
+     */
+    addInPlace(other) {
+        this.x += other.x; this.y += other.y; this.z += other.z;
     }
     /**
      * Subtract `other` from the vector and returns new `Float32Vector3`.
@@ -131,7 +165,20 @@ export class Float32Vector3 extends Vector3Base {
         const cz = this.x * other.y - this.y * other.x;
         return new Float32Vector3(cx, cy, cz);
     }
-    
+
+    /**
+     * 
+     * @param {Vec3} a 
+     * @param {Vec3} b 
+     * @param {Vec3} result 
+     */
+    static cross(a, b, result) {
+        const cx = a.y * b.z - a.z * b.y;
+        const cy = a.z * b.x - a.x * b.z;
+        const cz = a.x * b.y - a.y * b.x;
+        result.set(cx, cy, cz);
+    }
+
     /**
      * Normalize the vector and returns new `Float32Vector3`.
      *

@@ -26,15 +26,6 @@ const BLOCK_TEXTURE_MAP = [
 class ChunkData {
 
     data = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT);
-    #position = new Vec2(0, 0);
-
-    /**
-     * 
-     * @param {Vec2} position
-     */
-    constructor(position) {
-        this.#position = position;
-    }
 
     /**
      * @param {number} h 
@@ -71,10 +62,6 @@ class ChunkData {
 
     set(h, x, y, id) {
         this.data[CHUNK_PLANE_SIZE * h + y * CHUNK_SIZE + x] = id;
-    }
-
-    get position() {
-        return this.#position;
     }
 }
 
@@ -268,14 +255,25 @@ class ChunkDataLoader {
 class Chunk {
     #data
     #meshes
+    #position
+    /**@type {Array<Vec2} */
+    #worldCoordCorners
 
     /**
      * @param {ChunkData} data 
+     * @param {Vec2} position 
      * @param {Array<UIntMesh>} meshes
      */
-    constructor(data, meshes) {
+    constructor(data, position, meshes) {
         this.#data = data;
+        this.#position = position
         this.#meshes = meshes;
+        this.#worldCoordCorners = [
+            new Vec2(position.x * CHUNK_SIZE, -position.y * CHUNK_SIZE),
+            new Vec2((position.x + 1) * CHUNK_SIZE, -position.y * CHUNK_SIZE),
+            new Vec2((position.x + 1) * CHUNK_SIZE, -(position.y + 1)* CHUNK_SIZE),
+            new Vec2(position.x * CHUNK_SIZE, -(position.y + 1)* CHUNK_SIZE)
+        ]
     }
 
     get meshes() {
@@ -284,6 +282,14 @@ class Chunk {
 
     get data() {
         return this.#data;
+    }
+
+    get position() {
+        return this.#position;
+    }
+
+    get worldCoordCorners() {
+        return this.#worldCoordCorners;
     }
 }
 
@@ -302,14 +308,16 @@ class ChunkManager {
 
     async loadChunk(x, y) {
         const data = await this.#chunkLoader.getChunk(x, y);
+        const position = new Vec2(x, y);
         const meshes = this.#chunkMesher.createMeshes(
+            position,
             data,
             await this.#chunkLoader.getChunk(x - 1, y),
             await this.#chunkLoader.getChunk(x + 1, y),
             await this.#chunkLoader.getChunk(x, y + 1),
             await this.#chunkLoader.getChunk(x, y - 1)
         );
-        return new Chunk(data, meshes);
+        return new Chunk(data, position, meshes);
     }
 }
 
@@ -321,15 +329,16 @@ class ChunkMesher {
     #buffers = new Array(128);
     #cubeGen = new CubeGen()
     /**
-     * @param {ChunkData} chunk 
-     * @param {ChunkData} chunkLeft
-     * @param {ChunkData} chunkRight
-     * @param {ChunkData} chunkUp
-     * @param {ChunkData} chunkDown
+     * @param {Vec2} position 
+     * @param {ChunkData} chunkData 
+     * @param {ChunkData} chunkDataLeft
+     * @param {ChunkData} chunkDataRight
+     * @param {ChunkData} chunkDataUp
+     * @param {ChunkData} chunkDataDown
      * 
      * @returns {Array<Mesh>}
      */
-    createMeshes(chunk, chunkLeft, chunkRight, chunkUp, chunkDown) {
+    createMeshes(position, chunkData, chunkDataLeft, chunkDataRight, chunkDataUp, chunkDataDown) {
         const now = performance.now();
         this.#buffers.fill(null);
         const H = CHUNK_HEIGHT;
@@ -339,15 +348,15 @@ class ChunkMesher {
         for (let i = 0; i < H; i++)
             for (let y = 0; y < S; y++)
                 for (let x = 0; x < S; x++) {
-                    const blockType = chunk.atCheck(i, x, y);
+                    const blockType = chunkData.atCheck(i, x, y);
                     pos.x = x; pos.y = i; pos.z = -y;
                     if (blockType == BLOCK_EMPTY)
                         continue;
                     const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
                     const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
                     const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
-                    const above = chunk.atCheck(i + 1, x, y);
-                    const below = chunk.atCheck(i - 1, x, y);
+                    const above = chunkData.atCheck(i + 1, x, y);
+                    const below = chunkData.atCheck(i - 1, x, y);
                     if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
                         const buf = this.#bufferAt(blockTextureUp);
                         this.#cubeGen.genFace(Direction.UP, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
@@ -357,22 +366,22 @@ class ChunkMesher {
                         this.#cubeGen.genFace(Direction.DOWN, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
                     const buf = this.#bufferAt(blockTextureSide);
-                    const right = (x == CHUNK_SIZE - 1 ? chunkRight.at(i, 0, y) : chunk.at(i, x + 1, y));
+                    const right = (x == CHUNK_SIZE - 1 ? chunkDataRight.at(i, 0, y) : chunkData.at(i, x + 1, y));
                     if (right === BLOCK_EMPTY) {
                         this.#cubeGen.genFace(Direction.RIGHT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
 
-                    const left = (x == 0 ? chunkLeft.at(i, CHUNK_SIZE - 1, y) : chunk.at(i, x - 1, y));
+                    const left = (x == 0 ? chunkDataLeft.at(i, CHUNK_SIZE - 1, y) : chunkData.at(i, x - 1, y));
                     if (left === BLOCK_EMPTY) {
                         this.#cubeGen.genFace(Direction.LEFT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
 
-                    const down = (y == 0 ? chunkDown.at(i, x, CHUNK_SIZE - 1) : chunk.at(i, x, y - 1));
+                    const down = (y == 0 ? chunkDataDown.at(i, x, CHUNK_SIZE - 1) : chunkData.at(i, x, y - 1));
                     if (down === BLOCK_EMPTY) {
                         this.#cubeGen.genFace(Direction.FRONT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
 
-                    const up = (y == CHUNK_SIZE - 1 ? chunkUp.at(i, x, 0) : chunk.at(i, x, y + 1));
+                    const up = (y == CHUNK_SIZE - 1 ? chunkDataUp.at(i, x, 0) : chunkData.at(i, x, y + 1));
                     if (up === BLOCK_EMPTY) {
                         this.#cubeGen.genFace(Direction.BACK, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
                     }
@@ -381,7 +390,7 @@ class ChunkMesher {
         for (let id = 0; id < 128; id++) {
             const buf = this.#buffers[id];
             if (buf !== null) {
-                meshes.push(new Mesh(new Vec3(chunk.position.x * CHUNK_SIZE + 0.5, 0.5, -chunk.position.y * CHUNK_SIZE - 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
+                meshes.push(new Mesh(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
             }
         }
         const meshTime = performance.now() - now;
@@ -404,7 +413,6 @@ class UIntChunkMesher {
      * @type {Array<UInt32Buffer>}
      */
     #buffers = new Array(128);
-    #cubeGen = new CubeGen();
     #tmpArr = new Uint32Array(6);
 
     /*
@@ -433,15 +441,16 @@ class UIntChunkMesher {
     }
 
     /**
-     * @param {ChunkData} chunk 
-     * @param {ChunkData} chunkLeft
-     * @param {ChunkData} chunkRight
-     * @param {ChunkData} chunkUp
-     * @param {ChunkData} chunkDown
+     * @param {Vec2} position 
+     * @param {ChunkData} chunkData 
+     * @param {ChunkData} chunkDataLeft
+     * @param {ChunkData} chunkDataRight
+     * @param {ChunkData} chunkDataUp
+     * @param {ChunkData} chunkDataDown
      * 
      * @returns {Array<UIntMesh>}
      */
-    createMeshes(chunk, chunkLeft, chunkRight, chunkUp, chunkDown) {
+    createMeshes(position, chunkData, chunkDataLeft, chunkDataRight, chunkDataUp, chunkDataDown) {
         const now = performance.now();
         this.#buffers.fill(null);
         const H = CHUNK_HEIGHT;
@@ -450,14 +459,14 @@ class UIntChunkMesher {
         for (let i = 0; i < H; i++)
             for (let y = 0; y < S; y++)
                 for (let x = 0; x < S; x++) {
-                    const blockType = chunk.atCheck(i, x, y);
+                    const blockType = chunkData.atCheck(i, x, y);
                     if (blockType == BLOCK_EMPTY)
                         continue;
                     const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
                     const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
                     const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
-                    const above = chunk.atCheck(i + 1, x, y);
-                    const below = chunk.atCheck(i - 1, x, y);
+                    const above = chunkData.atCheck(i + 1, x, y);
+                    const below = chunkData.atCheck(i - 1, x, y);
                     if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
                         this.encode(blockTextureUp, i, x, y, Direction.UP);
                     }
@@ -465,22 +474,22 @@ class UIntChunkMesher {
                         this.encode(blockTextureDown, i, x, y, Direction.DOWN);
                     }
 
-                    const right = (x == CHUNK_SIZE - 1 ? chunkRight.at(i, 0, y) : chunk.at(i, x + 1, y));
+                    const right = (x == CHUNK_SIZE - 1 ? chunkDataRight.at(i, 0, y) : chunkData.at(i, x + 1, y));
                     if (right === BLOCK_EMPTY) {
                         this.encode(blockTextureSide, i, x, y, Direction.RIGHT);
                     }
 
-                    const left = (x == 0 ? chunkLeft.at(i, CHUNK_SIZE - 1, y) : chunk.at(i, x - 1, y));
+                    const left = (x == 0 ? chunkDataLeft.at(i, CHUNK_SIZE - 1, y) : chunkData.at(i, x - 1, y));
                     if (left === BLOCK_EMPTY) {
                         this.encode(blockTextureSide, i, x, y, Direction.LEFT);
                     }
 
-                    const down = (y == 0 ? chunkDown.at(i, x, CHUNK_SIZE - 1) : chunk.at(i, x, y - 1));
+                    const down = (y == 0 ? chunkDataDown.at(i, x, CHUNK_SIZE - 1) : chunkData.at(i, x, y - 1));
                     if (down === BLOCK_EMPTY) {
                         this.encode(blockTextureSide, i, x, y, Direction.FRONT);
                     }
 
-                    const up = (y == CHUNK_SIZE - 1 ? chunkUp.at(i, x, 0) : chunk.at(i, x, y + 1));
+                    const up = (y == CHUNK_SIZE - 1 ? chunkDataUp.at(i, x, 0) : chunkData.at(i, x, y + 1));
                     if (up === BLOCK_EMPTY) {
                         this.encode(blockTextureSide, i, x, y, Direction.BACK);
                     }
@@ -489,7 +498,7 @@ class UIntChunkMesher {
         for (let id = 0; id < 128; id++) {
             const buf = this.#buffers[id];
             if (buf !== null) {
-                meshes.push(new UIntMesh(new Vec3(chunk.position.x * CHUNK_SIZE + 0.5, 0.5, -chunk.position.y * CHUNK_SIZE - 0.5),
+                meshes.push(new UIntMesh(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5),
                     id, buf.trimmed()));
             }
         }
