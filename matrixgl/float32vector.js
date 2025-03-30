@@ -169,7 +169,9 @@ export class Float32Vector3 extends Vector3Base {
      * @param {number} scalar
      */
     addMulInPlace(other, scalar) {
-        this.x += other.x * scalar; this.y += other.y * scalar; this.z += other.z * scalar;
+        this.x += other.x * scalar; 
+        this.y += other.y * scalar; 
+        this.z += other.z * scalar;
     }
 
     /**

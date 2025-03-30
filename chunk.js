@@ -269,10 +269,16 @@ class Chunk {
         this.#position = position
         this.#meshes = meshes;
         this.#worldCoordCorners = [
+            /*
+            0, 0
+            0, 0, 0, 16, 0, 0, 16, -16, 0, 0, -16, 0
+            */
+            // bottom
             new Vec3(position.x * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1)* CHUNK_SIZE),
-            new Vec3(position.x * CHUNK_SIZE, 0, -(position.y + 1)* CHUNK_SIZE),
+            new Vec3(position.x * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
+            //top
             new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE),

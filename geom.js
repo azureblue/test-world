@@ -29,6 +29,7 @@ class FrustumPlanes {
     /**@type {Normal} */ right = new Normal();
     /**@type {Normal} */ near = new Normal();
     /**@type {Normal} */ far = new Normal();
+    planes = [this.near, this.left, this.right, this.far, this.top, this.bottom];
 }
 
 class Frustum {
