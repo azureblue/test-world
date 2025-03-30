@@ -256,7 +256,7 @@ class Chunk {
     #data
     #meshes
     #position
-    /**@type {Array<Vec2} */
+    /**@type {Array<Vec3>} */
     #worldCoordCorners
 
     /**
@@ -269,11 +269,15 @@ class Chunk {
         this.#position = position
         this.#meshes = meshes;
         this.#worldCoordCorners = [
-            new Vec2(position.x * CHUNK_SIZE, -position.y * CHUNK_SIZE),
-            new Vec2((position.x + 1) * CHUNK_SIZE, -position.y * CHUNK_SIZE),
-            new Vec2((position.x + 1) * CHUNK_SIZE, -(position.y + 1)* CHUNK_SIZE),
-            new Vec2(position.x * CHUNK_SIZE, -(position.y + 1)* CHUNK_SIZE)
-        ]
+            new Vec3(position.x * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1)* CHUNK_SIZE),
+            new Vec3(position.x * CHUNK_SIZE, 0, -(position.y + 1)* CHUNK_SIZE),
+            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE),
+            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE)
+        ];
     }
 
     get meshes() {

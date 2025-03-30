@@ -1,4 +1,4 @@
-import { Mat4, Vec2, Vec3 } from "./geom.js";
+import { FrustumPlanes, Mat4, Projection, Vec2, Vec3, vec3 } from "./geom.js";
 
 class Camera {
     #position = new Vec3(0, 0, 0);
@@ -8,9 +8,8 @@ class Camera {
     #direction = new Vec3(1, 0, 0);
     #directionXZ = new Vec2(1, 0,);
     #yaw = 0; #pitch = 0;
-    
-    static #DIRECTION_UP = new Vec3(0.0, 1.0, 0.0);
 
+    static #DIRECTION_UP = new Vec3(0.0, 1.0, 0.0);
 
     /**
      * @param {Vec3} position 
@@ -19,7 +18,7 @@ class Camera {
         this.#position.set(...position);
         this.#updateDirection();
     }
-    
+
     changeYaw(delta) {
         this.#yaw += delta;
         if (this.#yaw > 360)
@@ -48,7 +47,9 @@ class Camera {
         this.#directionXZ.x = Math.cos(yawRads);
         this.#directionXZ.y = Math.sin(yawRads);
         Vec3.cross(this.#direction, Camera.#DIRECTION_UP, this.#right);
+        this.#right.normalizeInPlace();
         Vec3.cross(this.#right, this.#direction, this.#up);
+        this.#up.normalizeInPlace();
     }
 
 
@@ -58,7 +59,7 @@ class Camera {
     moveForward(step) {
         this.#position.x += this.direction.x * step;
         this.#position.y += this.direction.y * step;
-        this.#position.z += this.direction.z * step;        
+        this.#position.z += this.direction.z * step;
     }
 
     /**
@@ -67,7 +68,7 @@ class Camera {
     moveRight(step) {
         this.#position.x += this.#right.x * step;
         this.#position.y += this.#right.y * step;
-        this.#position.z += this.#right.z * step;        
+        this.#position.z += this.#right.z * step;
     }
 
     /**
@@ -111,6 +112,53 @@ class Camera {
         return this.#yaw;
     }
 
+    #posToFar = vec3();
+    #tmp = vec3();
+    /**      
+     * @param {Projection} projection
+     * @param {FrustumPlanes} result
+     */
+    updatePlanes(projection, result) {
+
+        const frustum = projection.frustum;
+        const posToFar = this.#posToFar;
+        const pos = this.position;
+        const dir = this.direction;
+        const tmp = this.#tmp;
+        const farHalfV = frustum.far * Math.tan(projection.fieldOfViewV / 2.0)
+        const farHalfH = farHalfV * projection.aspectRatio;
+
+        posToFar.set(0, 0, 0);
+        posToFar.addMulInPlace(dir, frustum.far);
+
+        result.near.set(pos, dir);
+        result.near.position.addMulInPlace(dir, frustum.near);
+
+        result.far.position.setTo(pos).addInPlace(posToFar);
+        const farMid = result.far.position;
+        result.far.direction.setTo(dir).mulByScalarInPlace(-1.0);
+
+        result.left.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(this.#right, -farHalfH);
+        Vec3.cross(tmp, this.#up, result.left.direction);
+        result.left.direction.normalizeInPlace();
+
+        result.right.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(this.#right, farHalfH);
+        Vec3.cross(this.#up, tmp, result.right.direction);
+        result.right.direction.normalizeInPlace();
+
+        result.top.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(this.#up, farHalfV);
+        Vec3.cross(tmp, this.#right, result.top.direction);
+        result.top.direction.normalizeInPlace();
+
+        result.bottom.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(this.#up, -farHalfV);
+        Vec3.cross(this.#right, tmp, result.bottom.direction);
+        result.bottom.direction.normalizeInPlace();
+    }
+
 }
 
-export {Camera}
+export { Camera };
