@@ -125,7 +125,7 @@ class Camera {
         const pos = this.position;
         const dir = this.direction;
         const tmp = this.#tmp;
-        const farHalfV = frustum.far * Math.tan(projection.fieldOfViewV / 2.0)
+        const farHalfV = frustum.far * Math.tan(projection.fieldOfViewV / 2.0);
         const farHalfH = farHalfV * projection.aspectRatio;
 
         posToFar.set(0, 0, 0);

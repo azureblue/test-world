@@ -83,8 +83,8 @@ export async function start() {
      * @type {Array<Chunk>}
      */
     const chunks = [];
-    for (let cx = 0; cx < 1; cx++)
-        for (let cy = 0; cy < 1; cy++) {
+    for (let cx = -50; cx < 50; cx++)
+        for (let cy = -50; cy < 50; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
             chunks.push(chunk);
         }
@@ -163,7 +163,7 @@ export async function start() {
 
     const chunkData00 = await chunkLoader.getChunk(0, 0);
     const peak = chunkData00.peak(0, 0);
-    const cameraSpeed = 0.2;
+    const cameraSpeed = 5;
 
     const keys = {
         up: false,
@@ -250,77 +250,30 @@ export async function start() {
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
         camera.updatePlanes(projection, frustumPlanes);
-        let chunkCulled = 0;
+        let chunkCulled = 0;        
         for (let chunk of chunks) {
 
-            let left = 0;
-            let right = 0
-            let top = 0;
-            let down = 0;
-            let nearFar = 0;
-
-            let oks = 0;
-
-            for (const cornerPos of chunk.worldCoordCorners) {
-                vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.near.position, -1);
-                const nearOk = vecToCorner.dot(frustumPlanes.near.direction) > 0;
-                vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.far.position, -1);
-                const farOk = vecToCorner.dot(frustumPlanes.far.direction) > 0;
-
-                if (nearOk && farOk) {
-                    nearFar++;
-
-                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.left.position, -1);
-                    const leftOk = vecToCorner.dot(frustumPlanes.left.direction) > 0;
-
-                    if (!leftOk)
-                        left++;
-
-                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.right.position, -1);
-                    const rightOk = vecToCorner.dot(frustumPlanes.right.direction) > 0;
-
-                    if (!rightOk)
-                        right++;
-
-                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.top.position, -1);
-                    const topOk = vecToCorner.dot(frustumPlanes.top.direction) > 0;
-
-                    if (!topOk)
-                        top++;
-
-                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.bottom.position, -1);
-                    const bottomOk = vecToCorner.dot(frustumPlanes.bottom.direction) > 0;
-
-                    if (!bottomOk) {
-                        down++;
+            let shouldCull = false;
+            for (let plane of frustumPlanes.planes) {
+                let allOut = true;
+                for (const cornerPos of chunk.worldCoordCorners) {
+                    vecToCorner.setTo(cornerPos).addMulInPlace(plane.position, -1);
+                    vecToCorner.normalizeInPlace();
+                    const dot = vecToCorner.dot(plane.direction);
+                    if (dot >= -0.02) {
+                        allOut = false;
+                        break;
                     }
-                    if (leftOk && rightOk && topOk && bottomOk)
-                        oks++;
                 }
+                if (allOut) {
+                    shouldCull = true;
+                    break;
+                }    
             }
-            if (nearFar == 0) {
+            if (shouldCull) {
                 chunkCulled++;
                 continue;
             }
-
-            let cull = true;
-
-            if (oks > 0) {
-                cull = false;
-            } else {
-                // if ((left == 0 && right == 0) || (right * left > 0))
-                //     cull = false;
-
-                // if ((top == 0 && down == 0) || (top * down > 0))
-                //     cull = false;
-            }
-
-            if (cull) {
-                chunkCulled++;
-                continue;
-            }
-
-
 
             for (let mesh of chunk.meshes) {
                 mesh.bindVA();
@@ -329,7 +282,7 @@ export async function start() {
                 const modelTranslation = mesh.modelTranslation;
                 gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
                 // gl.uniformMatrix4fv(uModel, false, modelMat.values);
-                gl.drawArrays(gl.LINES, 0, mesh.len);
+                gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
                 // gl.drawArrays(gl.POINTS, 0, mesh.len);
             }
         }
