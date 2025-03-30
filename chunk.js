@@ -259,6 +259,15 @@ class Chunk {
     /**@type {Array<Vec3>} */
     #worldCoordCorners
 
+    /** @type {Float32Array} */
+    worldCorners = new Float32Array(8 * 4);
+    // /** @type {Float32Array} */
+    // worldCornersX = new Float32Array(8);
+    // /** @type {Float32Array} */
+    // worldCornersY = new Float32Array(8);
+    // /** @type {Float32Array} */
+    // worldCornersZ = new Float32Array(8);
+
     /**
      * @param {ChunkData} data 
      * @param {Vec2} position 
@@ -284,6 +293,17 @@ class Chunk {
             new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE),
             new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE)
         ];
+
+        this.#worldCoordCorners.forEach((corner, idx) => {
+            // this.worldCornersX[idx] = corner.x;
+            // this.worldCornersY[idx] = corner.y;
+            // this.worldCornersZ[idx] = corner.z
+            const offset = idx << 2;
+            this.worldCorners[offset] = corner.x;
+            this.worldCorners[offset + 1] = corner.y;
+            this.worldCorners[offset + 2] = corner.z;
+        })
+        
     }
 
     get meshes() {
