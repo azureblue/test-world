@@ -120,6 +120,13 @@ class FrustumCuller {
     #camera;
     #posToFar = vec3();
     #tmp = vec3();
+    // #tmpPlanePos = new Float32Array(4);
+    // #chunkCoords = new Float32Array(8 * 4);
+    // #chunkXs = new Float32Array(8);
+    // #chunkYs = new Float32Array(8);
+    // #chunkZs = new Float32Array(8);
+
+
 
     /**
      * @param {Frustum} frustum 
@@ -170,39 +177,37 @@ class FrustumCuller {
     }
 
     /**
-     * @param {Chunk} chunk 
-     * @returns {boolean}
+     * @param {Chunk} chunk
      */
     shouldDraw(chunk) {
-        const camPos = this.#camera.position;
-        const vecToCorner = this.#tmp;
-        let shouldCull = false;
+        const camPos = this.#camera.position._values;
+        const corners = chunk.worldCorners;
+        plane_loop:
         for (let plane of this.#planes.planes) {
-            let allOut = true;
-            for (const cornerPos of chunk.worldCoordCorners) {
-                vecToCorner._values[0] = cornerPos._values[0] - camPos._values[0] - plane.position._values[0];
-                vecToCorner._values[1] = cornerPos._values[1] - camPos._values[1] - plane.position._values[1];
-                vecToCorner._values[2] = cornerPos._values[2] - camPos._values[2] - plane.position._values[2];
-                // vecToCorner.setTo(cornerPos);
-                // vecToCorner.subInPlace(camPos);
-                // vecToCorner.subInPlace(plane.position);
-                const dot = vecToCorner.dot(plane.direction);
+            const planeRelativePos = plane.position._values;
+            const planeDir = plane.direction._values;
+            const planex = camPos[0] + planeRelativePos[0];
+            const planey = camPos[1] + planeRelativePos[1];
+            const planez = camPos[2] + planeRelativePos[2];
+            const planedx = planeDir[0];
+            const planedy = planeDir[1];
+            const planedz = planeDir[2];
+
+            for (let i = 0; i < 8; i++) {
+                const offset = i << 2;
+                const ctcx = corners[offset] - planex;
+                const ctcy = corners[offset + 1] - planey;
+                const ctcz = corners[offset + 2] - planez;
+                const dot = ctcx * planedx + ctcy * planedy + ctcz * planedz;
                 if (dot >= -FrustumCuller.DELTA) {
-                    allOut = false;
-                    break;
+                    continue plane_loop;
                 }
             }
-            if (allOut) {
-                shouldCull = true;
-                break;
-            }    
-        }
-        if (shouldCull) {
             return false;
         }
-
         return true;
     }
+
 
     static DELTA = 0.1;
 
