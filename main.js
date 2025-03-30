@@ -2,7 +2,7 @@ import { TextureAtlas } from "./atlas.js";
 import { Camera } from "./camera.js";
 import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
-import { Mat4, Vec2, Vec3 } from "./geom.js";
+import { FrustumPlanes, Projection, Vec2, Vec3, mat4, vec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { ImagePixels, Resources } from "./utils.js";
 
@@ -83,8 +83,8 @@ export async function start() {
      * @type {Array<Chunk>}
      */
     const chunks = [];
-    for (let cx = -16; cx < 16; cx++)
-        for (let cy = -16; cy < 16; cy++) {
+    for (let cx = 0; cx < 1; cx++)
+        for (let cy = 0; cy < 1; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
             chunks.push(chunk);
         }
@@ -134,19 +134,14 @@ export async function start() {
     gl.uniformBlockBinding(coordsProgram.program, gl.getUniformBlockIndex(coordsProgram.program, "Camera"), 0);
     gl.uniformBlockBinding(chunk0Program.program, gl.getUniformBlockIndex(chunk0Program.program, "Camera"), 0);
 
-    const fieldOfViewDeg = 70;
-    const fieldOfView = (fieldOfViewDeg * Math.PI) / 180; // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-    const zNear = 0.1;
-    const zFar = 1000.0;
-    const mProjection = Mat4.perspective({
-        aspectRatio: aspect,
-        fovYRadian: fieldOfView,
-        far: zFar,
-        near: zNear
-    });
+    const fieldOfView = (68 * Math.PI) / 180;
+    const projection = new Projection(fieldOfView, aspect, 0.1, 1000.0);
 
-    const mView = Mat4.identity();
+    const mProjection = mat4();
+    const mView = mat4();
+
+    projection.apply(mProjection);
 
     const hFov = Math.atan(aspect * Math.tan(fieldOfView));
 
@@ -175,6 +170,8 @@ export async function start() {
         down: false,
         left: false,
         right: false,
+        shift: false,
+        ctrl: false
     }
 
     let pause = false;
@@ -197,44 +194,52 @@ export async function start() {
                 draw();
             }
         }
-        if (ev.key == "w")
+        if (ev.key == "Control")
+            keys.ctrl = true;
+        else if (ev.key == "w" || ev.key == "ArrowUp")
             keys.up = true;
-        if (ev.key == "a")
+        else if (ev.key == "a" || ev.key == "ArrowLeft")
             keys.left = true;
-        if (ev.key == "s")
+        else if (ev.key == "s" || ev.key == "ArrowDown")
             keys.down = true;
-        if (ev.key == "d")
+        else if (ev.key == "d" || ev.key == "ArrowRight")
             keys.right = true;
     }, true);
 
     document.body.addEventListener("keyup", (ev) => {
-        if (ev.key == "w")
+
+        if (ev.key == "Control")
+            keys.ctrl = false;
+        else if (ev.key == "w" || ev.key == "ArrowUp")
             keys.up = false;
-        if (ev.key == "a")
+        else if (ev.key == "a" || ev.key == "ArrowLeft")
             keys.left = false;
-        if (ev.key == "s")
+        else if (ev.key == "s" || ev.key == "ArrowDown")
             keys.down = false;
-        if (ev.key == "d")
+        else if (ev.key == "d" || ev.key == "ArrowRight")
             keys.right = false;
     }, true);
 
     canvas.addEventListener("click", async () => canvas.requestPointerLock());
 
-    const tempVec2_0 = new Vec2(0, 0);
-    const tempVec2_1 = new Vec2(0, 0);
+    const vecToCorner = vec3();
+    const crossResult = vec3();
+
+    const frustumPlanes = new FrustumPlanes();
 
     function draw() {
 
+        const cameraSpeedMultiplier = keys.ctrl ? 0.2 : 1;
         if (run)
             time++;
         if (keys.up)
-            camera.moveForward(cameraSpeed);
+            camera.moveForward(cameraSpeed * cameraSpeedMultiplier);
         if (keys.down)
-            camera.moveForward(-cameraSpeed);
+            camera.moveForward(-cameraSpeed * cameraSpeedMultiplier);
         if (keys.left)
-            camera.moveRight(-cameraSpeed);
+            camera.moveRight(-cameraSpeed * cameraSpeedMultiplier);
         if (keys.right)
-            camera.moveRight(cameraSpeed);
+            camera.moveRight(cameraSpeed * cameraSpeedMultiplier);
 
         camera.setLookAtMatrix(mView);
 
@@ -244,32 +249,77 @@ export async function start() {
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
-        const downConeRads = Math.max(-camera.pitch / 180 * Math.PI - Math.PI / 2 + (fieldOfView / 2), 0);
-        const halfDegRads = hFov / 1.5;
-        const cosDownConeRads = Math.cos(downConeRads);
-        const camY = camera.position.y;
-        const _v = camY / cosDownConeRads;
-        const backoff = Math.sqrt(_v * _v - camY * camY) * 2 + 32;
-        const pos = camera.position;
-        const dir2 = camera.directionXZ;
-        const dir = camera.direction;
-        tempVec2_0.set(pos.x - dir2.x * backoff, pos.z - dir2.y * backoff);
+        camera.updatePlanes(projection, frustumPlanes);
         let chunkCulled = 0;
         for (let chunk of chunks) {
 
-            let cull = true;
+            let left = 0;
+            let right = 0
+            let top = 0;
+            let down = 0;
+            let nearFar = 0;
+
+            let oks = 0;
+
             for (const cornerPos of chunk.worldCoordCorners) {
-                tempVec2_1.set(cornerPos.x - tempVec2_0.x, cornerPos.y - tempVec2_0.y);
-                tempVec2_1.normalizeInPlace();
-                cull &&= (Math.acos(tempVec2_1.dot(dir2)) > halfDegRads);
-                // tempVec2_1.set(cornerPos.x - pos.x, cornerPos.y - pos.y);
-                // tempVec2_1.normalizeInPlace();
-                // cull &&= (tempVec2_1.dot(dir2) < 0);
+                vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.near.position, -1);
+                const nearOk = vecToCorner.dot(frustumPlanes.near.direction) > 0;
+                vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.far.position, -1);
+                const farOk = vecToCorner.dot(frustumPlanes.far.direction) > 0;
+
+                if (nearOk && farOk) {
+                    nearFar++;
+
+                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.left.position, -1);
+                    const leftOk = vecToCorner.dot(frustumPlanes.left.direction) > 0;
+
+                    if (!leftOk)
+                        left++;
+
+                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.right.position, -1);
+                    const rightOk = vecToCorner.dot(frustumPlanes.right.direction) > 0;
+
+                    if (!rightOk)
+                        right++;
+
+                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.top.position, -1);
+                    const topOk = vecToCorner.dot(frustumPlanes.top.direction) > 0;
+
+                    if (!topOk)
+                        top++;
+
+                    vecToCorner.setTo(cornerPos).addMulInPlace(frustumPlanes.bottom.position, -1);
+                    const bottomOk = vecToCorner.dot(frustumPlanes.bottom.direction) > 0;
+
+                    if (!bottomOk) {
+                        down++;
+                    }
+                    if (leftOk && rightOk && topOk && bottomOk)
+                        oks++;
+                }
             }
+            if (nearFar == 0) {
+                chunkCulled++;
+                continue;
+            }
+
+            let cull = true;
+
+            if (oks > 0) {
+                cull = false;
+            } else {
+                // if ((left == 0 && right == 0) || (right * left > 0))
+                //     cull = false;
+
+                // if ((top == 0 && down == 0) || (top * down > 0))
+                //     cull = false;
+            }
+
             if (cull) {
                 chunkCulled++;
                 continue;
             }
+
 
 
             for (let mesh of chunk.meshes) {
@@ -279,7 +329,8 @@ export async function start() {
                 const modelTranslation = mesh.modelTranslation;
                 gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
                 // gl.uniformMatrix4fv(uModel, false, modelMat.values);
-                gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
+                gl.drawArrays(gl.LINES, 0, mesh.len);
+                // gl.drawArrays(gl.POINTS, 0, mesh.len);
             }
         }
         gl.bindVertexArray(null);
@@ -291,9 +342,12 @@ export async function start() {
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
         gl.vertexAttribPointer(attrCoordLinesColors, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.LINES, 0, 6);
+
+        const pos = camera.position;
+        const dir = camera.direction;
         statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
             `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
-            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} fps: ${fps} chunk culled: ${chunkCulled} backoff: ${backoff}`;
+            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} fps: ${fps} chunk culled: ${chunkCulled}`;
 
         fpsCounter++;
         if (!pause)

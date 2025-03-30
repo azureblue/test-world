@@ -18,6 +18,16 @@ export class Float32Vector2 extends Vector2Base {
     add(other) {
         return new Float32Vector2(this.x + other.x, this.y + other.y);
     }
+
+    /**
+     * 
+     * @param {Float32Vector2} other
+     * @param {number} scalar 
+     */
+    addMultipliedInPlace(other, scalar) {
+        this._values[0] += other._values[0] * scalar;
+        this._values[1] += other._values[1] * scalar;
+    }
     /**
      * Subtract `other` from the vector and returns new `Float32Vector2`.
      *
@@ -39,16 +49,34 @@ export class Float32Vector2 extends Vector2Base {
         return new Float32Vector2(this.x * scalar, this.y * scalar);
     }
 
+    /**
+    * Multiply the vector by `scalar` in place.
+    *
+    * This method does not mutate the vector.
+    * @param {number} scalar
+    */
+    mulByScalarInPlace(scalar) {
+        this.x *= scalar;
+        this.y *= scalar;
+        return this;
+    }
+
 
     /**
-     * 
      * @param {number} x
      * @param {number} y
-     * 
      */
     set(x, y) {
         this._values[0] = x;
         this._values[1] = y;
+    }
+
+    /**
+     * @param {Float32Vector2} other
+     */
+    setTo(other) {
+        this._values.set(other._values);
+        return this;
     }
 
     /**
@@ -108,6 +136,14 @@ export class Float32Vector3 extends Vector3Base {
     }
 
     /**
+     * @param {Vec3} other
+     */
+    setTo(other) {
+        this._values.set(other._values);
+        return this;
+    }
+
+    /**
      * Add `other` to the vector and returns new `Float32Vector3`.
      *
      * This method does not mutate the vector.
@@ -126,6 +162,16 @@ export class Float32Vector3 extends Vector3Base {
     addInPlace(other) {
         this.x += other.x; this.y += other.y; this.z += other.z;
     }
+
+    /**
+     *
+     * @param {Float32Vector3} other
+     * @param {number} scalar
+     */
+    addMulInPlace(other, scalar) {
+        this.x += other.x * scalar; this.y += other.y * scalar; this.z += other.z * scalar;
+    }
+
     /**
      * Subtract `other` from the vector and returns new `Float32Vector3`.
      *
@@ -146,6 +192,15 @@ export class Float32Vector3 extends Vector3Base {
     mulByScalar(scalar) {
         return new Float32Vector3(this.x * scalar, this.y * scalar, this.z * scalar);
     }
+    /**
+     * @param {number} scalar
+     */
+    mulByScalarInPlace(scalar) {
+        this.x *= scalar;
+        this.y *= scalar;
+        this.z *= scalar;
+    }
+    
     /**
      * Calculate dot product.
      * @param {Float32Vector3} other

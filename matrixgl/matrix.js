@@ -67,7 +67,6 @@ export class Matrix4x4 {
         ]);
     }
 
-    
     setValues(m11, m21, m31, m41, m12, m22, m32, m42, m13, m23, m33, m43, m14, m24, m34, m44) {
         this._values[0] = m11;
         this._values[1] = m21;
@@ -168,55 +167,7 @@ export class Matrix4x4 {
         
         result.setValues(xAxis.x, yAxis.x, zAxis.x, 0.0, xAxis.y, yAxis.y, zAxis.y, 0.0, xAxis.z, yAxis.z, zAxis.z, 0.0, -cameraPosition.dot(xAxis), -cameraPosition.dot(yAxis), -cameraPosition.dot(zAxis), 1.0);
     }
-    /**
-     * Returns an orthographic projection matrix.
-     * @param {{top: number; bottom: number; left: number; right: number; near: number; far: number}} argsObject
-     * @returns {Matrix4x4}
-     */
-    static orthographic(argsObject) {
-        const top = argsObject.top;
-        const bottom = argsObject.bottom;
-        const left = argsObject.left;
-        const right = argsObject.right;
-        const near = argsObject.near;
-        const far = argsObject.far;
-        return new Matrix4x4(2 / (right - left), 0.0, 0.0, 0.0, 0.0, 2 / (top - bottom), 0.0, 0.0, 0.0, 0.0, -2 / (far - near), 0.0, -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1.0);
-    }
-    /**
-     * Returns a frustrum projection matrix.
-     * @param {{top: number; bottom: number; left: number; right: number; near: number; far: number}} argsObject
-     * @returns {Matrix4x4}
-     */
-    static frustum(argsObject) {
-        const top = argsObject.top;
-        const bottom = argsObject.bottom;
-        const left = argsObject.left;
-        const right = argsObject.right;
-        const near = argsObject.near;
-        const far = argsObject.far;
-        return new Matrix4x4(2 * near / (right - left), 0.0, 0.0, 0.0, 0.0, 2 * near / (top - bottom), 0.0, 0.0, (right + left) / (right - left), (top + bottom) / (top - bottom), -(far + near) / (far - near), -1.0, 0.0, 0.0, -2 * far * near / (far - near), 0.0);
-    }
-    /**
-     * Returns a perspective projection matrix.
-     * @param {{fovY: number; aspect: number; near: number; far: number}} argsObject
-     * @returns {Matrix4x4}
-     */
-    static perspective(argsObject) {
-        const top = argsObject.near * Math.tan(argsObject.fovYRadian * 0.5);
-        const height = top * 2;
-        const width = argsObject.aspectRatio * height;
-        const left = -0.5 * width;
-        const right = left + width;
-        const bottom = top - height;
-        return Matrix4x4.frustum({
-            top,
-            bottom,
-            left,
-            right,
-            near: argsObject.near,
-            far: argsObject.far
-        });
-    }
+  
     /**
      * Multiply by `other` matrix and returns a product.
      *
