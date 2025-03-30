@@ -138,8 +138,20 @@ export class Float32Vector3 extends Vector3Base {
     /**
      * @param {Vec3} other
      */
+    setToMultiplied(other, scalar) {
+        this._values[0] = other._values[0] * scalar;
+        this._values[1] = other._values[1] * scalar;
+        this._values[2] = other._values[2] * scalar;
+        return this;
+    }
+
+    /**
+     * @param {Vec3} other
+     */
     setTo(other) {
-        this._values.set(other._values);
+        this._values[0] = other._values[0];
+        this._values[1] = other._values[1];
+        this._values[2] = other._values[2];
         return this;
     }
 
@@ -162,6 +174,19 @@ export class Float32Vector3 extends Vector3Base {
     addInPlace(other) {
         this.x += other.x; this.y += other.y; this.z += other.z;
     }
+    
+    /**
+     * Add `other` to the vector.
+     *
+     * @param {Float32Vector3} other
+     */
+    subInPlace(other) {
+        this._values[0] -= other._values[0];
+        this._values[1] -= other._values[1];
+        this._values[2] -= other._values[2];
+    }
+
+
 
     /**
      *
@@ -169,8 +194,8 @@ export class Float32Vector3 extends Vector3Base {
      * @param {number} scalar
      */
     addMulInPlace(other, scalar) {
-        this.x += other.x * scalar; 
-        this.y += other.y * scalar; 
+        this.x += other.x * scalar;
+        this.y += other.y * scalar;
         this.z += other.z * scalar;
     }
 
@@ -202,7 +227,7 @@ export class Float32Vector3 extends Vector3Base {
         this.y *= scalar;
         this.z *= scalar;
     }
-    
+
     /**
      * Calculate dot product.
      * @param {Float32Vector3} other

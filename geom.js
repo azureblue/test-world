@@ -39,18 +39,23 @@ class Frustum {
     /**@type {number} */ #right;
     /**@type {number} */ #near;
     /**@type {number} */ #far;
+    /**@type {number} */ #farHalfV;
+    /**@type {number} */ #farHalfH;
 
-    constructor(top, bottom, left, right, near, far) {
-        this.set(top, bottom, left, right, near, far);
+
+    constructor(top, bottom, left, right, near, far, farHalfV, farHalfH) {
+        this.set(top, bottom, left, right, near, far, farHalfV, farHalfH);
     }
 
-    set(top, bottom, left, right, near, far) {
+    set(top, bottom, left, right, near, far, farHalfV, farHalfH) {
         this.#top = top;
         this.#bottom = bottom;
         this.#left = left;
         this.#right = right;
         this.#near = near;
         this.#far = far;
+        this.#farHalfV = farHalfV;
+        this.#farHalfH = farHalfH;
     }
 
 
@@ -77,6 +82,15 @@ class Frustum {
     get far() {
         return this.#far;
     }
+
+    get farHalfV() {
+        return this.#farHalfV;
+    }
+
+    get farHalfH() {
+        return this.#farHalfH;
+    }
+
 }
 
 class Projection {
@@ -114,7 +128,9 @@ class Projection {
         const bottom = top - height;
         this.#fieldOfViewV = fovYRadian;
         this.#aspectRatio = aspectRatio;
-        this.#frustum.set(top, bottom, left, right, near, far);
+        const farHalfV = far * Math.tan(fovYRadian / 2.0);
+        const farHalfH = farHalfV * aspectRatio;
+        this.#frustum.set(top, bottom, left, right, near, far, farHalfV, farHalfH);
     }
 
     get frustum() {
@@ -131,8 +147,8 @@ class Projection {
 
 }
 
+
 /**
- * Create new zero matrix.
  * @returns {Mat4}
  */
 function mat4() {
@@ -140,7 +156,6 @@ function mat4() {
 }
 
 /**
- * Create new zero matrix.
  * @returns {Mat3}
  */
 function mat3() {

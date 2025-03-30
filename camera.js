@@ -1,4 +1,5 @@
-import { FrustumPlanes, Mat4, Projection, Vec2, Vec3, vec3 } from "./geom.js";
+import { Chunk } from "./chunk.js";
+import { Frustum, FrustumPlanes, Mat4, Vec2, Vec3, vec3 } from "./geom.js";
 
 class Camera {
     #position = new Vec3(0, 0, 0);
@@ -111,54 +112,100 @@ class Camera {
     get yaw() {
         return this.#yaw;
     }
+}
 
+class FrustumCuller {
+    #planes = new FrustumPlanes();
+    #frustum;
+    #camera;
     #posToFar = vec3();
     #tmp = vec3();
-    /**      
-     * @param {Projection} projection
-     * @param {FrustumPlanes} result
+
+    /**
+     * @param {Frustum} frustum 
+     * @param {Camera} camera 
      */
-    updatePlanes(projection, result) {
-
-        const frustum = projection.frustum;
-        const posToFar = this.#posToFar;
-        const pos = this.position;
-        const dir = this.direction;
-        const tmp = this.#tmp;
-        const farHalfV = frustum.far * Math.tan(projection.fieldOfViewV / 2.0);
-        const farHalfH = farHalfV * projection.aspectRatio;
-
-        posToFar.set(0, 0, 0);
-        posToFar.addMulInPlace(dir, frustum.far);
-
-        result.near.set(pos, dir);
-        result.near.position.addMulInPlace(dir, frustum.near);
-
-        result.far.position.setTo(pos).addInPlace(posToFar);
-        const farMid = result.far.position;
-        result.far.direction.setTo(dir).mulByScalarInPlace(-1.0);
-
-        result.left.position.setTo(pos);
-        tmp.setTo(farMid).addMulInPlace(this.#right, -farHalfH);
-        Vec3.cross(tmp, this.#up, result.left.direction);
-        result.left.direction.normalizeInPlace();
-
-        result.right.position.setTo(pos);
-        tmp.setTo(farMid).addMulInPlace(this.#right, farHalfH);
-        Vec3.cross(this.#up, tmp, result.right.direction);
-        result.right.direction.normalizeInPlace();
-
-        result.top.position.setTo(pos);
-        tmp.setTo(farMid).addMulInPlace(this.#up, farHalfV);
-        Vec3.cross(tmp, this.#right, result.top.direction);
-        result.top.direction.normalizeInPlace();
-
-        result.bottom.position.setTo(pos);
-        tmp.setTo(farMid).addMulInPlace(this.#up, -farHalfV);
-        Vec3.cross(this.#right, tmp, result.bottom.direction);
-        result.bottom.direction.normalizeInPlace();
+    constructor(frustum, camera) {
+        this.#frustum = frustum;
+        this.#camera = camera;
     }
+
+    updatePlanes() {
+        const posToFar = this.#posToFar;
+        const camDir = this.#camera.direction;
+        const camRight = this.#camera.right;
+        const camUp = this.#camera.up;
+        const tmp = this.#tmp;
+        const farHalfV = this.#frustum.farHalfV
+        const farHalfH = this.#frustum.farHalfH;
+
+        posToFar.setToMultiplied(camDir, this.#frustum.far);
+
+        this.#planes.near.direction.setTo(camDir);
+        this.#planes.near.position.setToMultiplied(camDir, this.#frustum.near);
+
+        this.#planes.far.position.setTo(posToFar);
+        const farMid = posToFar;
+        this.#planes.far.direction.setTo(camDir).mulByScalarInPlace(-1.0);
+
+        // this.#planes.left.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(camRight, -farHalfH);
+        Vec3.cross(tmp, camUp, this.#planes.left.direction);
+        this.#planes.left.direction.normalizeInPlace();
+
+        // this.#planes.right.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(camRight, farHalfH);
+        Vec3.cross(camUp, tmp, this.#planes.right.direction);
+        this.#planes.right.direction.normalizeInPlace();
+
+        // this.#planes.top.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(camUp, farHalfV);
+        Vec3.cross(tmp, camRight, this.#planes.top.direction);
+        this.#planes.top.direction.normalizeInPlace();
+
+        // this.#planes.bottom.position.setTo(pos);
+        tmp.setTo(farMid).addMulInPlace(camUp, -farHalfV);
+        Vec3.cross(camRight, tmp, this.#planes.bottom.direction);
+        this.#planes.bottom.direction.normalizeInPlace();
+    }
+
+    /**
+     * @param {Chunk} chunk 
+     * @returns {boolean}
+     */
+    shouldDraw(chunk) {
+        const camPos = this.#camera.position;
+        const vecToCorner = this.#tmp;
+        let shouldCull = false;
+        for (let plane of this.#planes.planes) {
+            let allOut = true;
+            for (const cornerPos of chunk.worldCoordCorners) {
+                vecToCorner._values[0] = cornerPos._values[0] - camPos._values[0] - plane.position._values[0];
+                vecToCorner._values[1] = cornerPos._values[1] - camPos._values[1] - plane.position._values[1];
+                vecToCorner._values[2] = cornerPos._values[2] - camPos._values[2] - plane.position._values[2];
+                // vecToCorner.setTo(cornerPos);
+                // vecToCorner.subInPlace(camPos);
+                // vecToCorner.subInPlace(plane.position);
+                const dot = vecToCorner.dot(plane.direction);
+                if (dot >= -FrustumCuller.DELTA) {
+                    allOut = false;
+                    break;
+                }
+            }
+            if (allOut) {
+                shouldCull = true;
+                break;
+            }    
+        }
+        if (shouldCull) {
+            return false;
+        }
+
+        return true;
+    }
+
+    static DELTA = 0.1;
 
 }
 
-export { Camera };
+export { Camera, FrustumCuller };

@@ -1,5 +1,5 @@
 import { TextureAtlas } from "./atlas.js";
-import { Camera } from "./camera.js";
+import { Camera, FrustumCuller } from "./camera.js";
 import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
 import { FrustumPlanes, Projection, Vec2, Vec3, mat4, vec3 } from "./geom.js";
@@ -83,8 +83,8 @@ export async function start() {
      * @type {Array<Chunk>}
      */
     const chunks = [];
-    for (let cx = -50; cx < 50; cx++)
-        for (let cy = -50; cy < 50; cy++) {
+    for (let cx = -40; cx < 40; cx++)
+        for (let cy = -40; cy < 40; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
             chunks.push(chunk);
         }
@@ -177,6 +177,7 @@ export async function start() {
     let pause = false;
 
     const camera = new Camera(new Vec3(0, peak + 2, 0));
+    const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     document.body.addEventListener("mousemove", (me) => {
         if (pause)
@@ -222,11 +223,6 @@ export async function start() {
 
     canvas.addEventListener("click", async () => canvas.requestPointerLock());
 
-    const vecToCorner = vec3();
-    const crossResult = vec3();
-
-    const frustumPlanes = new FrustumPlanes();
-
     function draw() {
 
         const cameraSpeedMultiplier = keys.ctrl ? 0.2 : 1;
@@ -249,32 +245,15 @@ export async function start() {
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
-        camera.updatePlanes(projection, frustumPlanes);
+        frustumCuller.updatePlanes();        
         let chunkCulled = 0;        
         for (let chunk of chunks) {
 
-            let shouldCull = false;
-            for (let plane of frustumPlanes.planes) {
-                let allOut = true;
-                for (const cornerPos of chunk.worldCoordCorners) {
-                    vecToCorner.setTo(cornerPos).addMulInPlace(plane.position, -1);
-                    vecToCorner.normalizeInPlace();
-                    const dot = vecToCorner.dot(plane.direction);
-                    if (dot >= -0.02) {
-                        allOut = false;
-                        break;
-                    }
-                }
-                if (allOut) {
-                    shouldCull = true;
-                    break;
-                }    
-            }
-            if (shouldCull) {
+            if (!frustumCuller.shouldDraw(chunk)) {
                 chunkCulled++;
                 continue;
             }
-
+           
             for (let mesh of chunk.meshes) {
                 mesh.bindVA();
                 atlas.bind(gl, 0, mesh.textureId);
