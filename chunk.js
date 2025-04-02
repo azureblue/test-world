@@ -285,13 +285,13 @@ class Chunk {
             // bottom
             new Vec3(position.x * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1)* CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
             new Vec3(position.x * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
             //top
             new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE),
-            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE)
+            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1) * CHUNK_SIZE),
+            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1) * CHUNK_SIZE)
         ];
 
         this.#worldCoordCorners.forEach((corner, idx) => {
@@ -303,7 +303,7 @@ class Chunk {
             this.worldCorners[offset + 1] = corner.y;
             this.worldCorners[offset + 2] = corner.z;
         })
-        
+
     }
 
     get meshes() {
@@ -446,7 +446,7 @@ class UIntChunkMesher {
     #tmpArr = new Uint32Array(6);
 
     /*
-               ppnnnzzzzzzzzxxxxyyyy
+       ttttTTTTppnnnzzzzzzzzxxxxyyyy
     01234567890123456789012345678901
     */
 
@@ -456,10 +456,19 @@ class UIntChunkMesher {
      * @param {number} h 
      * @param {number} x 
      * @param {number} y 
-     * @param {number} direction 
+     * @param {number} direction
+     * @param {number} textureIdx
      */
-    encode(bufferId, h, x, y, direction) {
-        const ending = (Direction.directions[direction].bits << 16) | ((h & 0b11111111) << 8) | ((x & 0b1111) << 4) | (y & 0b1111);
+    encode(bufferId, h, x, y, direction, textureIdx) {
+        const dirBits = Direction.directions[direction].bits;
+
+        const ending = 0
+            | ((textureIdx & 0b11111111) << 21)
+            | ((dirBits & 0b111) << 16)
+            | ((h & 0b11111111) << 8)
+            | ((x & 0b1111) << 4)
+            | ((y & 0b1111));
+
         const buf = this.#bufferAt(bufferId);
         this.#tmpArr[0] = ((0b00 << 19) | ending);
         this.#tmpArr[1] = ((0b01 << 19) | ending);
