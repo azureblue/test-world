@@ -193,6 +193,10 @@ class ImagePixels {
     }
 }
 
+export function is2Pow(n) {
+    return (n & (n - 1)) === 0;
+}
+
 export {
     UInt32Buffer, Float32Buffer, UInt16Buffer, ImagePixels, Resources
 }

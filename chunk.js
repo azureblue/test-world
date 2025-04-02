@@ -10,7 +10,7 @@ const BLOCK_CHUNK_EDGE = 255;
 const BLOCK_EMPTY = 0, BLOCK_DIRT = 1, BLOCK_DIRT_GRASS = 2, BLOCK_GRASS = 3;
 
 const BLOCK_TEXTURE_MAP = [
-    [],
+    [0, 0, 0],
     [1, 1, 1],
     [3, 2, 1],
     [3, 3, 3],
@@ -158,20 +158,17 @@ class UIntMesh {
     static #a_in;
 
     /** @type {Array<WebGLVertexArrayObject>} */
-    #va = [];
-    #textureId;
+    #va;
     #mTranslation;
     #len;
 
     /**
      * 
      * @param {Vec3} mTranslation 
-     * @param {number} textureId 
      * @param {Uint32Array} input 
      */
-    constructor(mTranslation, textureId, input) {
+    constructor(mTranslation, input) {
         this.#mTranslation = mTranslation;
-        this.#textureId = textureId;
         const gl = UIntMesh.#gl;
         this.#va = gl.createVertexArray();
         const vb = gl.createBuffer();
@@ -190,10 +187,6 @@ class UIntMesh {
 
     bindVA() {
         UIntMesh.#gl.bindVertexArray(this.#va);
-    }
-
-    get textureId() {
-        return this.#textureId;
     }
 
     get modelTranslation() {
@@ -254,7 +247,7 @@ class ChunkDataLoader {
 
 class Chunk {
     #data
-    #meshes
+    #mesh
     #position
     /**@type {Array<Vec3>} */
     #worldCoordCorners
@@ -271,12 +264,12 @@ class Chunk {
     /**
      * @param {ChunkData} data 
      * @param {Vec2} position 
-     * @param {Array<UIntMesh>} meshes
+     * @param {UIntMesh} mesh
      */
-    constructor(data, position, meshes) {
+    constructor(data, position, mesh) {
         this.#data = data;
         this.#position = position
-        this.#meshes = meshes;
+        this.#mesh = mesh;
         this.#worldCoordCorners = [
             /*
             0, 0
@@ -285,13 +278,13 @@ class Chunk {
             // bottom
             new Vec3(position.x * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1)* CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
             new Vec3(position.x * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
             //top
             new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
             new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE),
-            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1)* CHUNK_SIZE)
+            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1) * CHUNK_SIZE),
+            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1) * CHUNK_SIZE)
         ];
 
         this.#worldCoordCorners.forEach((corner, idx) => {
@@ -303,11 +296,11 @@ class Chunk {
             this.worldCorners[offset + 1] = corner.y;
             this.worldCorners[offset + 2] = corner.z;
         })
-        
+
     }
 
-    get meshes() {
-        return this.#meshes;
+    get mesh() {
+        return this.#mesh;
     }
 
     get data() {
@@ -339,7 +332,7 @@ class ChunkManager {
     async loadChunk(x, y) {
         const data = await this.#chunkLoader.getChunk(x, y);
         const position = new Vec2(x, y);
-        const meshes = this.#chunkMesher.createMeshes(
+        const mesh = this.#chunkMesher.createMeshes(
             position,
             data,
             await this.#chunkLoader.getChunk(x - 1, y),
@@ -347,8 +340,17 @@ class ChunkManager {
             await this.#chunkLoader.getChunk(x, y + 1),
             await this.#chunkLoader.getChunk(x, y - 1)
         );
-        return new Chunk(data, position, meshes);
+        return new Chunk(data, position, mesh);
     }
+}
+
+class Scene {
+    #chunkMap = new Map();
+
+    iterateChunks() {
+
+    }
+
 }
 
 class ChunkMesher {
@@ -440,34 +442,40 @@ class ChunkMesher {
 class UIntChunkMesher {
 
     /**
-     * @type {Array<UInt32Buffer>}
+     * @type {UInt32Buffer}
      */
-    #buffers = new Array(128);
+    #buffer
     #tmpArr = new Uint32Array(6);
 
     /*
-               ppnnnzzzzzzzzxxxxyyyy
+       ttttTTTTppnnnzzzzzzzzxxxxyyyy
     01234567890123456789012345678901
     */
 
     /**
      * 
-     * @param {number} bufferId
+     * @param {number} textureIdx
      * @param {number} h 
      * @param {number} x 
      * @param {number} y 
-     * @param {number} direction 
+     * @param {number} direction
      */
-    encode(bufferId, h, x, y, direction) {
-        const ending = (Direction.directions[direction].bits << 16) | ((h & 0b11111111) << 8) | ((x & 0b1111) << 4) | (y & 0b1111);
-        const buf = this.#bufferAt(bufferId);
+    encode(textureIdx, h, x, y, direction) {
+        const dirBits = Direction.directions[direction].bits;        
+        const ending = 0
+            | ((textureIdx & 0b11111111) << 21)
+            | ((dirBits & 0b111) << 16)
+            | ((h & 0b11111111) << 8)
+            | ((x & 0b1111) << 4)
+            | ((y & 0b1111));
+
         this.#tmpArr[0] = ((0b00 << 19) | ending);
         this.#tmpArr[1] = ((0b01 << 19) | ending);
         this.#tmpArr[2] = ((0b10 << 19) | ending);
         this.#tmpArr[3] = ((0b00 << 19) | ending);
         this.#tmpArr[4] = ((0b10 << 19) | ending);
         this.#tmpArr[5] = ((0b11 << 19) | ending);
-        buf.add(this.#tmpArr);
+        this.#buffer.add(this.#tmpArr);
     }
 
     /**
@@ -478,11 +486,11 @@ class UIntChunkMesher {
      * @param {ChunkData} chunkDataUp
      * @param {ChunkData} chunkDataDown
      * 
-     * @returns {Array<UIntMesh>}
+     * @returns {UIntMesh}
      */
     createMeshes(position, chunkData, chunkDataLeft, chunkDataRight, chunkDataUp, chunkDataDown) {
+        this.#buffer = new UInt32Buffer(4);
         const now = performance.now();
-        this.#buffers.fill(null);
         const H = CHUNK_HEIGHT;
         const S = CHUNK_SIZE;
 
@@ -524,34 +532,17 @@ class UIntChunkMesher {
                         this.encode(blockTextureSide, i, x, y, Direction.BACK);
                     }
                 }
-        const meshes = [];
-        for (let id = 0; id < 128; id++) {
-            const buf = this.#buffers[id];
-            if (buf !== null) {
-                meshes.push(new UIntMesh(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5),
-                    id, buf.trimmed()));
-            }
-        }
         const meshTime = performance.now() - now;
-
-        // console.debug("chunk " + chunk.position.toPosString() + " gen time: " + (performance.now() - now));
-        return meshes;
-    }
-
-    #bufferAt(idx) {
-        if (this.#buffers[idx] == null)
-            return this.#buffers[idx] = new UInt32Buffer();
-        else
-            return this.#buffers[idx];
+        return new UIntMesh(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5),
+            this.#buffer.trimmed());
     }
 }
 
 export {
-    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, UIntChunkMesher, UIntMesh, Mesh,
-    Chunk
+    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, Chunk, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh, UIntChunkMesher, UIntMesh
 };
 /*
-            ppnnzzzzzzzzxxxxyyyy
+    ttttTTTTppnnzzzzzzzzxxxxyyyy
 01234567890123456789012345678901
 
  */
