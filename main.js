@@ -2,7 +2,7 @@ import { TextureAtlas } from "./atlas.js";
 import { Camera, FrustumCuller } from "./camera.js";
 import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
-import { FrustumPlanes, Projection, Vec2, Vec3, mat4, vec3 } from "./geom.js";
+import { Projection, Vec2, Vec3, mat4 } from "./geom.js";
 import { Program } from "./gl.js";
 import { ImagePixels, Resources } from "./utils.js";
 
@@ -44,9 +44,9 @@ export async function start() {
     }, 1000);
 
 
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.enable(gl.BLEND);
+    // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // gl.enable(gl.BLEND);
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -245,25 +245,22 @@ export async function start() {
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
-        frustumCuller.updatePlanes();        
-        let chunkCulled = 0;        
+        frustumCuller.updatePlanes();
+        let chunkCulled = 0;
+        atlas.bind(gl);
         for (let chunk of chunks) {
 
             if (!frustumCuller.shouldDraw(chunk)) {
                 chunkCulled++;
                 continue;
             }
-           
-            for (let mesh of chunk.meshes) {
-                mesh.bindVA();
-                atlas.bind(gl, 0, mesh.textureId);
-                // const modelMat = mesh.modelMatrix;
-                const modelTranslation = mesh.modelTranslation;
-                gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-                // gl.uniformMatrix4fv(uModel, false, modelMat.values);
-                gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
-                // gl.drawArrays(gl.POINTS, 0, mesh.len);
-            }
+            const mesh = chunk.mesh;
+            mesh.bindVA();            
+            const modelTranslation = mesh.modelTranslation;
+            gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+            // gl.uniformMatrix4fv(uModel, false, modelMat.values);
+            gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
+            // gl.drawArrays(gl.POINTS, 0, mesh.len);
         }
         gl.bindVertexArray(null);
 
