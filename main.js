@@ -14,7 +14,9 @@ export async function start() {
 
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
-    const gl = canvas.getContext("webgl2");
+    const gl = canvas.getContext("webgl2", {
+        powerPreference: "high-performance"
+    });
     gl.lineWidth(2);
 
     const baseProgram = new Program(
