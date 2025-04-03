@@ -163,7 +163,7 @@ export async function start() {
 
     const chunkData00 = await chunkLoader.getChunk(0, 0);
     const peak = chunkData00.peak(0, 0);
-    const cameraSpeed = 5;
+    const cameraSpeed = 2;
 
     const keys = {
         up: false,
