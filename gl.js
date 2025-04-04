@@ -1,9 +1,8 @@
-class Program {
+export class Program {
 
     #gl;
     /**
-     * 
-     * @param {WebGLRenderingContext} gl 
+     * @param {WebGL2RenderingContext} gl 
      * @param {string} vertexShaderSrc 
      * @param {string} fragmentShaderSrc 
      */
@@ -43,6 +42,3 @@ class Program {
         this.#gl.useProgram(this.program);
     }
 }
-
-
-export {Program}

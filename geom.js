@@ -58,7 +58,6 @@ class Frustum {
         this.#farHalfH = farHalfH;
     }
 
-
     get top() {
         return this.#top;
     }
@@ -90,7 +89,6 @@ class Frustum {
     get farHalfH() {
         return this.#farHalfH;
     }
-
 }
 
 class Projection {
@@ -101,7 +99,6 @@ class Projection {
     #aspectRatio
     /**@type {numer} */
     #fieldOfViewV
-
 
     constructor(fovYRadian, aspectRatio, near, far) {
         this.set(fovYRadian, aspectRatio, near, far);
@@ -146,7 +143,6 @@ class Projection {
     }
 
 }
-
 
 /**
  * @returns {Mat4}

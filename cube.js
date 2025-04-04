@@ -45,9 +45,7 @@ class Face {
         Face.DOWN
     ]
 
-
     /**
-     * 
      * @param {Array<number>} vertices 
      * @param {*} normal 
      */
@@ -75,7 +73,6 @@ class Direction {
     ];
 
     /**
-     * 
      * @param {Vec3} direction 
      * @param {number} bits 
      */
@@ -98,7 +95,6 @@ class CubeGen {
     }
 
     /**
-     * 
      * @param {number} direction 
      * @param {Float32Buffer} outVertices
      * @param {Float32Buffer} [outNormals]
