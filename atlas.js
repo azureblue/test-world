@@ -1,5 +1,6 @@
+import { is2Pow } from "./utils.js";
 
-class TextureAtlas {
+export class TextureArray {
 
     #size;
     #texture;
@@ -19,23 +20,20 @@ class TextureAtlas {
         const height = image.height;
         let imageCanvas = new OffscreenCanvas(width, height);
         let imageCtx = imageCanvas.getContext("2d");
-        let tex3DCanvas = new OffscreenCanvas(height, width);
-        let tex3DCtx = tex3DCanvas.getContext("2d");
-
-        const columns = width / size;
+        if (!is2Pow(size))
+            throw "invalid size";
+        const columns = Math.floor(width / size);
         imageCtx.scale(1, -1);
         imageCtx.drawImage(image, 0, 0, width, -size);
-        for (let i = 0; i < columns; i++) {
-            tex3DCtx.putImageData(imageCtx.getImageData(i * size, 0, (i + 1) * size, size), 0, i * size);
-        }
-        const data = tex3DCtx.getImageData(0, 0, height, width);
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
         gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 5, gl.RGBA8, size, size, columns);
         // for (let c = 0; c < columns; c++) {            
-        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, size, size, 4, gl.RGBA,
-            gl.UNSIGNED_BYTE,
-            data.data);
+        for (let i = 0; i < columns; i++) {
+            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, size, size, 1 , gl.RGBA,
+                gl.UNSIGNED_BYTE,
+                imageCtx.getImageData(i * size, 0, (i + 1) * size, size));
+        }
         // const ext = gl.getExtension("EXT_texture_filter_anisotropic");                
         // const max = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);        
 
@@ -44,7 +42,7 @@ class TextureAtlas {
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
         // }
-        return new TextureAtlas(texture, size);
+        return new TextureArray(texture, size);
     }
 
     /**
@@ -56,6 +54,4 @@ class TextureAtlas {
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#texture);
     }
 }
-
-export { TextureAtlas };
 
