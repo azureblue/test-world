@@ -3,7 +3,7 @@ import { Vec2 } from "./geom.js";
 import { ImagePixels } from "./utils.js";
 
 
-class PixelDataChunkGenerator {
+export class PixelDataChunkGenerator {
     #pixels
     #originPosition
 
@@ -41,5 +41,3 @@ class PixelDataChunkGenerator {
         return chunk;
     }
 }
-
-export {PixelDataChunkGenerator}

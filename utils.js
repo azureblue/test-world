@@ -72,8 +72,7 @@ class DataBuffer {
     }
 
     /**
-     * 
-     * @returns {Float32Array | Uint16Array}
+     * @returns {Float32Array | Uint32Array | Uint16Array | Uint8Array}
      */
     trimmed() {
         return this.#array.subarray(0, this.#pos);

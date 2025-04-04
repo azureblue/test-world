@@ -453,14 +453,13 @@ class UIntChunkMesher {
     */
 
     /**
-     * 
      * @param {number} textureIdx
      * @param {number} h 
      * @param {number} x 
      * @param {number} y 
      * @param {number} direction
      */
-    encode(textureIdx, h, x, y, direction) {
+    #encode(textureIdx, h, x, y, direction) {
         const dirBits = Direction.directions[direction].bits;        
         const ending = 0
             | ((textureIdx & 0b11111111) << 21)
@@ -506,30 +505,30 @@ class UIntChunkMesher {
                     const above = chunkData.atCheck(i + 1, x, y);
                     const below = chunkData.atCheck(i - 1, x, y);
                     if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
-                        this.encode(blockTextureUp, i, x, y, Direction.UP);
+                        this.#encode(blockTextureUp, i, x, y, Direction.UP);
                     }
                     if (below === BLOCK_EMPTY || below === BLOCK_CHUNK_EDGE) {
-                        this.encode(blockTextureDown, i, x, y, Direction.DOWN);
+                        this.#encode(blockTextureDown, i, x, y, Direction.DOWN);
                     }
 
                     const right = (x == CHUNK_SIZE - 1 ? chunkDataRight.at(i, 0, y) : chunkData.at(i, x + 1, y));
                     if (right === BLOCK_EMPTY) {
-                        this.encode(blockTextureSide, i, x, y, Direction.RIGHT);
+                        this.#encode(blockTextureSide, i, x, y, Direction.RIGHT);
                     }
 
                     const left = (x == 0 ? chunkDataLeft.at(i, CHUNK_SIZE - 1, y) : chunkData.at(i, x - 1, y));
                     if (left === BLOCK_EMPTY) {
-                        this.encode(blockTextureSide, i, x, y, Direction.LEFT);
+                        this.#encode(blockTextureSide, i, x, y, Direction.LEFT);
                     }
 
                     const down = (y == 0 ? chunkDataDown.at(i, x, CHUNK_SIZE - 1) : chunkData.at(i, x, y - 1));
                     if (down === BLOCK_EMPTY) {
-                        this.encode(blockTextureSide, i, x, y, Direction.FRONT);
+                        this.#encode(blockTextureSide, i, x, y, Direction.FRONT);
                     }
 
                     const up = (y == CHUNK_SIZE - 1 ? chunkDataUp.at(i, x, 0) : chunkData.at(i, x, y + 1));
                     if (up === BLOCK_EMPTY) {
-                        this.encode(blockTextureSide, i, x, y, Direction.BACK);
+                        this.#encode(blockTextureSide, i, x, y, Direction.BACK);
                     }
                 }
         const meshTime = performance.now() - now;
