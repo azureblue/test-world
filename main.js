@@ -1,4 +1,4 @@
-import { TextureAtlas } from "./atlas.js";
+import { TextureArray } from "./atlas.js";
 import { Camera, FrustumCuller } from "./camera.js";
 import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
@@ -45,8 +45,6 @@ export async function start() {
         fpsCounter = 0;
     }, 1000);
 
-
-    // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     // gl.enable(gl.BLEND);
 
@@ -75,9 +73,8 @@ export async function start() {
 
     UIntMesh.setGL(gl, aPosition, aNormal, aTexCoord);
     baseProgram.use();
-    const tmp8Ar = new Uint8Array(9);
     const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
-    const atlas = TextureAtlas.create(gl, textures, 16);
+    const texArray = TextureArray.create(gl, textures, 16);
     const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
     const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
 
@@ -138,14 +135,12 @@ export async function start() {
 
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const fieldOfView = (68 * Math.PI) / 180;
-    const projection = new Projection(fieldOfView, aspect, 0.1, 1000.0);
+    const projection = new Projection(fieldOfView, aspect, 0.1, 1000.0);    
 
     const mProjection = mat4();
     const mView = mat4();
 
     projection.apply(mProjection);
-
-    const hFov = Math.atan(aspect * Math.tan(fieldOfView));
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
     gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.proj.offset, mProjection._values, 0);
@@ -249,7 +244,7 @@ export async function start() {
 
         frustumCuller.updatePlanes();
         let chunkCulled = 0;
-        atlas.bind(gl);
+        texArray.bind(gl);
         for (let chunk of chunks) {
 
             if (!frustumCuller.shouldDraw(chunk)) {
