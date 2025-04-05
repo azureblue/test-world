@@ -52,7 +52,7 @@ export async function start() {
     canvas.height = window.innerHeight;
     gl.viewport(0, 0, canvas.width, canvas.height);
 
-    gl.clearColor(136 / 255, 198 / 255, 252 / 255, 1);
+    gl.clearColor(0.522, 0.855, 1, 1);
     gl.enable(gl.DEPTH_TEST);
     gl.frontFace(gl.CCW);
     gl.enable(gl.CULL_FACE);
@@ -115,7 +115,7 @@ export async function start() {
     gl.bufferData(gl.UNIFORM_BUFFER, uCameraSize, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
     gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, uCameraBuffer);
-    const uCameraIndices = gl.getUniformIndices(baseProgram.program, ["proj", "view"]);
+    const uCameraIndices = gl.getUniformIndices(baseProgram.program, ["cam_proj", "cam_view", "cam_pos"]);
     const uCameraOffsets = gl.getActiveUniforms(baseProgram.program, uCameraIndices, gl.UNIFORM_OFFSET);
 
     const uCameraVariableInfo = {
@@ -126,6 +126,10 @@ export async function start() {
         view: {
             index: uCameraIndices[1],
             offset: uCameraOffsets[1]
+        },
+        pos: {
+            index: uCameraIndices[2],
+            offset: uCameraOffsets[2]
         }
     };
 
@@ -135,7 +139,7 @@ export async function start() {
 
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const fieldOfView = (68 * Math.PI) / 180;
-    const projection = new Projection(fieldOfView, aspect, 0.1, 1000.0);    
+    const projection = new Projection(fieldOfView, aspect, 0.1, 640.0);    
 
     const mProjection = mat4();
     const mView = mat4();
@@ -160,6 +164,9 @@ export async function start() {
 
     const chunkData00 = await chunkLoader.getChunk(0, 0);
     const peak = chunkData00.peak(0, 0);
+    const camera = new Camera(new Vec3(0, peak + 2, 0));
+    const frustumCuller = new FrustumCuller(projection.frustum, camera);
+
     const cameraSpeed = 2;
 
     const keys = {
@@ -172,9 +179,6 @@ export async function start() {
     }
 
     let pause = false;
-
-    const camera = new Camera(new Vec3(0, peak + 2, 0));
-    const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     document.body.addEventListener("mousemove", (me) => {
         if (pause)
@@ -240,11 +244,13 @@ export async function start() {
         chunk0Program.use()
         gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.pos.offset, camera.position._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
         frustumCuller.updatePlanes();
         let chunkCulled = 0;
         texArray.bind(gl);
+
         for (let chunk of chunks) {
 
             if (!frustumCuller.shouldDraw(chunk)) {

@@ -42,7 +42,6 @@ class Frustum {
     /**@type {number} */ #farHalfV;
     /**@type {number} */ #farHalfH;
 
-
     constructor(top, bottom, left, right, near, far, farHalfV, farHalfH) {
         this.set(top, bottom, left, right, near, far, farHalfV, farHalfH);
     }
@@ -141,7 +140,6 @@ class Projection {
     get aspectRatio() {
         return this.#aspectRatio;
     }
-
 }
 
 /**
@@ -158,16 +156,24 @@ function mat3() {
     return new Mat3(0, 0, 0, 0, 0, 0, 0, 0, 0)
 }
 
-/**@returns {Vec3} */
-function vec3() {
-    return new Vec3(0, 0, 0);
+/**
+ * @param {number} [x] 
+ * @param {number} [y] 
+ * @param {number} [z] 
+ * @returns {Vec3}
+ */
+function vec3(x = 0, y = 0, z = 0) {
+    return new Vec3(x, y, z);
 }
 
-/**@returns {Vec2} */
-function vec2() {
-    return new Vec2(0, 0);
+/**
+ * @param {number} [x] 
+ * @param {number} [y] 
+ * @returns {Vec2}
+ */
+function vec2(x = 0, y = 0) {
+    return new Vec2(x = 0, y = 0);
 }
 
-
-export { Frustum, FrustumPlanes, Mat3, Mat4, Projection, Vec2, Vec3, Vec4, mat3, mat4, vec2, vec3 };
+export { Frustum, FrustumPlanes, Mat3, mat3, Mat4, mat4, Projection, Vec2, vec2, Vec3, vec3, Vec4 };
 
