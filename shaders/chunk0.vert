@@ -1,11 +1,13 @@
 #version 300 es
+#define VIEW_DISTANCE 640.0
 // consider calculating uvs in js
 //   ttttTTTTppnnnzzzzzzzzxxxxyyyy
 //01234567890123456789012345678901
 layout(location = 0) in uint a_in;
 layout(std140) uniform Camera {
-    mat4 proj;
-    mat4 view;
+    mat4 cam_proj;
+    mat4 cam_view;
+    vec3 cam_pos;
 };
 
 
@@ -23,6 +25,7 @@ uniform vec3 m_translation;
 
 out highp vec3 v_tex_coord;
 flat out uint o_norm;
+out float fading;
 void main() {
     uint z = (a_in) & 15u;
     uint x = (a_in >> 4) & 15u;
@@ -32,6 +35,7 @@ void main() {
     uint t = (a_in >> 21) & 255u;
     v_tex_coord = vec3(tex_coord_map[p], float(t));
     vec3 pos = vec3(x, y, -float(z)) + vertex_offest_map[n * 4u + p];
-    gl_Position = proj * view * vec4(pos + m_translation, 1.0f);
+    gl_Position = cam_proj * cam_view * vec4(pos + m_translation, 1.0f);
+    fading = clamp(distance(cam_pos, pos + m_translation) / VIEW_DISTANCE, 0.0, 1.0);
     o_norm = n;
 }

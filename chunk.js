@@ -1,5 +1,5 @@
 import { CubeGen, Direction } from "./cube.js";
-import { Vec2, Vec3 } from "./geom.js";
+import { Vec2, vec3, Vec3 } from "./geom.js";
 import { Float32Buffer, UInt16Buffer, UInt32Buffer } from "./utils.js";
 
 const MAX_IDX_VALUE = 65535;
@@ -249,6 +249,8 @@ class Chunk {
     #data
     #mesh
     #position
+    /**@type {Vec3} */
+    #worldCenterPosition
     /**@type {Array<Vec3>} */
     #worldCoordCorners
 
@@ -270,6 +272,7 @@ class Chunk {
         this.#data = data;
         this.#position = position
         this.#mesh = mesh;
+        this.#worldCenterPosition = vec3(position.x * CHUNK_SIZE + CHUNK_SIZE / 2, CHUNK_HEIGHT / 2, -position.y * CHUNK_SIZE - CHUNK_SIZE / 2)
         this.#worldCoordCorners = [
             /*
             0, 0
@@ -297,6 +300,10 @@ class Chunk {
             this.worldCorners[offset + 2] = corner.z;
         })
 
+    }
+
+    get worldCenterPosition() {
+        return this.#worldCenterPosition;
     }
 
     get mesh() {

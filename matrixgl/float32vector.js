@@ -302,6 +302,17 @@ export class Float32Vector3 extends Vector3Base {
     get xz() {
         return new Float32Vector2(this.x, this.z);
     }
+
+    /**
+     * @param {Float32Vector3} other 
+     * @returns {number}
+     */
+    dist2(other) {
+        const dx = this._values[0] - other._values[0];
+        const dy = this._values[1] - other._values[1];
+        const dz = this._values[2] - other._values[2];
+        return dx * dx + dy * dy + dz * dz;
+    }
 }
 /**
  * A 4-dimensional vector of single-precision float numbers.
@@ -349,18 +360,4 @@ export class Float32Vector4 extends Vector4Base {
         return new Float32Vector3(this.x, this.y, this.z);
     }
 }
-/**
- * An alias for `Float32Vector2`.
- * @type {Float32Vector2}
- */
-export const Vector2 = Float32Vector2;
-/**
- * An alias for `Float32Vector3`.
- * @type {Float32Vector3}
- */
-export const Vector3 = Float32Vector3;
-/**
- * An alias for `Float32Vector4`.
- * @type {Float32Vector4}
- */
-export const Vector4 = Float32Vector4;
+
