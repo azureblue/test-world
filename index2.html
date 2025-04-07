@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="icon" href="favicon.png" type="image/png">
+    <link rel="stylesheet" href="style.css" />
+</head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test World</title>
+
+<body>
+    <div id="stats"></div>
+</body>
+<style>
+    body {
+        background-image: linear-gradient(45deg, #aaa 25%, transparent 25%),
+            linear-gradient(135deg, #aaa 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #aaa 75%),
+            linear-gradient(135deg, transparent 75%, #aaa 75%);
+        background-size: 10px 10px;
+        /* Must be a square */
+        background-position: 0px 0, -5px 0, 5px -5px, 0px 5px;
+        /* Must be half of one side of the square */
+    }
+</style>
+<script type="module">
+
+    export class EdgeShadowGenerator {
+
+        #canvas
+        #ctx2d
+        #size
+
+        constructor(size) {
+            this.#size = size;
+            this.#canvas = new OffscreenCanvas(size, size);
+            this.#ctx2d = this.#canvas.getContext("2d");
+        }
+
+        generate(shadowStart, shadowEnd, alphaStart, alphaEnd, r, g, b) {
+            const size = this.#size;
+            const imageDataArray = Array(64);
+            const shadowLen = shadowEnd - shadowStart;
+            const shadowLenInPixelsOnImage = shadowEnd * size;
+            const alphaRange = alphaEnd - alphaStart;
+
+            const empty = new ImageData(size, size);
+            const left = new ImageData(size, size);
+            const down = new ImageData(size, size);
+
+            const pixel = new Uint8Array([r, g, b, 0]);
+
+            for (let x = 0; x < shadowLenInPixelsOnImage; x++) {
+                let res = this.#smoothstep(shadowStart, shadowEnd, x / size);
+                let val = (1.0 - res) * alphaRange + alphaStart;
+                pixel[3] = val;
+                for (let y = 0; y < size; y++) {
+                    this.#setPixel(left, x, y, pixel);
+                    this.#setPixel(down, y, size - x - 1, pixel);
+                }
+            }
+
+            const corner0 = new ImageData(size, size);
+            for (let x = 0; x < size; x++) {
+                for (let y = 0; y < size; y++) {
+                    const a0 = this.#getA(left, x, y);
+                    const a1 = this.#getA(down, x, y);
+                    pixel[3] = Math.min(a0, a1);
+                    this.#setPixel(corner0, x, y, pixel);
+                }
+            }
+
+            const cross0 = new ImageData(size, size);
+            for (let x = 0; x < size; x++) {
+                for (let y = 0; y < size; y++) {
+                    const a0 = this.#getA(left, x, y);
+                    const a1 = this.#getA(down, x, y);
+                    pixel[3] = Math.max(a0, a1);
+                    this.#setPixel(cross0, x, y, pixel);
+                }
+            }
+
+            imageDataArray[0] = empty;
+            imageDataArray[1] = corner0;
+            imageDataArray[2] = left;
+            imageDataArray[3] = down;
+            imageDataArray[4] = cross0;
+
+            for (let r = 1; r <= 3; r++) {
+                for (let i = 0; i < 5; i++) {
+                    imageDataArray[r * 5 + i] = empty;
+                    imageDataArray[r * 5 + i] = new ImageData(size, size);
+                    imageDataArray[r * 5 + i] = new ImageData(size, size);
+                    imageDataArray[r * 5 + i] = new ImageData(size, size);
+                    imageDataArray[r * 5 + i] = new ImageData(size, size);
+                    for (let x = 0; x < size; x++) {
+                        for (let y = 0; y < size; y++) {
+                            this.#getPixel(imageDataArray[(r - 1) * 5 + i], x, y, pixel);
+                            this.#setPixel(imageDataArray[r * 5 + i], y, size - x - 1, pixel);
+                        }
+                    }
+                }
+            }
+
+            return imageDataArray;
+
+        }
+
+
+        /**
+         * @param {ImageData} data 
+         * @param {Uint8Array} pixelData 
+         */
+        #setPixel(data, x, y, pixelData) {
+            const idx = (y * this.#size + x) * 4;
+            data.data.set(pixelData, idx);
+        }
+
+        /**
+         * @param {ImageData} data 
+         * @param {Uint8Array} pixelData
+         */
+        #getPixel(data, x, y, pixelData) {
+            const idx = (y * this.#size + x) * 4;
+            pixelData[0] = data.data[idx];
+            pixelData[1] = data.data[idx + 1];
+            pixelData[2] = data.data[idx + 2];
+            pixelData[3] = data.data[idx + 3];
+        }
+        /**
+         * @param {ImageData} data 
+         */
+        #getA(data, x, y) {
+            const idx = (y * this.#size + x) * 4;
+            return data.data[idx + 3];
+        }
+
+        #smoothstep(edge0, edge1, x) {
+            let t = (x - edge0) / (edge1 - edge0);
+            if (t < 0.0)
+                t = 0.0;
+            if (t > 1.0)
+                t = 1.0;
+            return t * t * (3.0 - 2.0 * t);
+        }
+
+        /** @param {CanvasRenderingContext2D} ctx */
+        applyTo(ctx) {
+            ctx.putImageData(this.#ctx2d.getImageData(0, 0, this.#size, this.#size), 0, 0);
+        }
+    }
+
+    let can = document.createElement("canvas");
+    can.width = 16 * 8;
+    can.height = 16 * 8;
+    document.body.append(can);
+    can.style.width = '1200px';
+    can.style.height = '1200px';
+    can.style.border = '1px solid'
+    let ctx = can.getContext('2d');
+    let gen = new EdgeShadowGenerator(16);
+    let asd = gen.generate(0, 0.4, 0, 200, 0, 0, 0);
+    for (let i = 0; i < 40; i++) {
+        ctx.putImageData(asd[i], (i % 8) * 16, (i >> 3) * 16);
+        ctx.fillText("" + i, (i % 8) * 16 + 3, (i >> 3) * 16 + 10);
+    }
+
+
+</script>
+
+</html>

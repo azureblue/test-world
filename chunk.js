@@ -18,6 +18,10 @@ export const BLOCKS = {
 const BLOCK_EMPTY = BLOCKS.BLOCK_EMPTY;
 const BLOCK_CHUNK_EDGE = BLOCKS.BLOCK_CHUNK_EDGE;
 
+function isSolid(block) {
+    return (block != BLOCK_EMPTY && block != BLOCK_CHUNK_EDGE);
+}
+
 const BLOCK_TEXTURE_MAP = [
     [0, 0, 0], // 0
     [1, 1, 1], // 1
@@ -346,18 +350,66 @@ class ChunkManager {
         this.#chunkMesher = chunkMesher;
     }
 
-    async loadChunk(x, y) {
-        const data = await this.#chunkLoader.getChunk(x, y);
-        const position = new Vec2(x, y);
+    async loadChunk(cx, cy) {
+        const position = new Vec2(cx, cy);
+        const chunks = [
+            await this.#chunkLoader.getChunk(cx - 1, cy + 1),
+            await this.#chunkLoader.getChunk(cx, cy + 1),
+            await this.#chunkLoader.getChunk(cx + 1, cy + 1),
+            await this.#chunkLoader.getChunk(cx - 1, cy),
+            await this.#chunkLoader.getChunk(cx, cy),
+            await this.#chunkLoader.getChunk(cx + 1, cy),
+            await this.#chunkLoader.getChunk(cx - 1, cy - 1),
+            await this.#chunkLoader.getChunk(cx, cy - 1),
+            await this.#chunkLoader.getChunk(cx + 1, cy - 1)
+        ];
+
         const mesh = this.#chunkMesher.createMeshes(
-            position,
-            data,
-            await this.#chunkLoader.getChunk(x - 1, y),
-            await this.#chunkLoader.getChunk(x + 1, y),
-            await this.#chunkLoader.getChunk(x, y + 1),
-            await this.#chunkLoader.getChunk(x, y - 1)
+            position, new BlockAdjs(chunks)
         );
-        return new Chunk(data, position, mesh);
+        return new Chunk(chunks[4], position, mesh);
+    }
+}
+
+export class BlockAdjs {
+
+    #chunks
+    #x;
+    #y;
+    #h;
+
+    /**
+     * @param {ArrayLike} data 
+     */
+    constructor(chunks) {
+        this.#chunks = chunks;
+    }
+
+    setPosition(h, x, y) {
+        this.#h = h;
+        this.#x = x;
+        this.#y = y;
+    }
+
+    get(dh, dx, dy) {
+        let chunk = 4;
+        let px = this.#x + dx;
+        let py = this.#y + dy;
+        if (px < 0) {
+            px += CHUNK_SIZE;
+            chunk -= 1;
+        } else if (px >= CHUNK_SIZE) {
+            px -= CHUNK_SIZE;
+            chunk += 1;
+        }
+        if (py < 0) {
+            py += CHUNK_SIZE;
+            chunk += 3;
+        } else if (py >= CHUNK_SIZE) {
+            py -= CHUNK_SIZE;
+            chunk -= 3;
+        }
+        return this.#chunks[chunk].atCheck(dh + this.#h, px, py);
     }
 }
 
@@ -465,7 +517,7 @@ class UIntChunkMesher {
     #tmpArr = new Uint32Array(6);
 
     /*
-       shttttTTTTnnnzzzzzzzzxxxxyyyy
+     shadttttTTTTnnnzzzzzzzzxxxxyyyy
     01234567890123456789012345678901
     */
 
@@ -476,35 +528,75 @@ class UIntChunkMesher {
      * @param {number} y 
      * @param {number} direction
      */
-    #encode(textureIdx, h, x, y, direction) {
+    #encode(textureIdx, h, x, y, direction, shadows = 0) {
         const dirBits = Direction.directions[direction].bits;
-        const ending = 0
+        // shadows = 0b1100;
+        const bits = 0
+            // | ((shadows & 0b1111) << 27)
             | ((textureIdx & 0b11111111) << 19)
             | ((dirBits & 0b111) << 16)
             | ((h & 0b11111111) << 8)
             | ((x & 0b1111) << 4)
             | ((y & 0b1111));
 
-        this.#tmpArr[0] = ending;
-        this.#tmpArr[1] = ending;
-        this.#tmpArr[2] = ending;
-        this.#tmpArr[3] = ending;
-        this.#tmpArr[4] = ending;
-        this.#tmpArr[5] = ending;
+        // first corner
+        let corner0 = 0;
+        if ((shadows & 0b1001_0000) == 0b1001_0000)
+            corner0 = 4;
+        else if ((shadows & 0b1000_0000) == 0b1000_0000)
+            corner0 = 2;
+        else if ((shadows & 0b0001_0000) == 0b0001_0000)
+            corner0 = 3;
+        else if ((shadows & 0b0000_0001) == 0b0000_0001)
+            corner0 = 1;
+
+        let corner1 = 0;
+        if ((shadows & 0b011_0000) == 0b0011_0000)
+            corner1 = 4;
+        else if ((shadows & 0b0001_0000) == 0b0001_0000)
+            corner1 = 2;
+        else if ((shadows & 0b0010_0000) == 0b0010_0000)
+            corner1 = 3;
+        else if ((shadows & 0b0000_0010) == 0b0000_0010)
+            corner1 = 1;
+
+        let corner2 = 0;
+        if ((shadows & 0b0110_0000) == 0b0110_0000)
+            corner2 = 4;
+        else if ((shadows & 0b0010_0000) == 0b0010_0000)
+            corner2 = 2;
+        else if ((shadows & 0b0100_0000) == 0b0100_0000)
+            corner2 = 3;
+        else if ((shadows & 0b0000_0100) == 0b0000_0100)
+            corner2 = 1;
+
+        let corner3 = 0;
+        if ((shadows & 0b1100_0000) == 0b1100_0000)
+            corner3 = 4;
+        else if ((shadows & 0b0100_0000) == 0b0100_0000)
+            corner3 = 2;
+        else if ((shadows & 0b1000_0000) == 0b1000_0000)
+            corner3 = 3;
+        else if ((shadows & 0b0000_1000) == 0b0000_1000)
+            corner3 = 1;
+
+
+        this.#tmpArr[0] = bits | (corner0 << 27);
+        this.#tmpArr[1] = bits | (corner1 << 27);
+        this.#tmpArr[2] = bits | (corner2 << 27);
+        this.#tmpArr[3] = bits | (corner0 << 27);
+        this.#tmpArr[4] = bits | (corner2 << 27);
+        this.#tmpArr[5] = bits | (corner3 << 27)
         this.#buffer.add(this.#tmpArr);
     }
 
     /**
      * @param {Vec2} position 
-     * @param {ChunkData} chunkData 
-     * @param {ChunkData} chunkDataLeft
-     * @param {ChunkData} chunkDataRight
-     * @param {ChunkData} chunkDataUp
-     * @param {ChunkData} chunkDataDown
+     * @param {BlockAdjs} adj
      * 
      * @returns {UIntMesh}
      */
-    createMeshes(position, chunkData, chunkDataLeft, chunkDataRight, chunkDataUp, chunkDataDown) {
+    createMeshes(position, adj) {
         this.#buffer = new UInt32Buffer(4);
         const now = performance.now();
         const H = CHUNK_HEIGHT;
@@ -513,38 +605,52 @@ class UIntChunkMesher {
         for (let i = 0; i < H; i++)
             for (let y = 0; y < S; y++)
                 for (let x = 0; x < S; x++) {
-                    const blockType = chunkData.atCheck(i, x, y);
+                    adj.setPosition(i, x, y);
+                    const blockType = adj.get(0, 0, 0);
                     if (blockType == BLOCK_EMPTY)
                         continue;
+
                     const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
                     const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
                     const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
-                    const above = chunkData.atCheck(i + 1, x, y);
-                    const below = chunkData.atCheck(i - 1, x, y);
+                    const above = adj.get(1, 0, 0);
+                    const below = adj.get(-1, 0, 0);
                     if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
-                        this.#encode(blockTextureUp, i, x, y, Direction.UP);
+                        let shadows = 0;
+                        if (isSolid(adj.get(1, 0, -1)))/**/ shadows |= 0b0001_0000;
+                        if (isSolid(adj.get(1, 1, 0)))/**/  shadows |= 0b0010_0000;
+                        if (isSolid(adj.get(1, 0, 1)))/**/  shadows |= 0b0100_0000;
+                        if (isSolid(adj.get(1, -1, 0)))/**/ shadows |= 0b1000_0000;
+
+                        if (isSolid(adj.get(1, -1, -1)))/**/shadows |= 0b0000_0001;
+                        if (isSolid(adj.get(1, 1, -1)))/**/ shadows |= 0b0000_0010;
+                        if (isSolid(adj.get(1, 1, 1)))/**/  shadows |= 0b0000_0100;
+                        if (isSolid(adj.get(1, -1, 1)))/**/ shadows |= 0b0000_1000;
+
+                        this.#encode(blockTextureUp, i, x, y, Direction.UP, shadows);
                     }
+
                     if (below === BLOCK_EMPTY || below === BLOCK_CHUNK_EDGE) {
                         this.#encode(blockTextureDown, i, x, y, Direction.DOWN);
                     }
 
-                    const right = (x == CHUNK_SIZE - 1 ? chunkDataRight.at(i, 0, y) : chunkData.at(i, x + 1, y));
-                    if (right === BLOCK_EMPTY) {
+                    if (adj.get(0, 1, 0) === BLOCK_EMPTY) {
                         this.#encode(blockTextureSide, i, x, y, Direction.RIGHT);
                     }
 
-                    const left = (x == 0 ? chunkDataLeft.at(i, CHUNK_SIZE - 1, y) : chunkData.at(i, x - 1, y));
-                    if (left === BLOCK_EMPTY) {
+                    if (adj.get(0, -1, 0) === BLOCK_EMPTY) {
                         this.#encode(blockTextureSide, i, x, y, Direction.LEFT);
                     }
 
-                    const down = (y == 0 ? chunkDataDown.at(i, x, CHUNK_SIZE - 1) : chunkData.at(i, x, y - 1));
-                    if (down === BLOCK_EMPTY) {
-                        this.#encode(blockTextureSide, i, x, y, Direction.FRONT);
+                    if (adj.get(0, 0, -1) === BLOCK_EMPTY) {
+                        let shadows = 0;
+                        if (isSolid(adj.get(-1, 0, -1))) {
+                            shadows |= 3;
+                        }
+                        this.#encode(blockTextureSide, i, x, y, Direction.FRONT, shadows);
                     }
 
-                    const up = (y == CHUNK_SIZE - 1 ? chunkDataUp.at(i, x, 0) : chunkData.at(i, x, y + 1));
-                    if (up === BLOCK_EMPTY) {
+                    if (adj.get(0, 0, 1) === BLOCK_EMPTY) {
                         this.#encode(blockTextureSide, i, x, y, Direction.BACK);
                     }
                 }

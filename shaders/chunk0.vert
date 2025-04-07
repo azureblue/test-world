@@ -1,11 +1,12 @@
 #version 300 es
 #define VIEW_DISTANCE_SQ 409600.0
+#define b_0000_0001 1u
 #define b_0000_0011 3u
 #define b_0000_0111 7u
 #define b_0000_1111 15u
 #define b_1111_1111 255u
 // consider calculating uvs in js
-//     ttttTTTTnnnzzzzzzzzxxxxyyyy
+//  shattttTTTTnnnzzzzzzzzxxxxyyyy
 //01234567890123456789012345678901
 layout (location = 0) in uint a_in;
 layout (std140) uniform Camera {
@@ -27,19 +28,24 @@ const vec3 vertex_offest_map[24] = vec3[24](
 const vec3 normal_0 = vec3(-1, 0, 0);
 const vec3 normal_0_up = vec3(-1, 0, 0);
 
-
 uniform vec3 m_translation;
 
 out highp vec3 v_tex_coord;
+out highp vec3 s_tex_coord;
+out vec3 v_tex_ids;
+out vec3 v_bary;
 flat out uint o_norm;
-out float fading;
+smooth out float fading;
+
 void main() {
+    int vertex_idx = gl_VertexID % 6;
     uint z = (a_in >> 0) & b_0000_1111;
     uint x = (a_in >> 4) & b_0000_1111;
     uint y = (a_in >> 8) & b_1111_1111;
     uint n = (a_in >> 16) & b_0000_0111;
-    uint p = idx_to_face_point_idx[gl_VertexID % 6]; // (a_in >> 19) & b_0000_0011;
-    uint t = (a_in >> 19) & b_1111_1111;
+    uint p = idx_to_face_point_idx[vertex_idx]; // (a_in >> 19) & b_0000_0011;
+    uint tex_idx = (a_in >> 19) & b_1111_1111;
+    uint shadow_idx = 32u + (a_in >> 27) & b_0000_0111;
 
     vec3 pos = vec3(x, y, -float(z)) + m_translation + vertex_offest_map[n * 4u + p];
     vec3 pos_to_cam_diff = cam_pos - pos;
@@ -49,8 +55,22 @@ void main() {
     uint p_1 = (p >> 1) & 1u;
 
     fading = clamp(cam_to_pos_dist_sq / VIEW_DISTANCE_SQ, 0.0f, 1.0f);
-    v_tex_coord = vec3(float(p_0 ^ p_1), float(p_1), float(t));
-    // v_tex_coord = vec3(tex_coord_map[p], float(t));
+    v_tex_coord = vec3(float(p_0 ^ p_1), float(p_1), float(tex_idx));
+    v_tex_ids = vec3(0.0, 0.0, 0.0);
+    v_bary = vec3(0.0, 0.0, 0.0);
+    int a = gl_VertexID % 6;
+    v_tex_ids[vertex_idx % 3] = float(32u + p * 5u + shadow_idx);
+    v_bary[vertex_idx % 3] = 1.0;
+    // if (a == 0) {
+    //     v_tex_ids[0] = float(32 + 1);
+    //     v_bary[0] = 1.0;
+    // } else if (a == 1) {
+    //     v_tex_ids[1] = float(32 + 9);
+    //     v_bary[1] = 1.0;
+    // } else if (a == 2) {
+    //     v_tex_ids[2] = float(32 + 12);
+    //     v_bary[2] = 1.0;
+    // } 
     o_norm = n;
     gl_Position = cam_proj * cam_view * vec4(pos, 1.0f);
 }
