@@ -1,4 +1,4 @@
-import { BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_GRASS, CHUNK_SIZE, ChunkData } from "./chunk.js";
+import { BLOCKS, CHUNK_SIZE, ChunkData } from "./chunk.js";
 import { Vec2 } from "./geom.js";
 import { ImagePixels } from "./utils.js";
 
@@ -34,9 +34,9 @@ export class PixelDataChunkGenerator {
                     continue;
                 const height = this.#pixels.getR(cx, cy);
                 for (let e = 0; e < height - 1; e++)
-                    chunk.set(e, x, CHUNK_SIZE - y - 1, BLOCK_DIRT);
+                    chunk.set(e, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_DIRT);
                 if (height > 0)
-                    chunk.set(height - 1, x, CHUNK_SIZE - y - 1, BLOCK_DIRT_GRASS);
+                    chunk.set(height - 1, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_DIRT_GRASS);
             }
         return chunk;
     }

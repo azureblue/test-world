@@ -2,18 +2,28 @@ import { CubeGen, Direction } from "./cube.js";
 import { Vec2, vec3, Vec3 } from "./geom.js";
 import { Float32Buffer, UInt16Buffer, UInt32Buffer } from "./utils.js";
 
-const MAX_IDX_VALUE = 65535;
 const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 128;
 const CHUNK_PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
-const BLOCK_CHUNK_EDGE = 255;
-const BLOCK_EMPTY = 0, BLOCK_DIRT = 1, BLOCK_DIRT_GRASS = 2, BLOCK_GRASS = 3;
+
+export const BLOCKS = {
+    BLOCK_EMPTY: 0,
+    BLOCK_DIRT: 1,
+    BLOCK_DIRT_GRASS: 2,
+    BLOCK_GRASS: 3,
+    BLOCK_ROCK: 4,
+    BLOCK_CHUNK_EDGE: 255
+}
+
+const BLOCK_EMPTY = BLOCKS.BLOCK_EMPTY;
+const BLOCK_CHUNK_EDGE = BLOCKS.BLOCK_CHUNK_EDGE;
 
 const BLOCK_TEXTURE_MAP = [
-    [0, 0, 0],
-    [1, 1, 1],
-    [3, 2, 1],
-    [3, 3, 3],
+    [0, 0, 0], // 0
+    [1, 1, 1], // 1
+    [3, 2, 1], // 2
+    [3, 3, 3], // 3
+    [4, 4, 4], // 4
 ]
 
 /**
@@ -455,7 +465,7 @@ class UIntChunkMesher {
     #tmpArr = new Uint32Array(6);
 
     /*
-       ttttTTTTppnnnzzzzzzzzxxxxyyyy
+       shttttTTTTnnnzzzzzzzzxxxxyyyy
     01234567890123456789012345678901
     */
 
@@ -467,20 +477,20 @@ class UIntChunkMesher {
      * @param {number} direction
      */
     #encode(textureIdx, h, x, y, direction) {
-        const dirBits = Direction.directions[direction].bits;        
+        const dirBits = Direction.directions[direction].bits;
         const ending = 0
-            | ((textureIdx & 0b11111111) << 21)
+            | ((textureIdx & 0b11111111) << 19)
             | ((dirBits & 0b111) << 16)
             | ((h & 0b11111111) << 8)
             | ((x & 0b1111) << 4)
             | ((y & 0b1111));
 
-        this.#tmpArr[0] = ((0b00 << 19) | ending);
-        this.#tmpArr[1] = ((0b01 << 19) | ending);
-        this.#tmpArr[2] = ((0b10 << 19) | ending);
-        this.#tmpArr[3] = ((0b00 << 19) | ending);
-        this.#tmpArr[4] = ((0b10 << 19) | ending);
-        this.#tmpArr[5] = ((0b11 << 19) | ending);
+        this.#tmpArr[0] = ending;
+        this.#tmpArr[1] = ending;
+        this.#tmpArr[2] = ending;
+        this.#tmpArr[3] = ending;
+        this.#tmpArr[4] = ending;
+        this.#tmpArr[5] = ending;
         this.#buffer.add(this.#tmpArr);
     }
 
@@ -545,11 +555,6 @@ class UIntChunkMesher {
 }
 
 export {
-    BLOCK_DIRT, BLOCK_DIRT_GRASS, BLOCK_EMPTY, BLOCK_GRASS, CHUNK_SIZE, Chunk, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh, UIntChunkMesher, UIntMesh
+    Chunk, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh, UIntChunkMesher, UIntMesh
 };
-/*
-    ttttTTTTppnnzzzzzzzzxxxxyyyy
-01234567890123456789012345678901
-
- */
 
