@@ -19,7 +19,7 @@ export class TextureArray {
         const width = image.width;
         const height = image.height;
         let imageCanvas = new OffscreenCanvas(width, height);
-        let imageCtx = imageCanvas.getContext("2d");
+        let imageCtx = imageCanvas.getContext("2d", {willReadFrequently: true});
         if (!is2Pow(size))
             throw "invalid size";
         const columns = Math.floor(width / size);
