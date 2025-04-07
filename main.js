@@ -1,6 +1,6 @@
-import { TextureArray } from "./atlas.js";
+import { TextureArray } from "./textures.js";
 import { Camera, FrustumCuller } from "./camera.js";
-import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
+import { BlockAdjs, Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
 import { Projection, Vec2, Vec3, mat4 } from "./geom.js";
 import { Program } from "./gl.js";
@@ -18,6 +18,7 @@ export async function start() {
         powerPreference: "high-performance"
     });
     gl.lineWidth(2);
+    
 
     const baseProgram = new Program(
         gl,
@@ -71,13 +72,12 @@ export async function start() {
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
 
-    UIntMesh.setGL(gl, aPosition, aNormal, aTexCoord);
+    UIntMesh.setGL(gl, aIn, aNormal, aTexCoord);
     baseProgram.use();
     const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
     const texArray = TextureArray.create(gl, textures, 16);
     const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
     const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
-
     /**
      * @type {Array<Chunk>}
      */
