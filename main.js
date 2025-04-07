@@ -225,7 +225,7 @@ export async function start() {
     canvas.addEventListener("click", async () => canvas.requestPointerLock());
 
     function draw() {
-
+        const now = performance.now();
         const cameraSpeedMultiplier = keys.ctrl ? 0.2 : 1;
         if (run)
             time++;
@@ -240,8 +240,8 @@ export async function start() {
 
         camera.setLookAtMatrix(mView);
 
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         chunk0Program.use()
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.pos.offset, camera.position._values, 0);
@@ -277,9 +277,10 @@ export async function start() {
 
         const pos = camera.position;
         const dir = camera.direction;
+        const nowDiff = performance.now() - now;
         statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
             `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
-            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} fps: ${fps} chunk culled: ${chunkCulled}`;
+            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${nowDiff.toFixed(1)}ms  fps: ${fps} chunk culled: ${chunkCulled}`;
 
         fpsCounter++;
         if (!pause)
