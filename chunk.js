@@ -361,6 +361,62 @@ class ChunkManager {
     }
 }
 
+class BlockAdjs {
+
+    #data = new Uint16Array(27);
+
+    /**
+     * @param {ArrayLike} data 
+     */
+    constructor(data) {
+        this.#data.set(data);
+    }
+
+    get(dh, dx, dy) {
+        return this.#data[13 + dh * 9 + dy * 3 + dx];
+    }
+
+    /**
+     * @param {ChunkDataLoader} dataLoader 
+     */
+    static async load(dataLoader, cx, cy, bh, bx, by) {
+        const res = new Uint32Array(27);
+        const chunks = [
+            await dataLoader.getChunk(cx - 1, cy + 1),
+            await dataLoader.getChunk(cx, cy + 1),
+            await dataLoader.getChunk(cx + 1, cy + 1),
+            await dataLoader.getChunk(cx - 1, cy),
+            await dataLoader.getChunk(cx, cy),
+            await dataLoader.getChunk(cx + 1, cy - 1),
+            await dataLoader.getChunk(cx - 1, cy - 1),
+            await dataLoader.getChunk(cx, cy - 1),
+            await dataLoader.getChunk(cx + 1, cy - 1)
+        ];
+        for (let h = -1; h < 2; h++)
+            for (let y = -1; y < 2; y++)
+                for (let x = -1; x < 2; x++) {
+                    let chunk = 4;
+                    let px = x;
+                    let py = y;
+                    if (px < 0) {
+                        px += CHUNK_SIZE;
+                        chunk -= 1;
+                    } else if (py >= CHUNK_SIZE) {
+                        px -= CHUNK_SIZE;
+                        chunk += 1;
+                    }
+                    if (py < 0) {
+                        py += CHUNK_SIZE;
+                        chunk += 3;
+                    } else if (py >= CHUNK_SIZE) {
+                        py -= CHUNK_SIZE;
+                        chunk += 3;
+                    }
+            }
+    }
+
+}
+
 class Scene {
     #chunkMap = new Map();
 
