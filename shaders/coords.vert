@@ -11,6 +11,6 @@ layout (std140) uniform Camera
 };
 
 void main() {
-    gl_Position = cam_proj * cam_view * vec4(a_position, 1.0);
+    gl_Position = cam_proj * cam_view * vec4(a_position + vec3(0.0, 2.0, 0.0), 1.0);
     v_color = a_color;
 }

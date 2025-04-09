@@ -361,7 +361,7 @@ class ChunkManager {
     }
 }
 
-class BlockAdjs {
+export class BlockAdjs {
 
     #data = new Uint16Array(27);
 
@@ -392,12 +392,13 @@ class BlockAdjs {
             await dataLoader.getChunk(cx, cy - 1),
             await dataLoader.getChunk(cx + 1, cy - 1)
         ];
+        let idx = 0;
         for (let h = -1; h < 2; h++)
             for (let y = -1; y < 2; y++)
                 for (let x = -1; x < 2; x++) {
                     let chunk = 4;
-                    let px = x;
-                    let py = y;
+                    let px = bx + x;
+                    let py = by + y;
                     if (px < 0) {
                         px += CHUNK_SIZE;
                         chunk -= 1;
@@ -410,9 +411,12 @@ class BlockAdjs {
                         chunk += 3;
                     } else if (py >= CHUNK_SIZE) {
                         py -= CHUNK_SIZE;
-                        chunk += 3;
+                        chunk -= 3;
                     }
+                res[idx] = chunks[chunk].atCheck(h + bh, px, py);
+                idx++;
             }
+            return new BlockAdjs(res);
     }
 
 }

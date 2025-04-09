@@ -32,7 +32,7 @@ export class PixelDataChunkGenerator {
                 const cy = startY + y;
                 if (cx < 0 || cy < 0 || cx >= w || cy >= h)
                     continue;
-                const height = this.#pixels.getR(cx, cy);
+                const height = (Math.abs(x) == Math.abs(CHUNK_SIZE - y - 1)) ? 2: 1; //this.#pixels.getR(cx, cy);
                 for (let e = 0; e < height - 1; e++)
                     chunk.set(e, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_DIRT);
                 if (height > 0)
