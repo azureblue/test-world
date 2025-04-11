@@ -537,7 +537,9 @@ class UIntChunkMesher {
      */
     #encode(textureIdx, h, x, y, direction, shadows = 0) {
         const dirBits = Direction.directions[direction].bits;
-        const ending = 0
+        shadows = 0b1100;
+        const bits = 0
+            | ((shadows & 0b1111) << 27)
             | ((textureIdx & 0b11111111) << 19)
             | ((dirBits & 0b111) << 16)
             | ((h & 0b11111111) << 8)
@@ -545,12 +547,12 @@ class UIntChunkMesher {
             | ((y & 0b1111));
 
         
-        this.#tmpArr[0] = ending | (((shadows >> 0) & 1) << 27);
-        this.#tmpArr[1] = ending | (((shadows >> 1) & 1) << 27);
-        this.#tmpArr[2] = ending | (((shadows >> 2) & 1) << 27);
-        this.#tmpArr[3] = ending | (((shadows >> 0) & 1) << 27);
-        this.#tmpArr[4] = ending | (((shadows >> 2) & 1) << 27);
-        this.#tmpArr[5] = ending | (((shadows >> 3) & 1) << 27);
+        this.#tmpArr[0] = bits;
+        this.#tmpArr[1] = bits;
+        this.#tmpArr[2] = bits;
+        this.#tmpArr[3] = bits;
+        this.#tmpArr[4] = bits;
+        this.#tmpArr[5] = bits;
         this.#buffer.add(this.#tmpArr);
     }
 

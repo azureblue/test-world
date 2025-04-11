@@ -13,8 +13,18 @@ import { Mat4, vec3 } from "./geom.js";
 // console.log(performance.now() - now);
 // console.log(m);
 let a = 0;
-for (let i = 0; i < 1e7; i++) {
-    const x = vec3(i, 0, 0);
-    a += x._values[0];
+let obj = {
+    a: 1,
+    b: 2, 
+    c: 3,
+    dasadfasdfasdf1: 4,
+    d2: 4,
+    d3: 4,
+    d4: 4,
+    d5: 4,
+    d6: 4,
 }
-console.log(a);
+for (let i = 0; i < 1e7; i++) {    
+    obj["dasadfasdfasdf1"] += i;
+}
+console.log(obj.c);

@@ -1,4 +1,4 @@
-import { TextureArray } from "./atlas.js";
+import { TextureArray } from "./textures.js";
 import { Camera, FrustumCuller } from "./camera.js";
 import { BlockAdjs, Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
@@ -83,8 +83,8 @@ export async function start() {
      * @type {Array<Chunk>}
      */
     const chunks = [];
-    for (let cx = -1; cx < 1; cx++)
-        for (let cy = -1; cy < 1; cy++) {
+    for (let cx = -40; cx < 40; cx++)
+        for (let cy = -40; cy < 40; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
             chunks.push(chunk);
         }

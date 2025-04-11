@@ -32,9 +32,9 @@ const vec3 normal_0_up = vec3(-1, 0, 0);
 uniform vec3 m_translation;
 
 out highp vec3 v_tex_coord;
+out highp vec3 s_tex_coord;
 flat out uint o_norm;
 smooth out float fading;
-smooth out float shadow;
 void main() {
     int vertex_idx = gl_VertexID % 6;
     uint z = (a_in >> 0) & b_0000_1111;
@@ -43,7 +43,7 @@ void main() {
     uint n = (a_in >> 16) & b_0000_0111;
     uint p = idx_to_face_point_idx[vertex_idx]; // (a_in >> 19) & b_0000_0011;
     uint t = (a_in >> 19) & b_1111_1111;
-    uint s = (a_in >> 27) & b_0000_0001;
+    uint s = (a_in >> 27) & b_0000_1111;
 
     vec3 pos = vec3(x, y, -float(z)) + m_translation + vertex_offest_map[n * 4u + p];
     vec3 pos_to_cam_diff = cam_pos - pos;
@@ -53,8 +53,8 @@ void main() {
     uint p_1 = (p >> 1) & 1u;
 
     fading = clamp(cam_to_pos_dist_sq / VIEW_DISTANCE_SQ, 0.0f, 1.0f);
-    shadow = float(s);
-    v_tex_coord = vec3(float(p_0 ^ p_1), float(p_1), float(t));
+    s_tex_coord = vec3(float(p_0 ^ p_1), float(p_1), 5);
+    v_tex_coord = vec3(float(p_0 ^ p_1), float(p_1), t);
     // v_tex_coord = vec3(tex_coord_map[p], float(t));
     o_norm = n;
     gl_Position = cam_proj * cam_view * vec4(pos, 1.0f);
