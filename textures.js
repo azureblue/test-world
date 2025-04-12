@@ -23,7 +23,7 @@ export class TextureArray {
         if (!is2Pow(size))
             throw "invalid size";
         const edgeShadow = new EdgeShadowGenerator(size);
-        const shadows = edgeShadow.generate(0, 0.4, 0, 200, 0, 0, 0);
+        const shadows = edgeShadow.generate(0, 0.25, 0, 150, 0, 0, 0);
         const columns = Math.floor(width / size);
         imageCtx.scale(1, -1);
         imageCtx.drawImage(image, 0, 0, width, -size);
