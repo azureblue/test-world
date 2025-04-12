@@ -33,8 +33,6 @@ const BLOCK_TEXTURE_MAP = [
 /**
  * 00 10 12
  * 01 11 21
- * 
- * 
  */
 
 class ChunkData {
@@ -154,7 +152,6 @@ class Mesh {
     }
 
     /**
-     * 
      * @param {WebGL2RenderingContext} gl 
      */
     static setGL(gl, a_pos, a_norm, a_uv) {
@@ -177,7 +174,6 @@ class UIntMesh {
     #len;
 
     /**
-     * 
      * @param {Vec3} mTranslation 
      * @param {Uint32Array} input 
      */
@@ -187,13 +183,11 @@ class UIntMesh {
         this.#va = gl.createVertexArray();
         const vb = gl.createBuffer();
 
-
         gl.bindVertexArray(this.#va);
         gl.enableVertexAttribArray(UIntMesh.#a_in);
         gl.bindBuffer(gl.ARRAY_BUFFER, vb);
         gl.vertexAttribIPointer(UIntMesh.#a_in, 1, gl.UNSIGNED_INT, false, 0, 0);
         gl.bindVertexArray(null);
-
         gl.bindBuffer(gl.ARRAY_BUFFER, vb);
         gl.bufferData(gl.ARRAY_BUFFER, input, gl.STATIC_DRAW);
         this.#len = input.length;
@@ -312,8 +306,7 @@ class Chunk {
             this.worldCorners[offset] = corner.x;
             this.worldCorners[offset + 1] = corner.y;
             this.worldCorners[offset + 2] = corner.z;
-        })
-
+        });
     }
 
     get worldCenterPosition() {
@@ -517,8 +510,8 @@ class UIntChunkMesher {
     #tmpArr = new Uint32Array(6);
 
     /*
-     shadttttTTTTnnnzzzzzzzzxxxxyyyy
-    01234567890123456789012345678901
+      shadttttTTTTnnnzzzzzzzzxxxxyyyy
+     01234567890123456789012345678901
     */
 
     /**
@@ -530,16 +523,13 @@ class UIntChunkMesher {
      */
     #encode(textureIdx, h, x, y, direction, shadows = 0) {
         const dirBits = Direction.directions[direction].bits;
-        // shadows = 0b1100;
         const bits = 0
-            // | ((shadows & 0b1111) << 27)
             | ((textureIdx & 0b11111111) << 19)
             | ((dirBits & 0b111) << 16)
             | ((h & 0b11111111) << 8)
             | ((x & 0b1111) << 4)
             | ((y & 0b1111));
 
-        // first corner
         let corner0 = 0;
         if ((shadows & 0b1001_0000) == 0b1001_0000)
             corner0 = 4;
@@ -635,23 +625,59 @@ class UIntChunkMesher {
                     }
 
                     if (adj.get(0, 1, 0) === BLOCK_EMPTY) {
-                        this.#encode(blockTextureSide, i, x, y, Direction.RIGHT);
+                        let shadows = 0;
+                        if (isSolid(adj.get(-1, 1, 0)))/**/ shadows |= 0b0001_0000;
+                        if (isSolid(adj.get(0, 1, 1)))/**/  shadows |= 0b0010_0000;
+                        if (isSolid(adj.get(1, 1, 0)))/**/  shadows |= 0b0100_0000;
+                        if (isSolid(adj.get(0, 1, -1)))/**/ shadows |= 0b1000_0000;
+
+                        if (isSolid(adj.get(-1, 1, -1)))/**/shadows |= 0b0000_0001;
+                        if (isSolid(adj.get(-1, 1, 1)))/**/ shadows |= 0b0000_0010;
+                        if (isSolid(adj.get(1, 1, 1)))/**/  shadows |= 0b0000_0100;
+                        if (isSolid(adj.get(1, 1, -1)))/**/ shadows |= 0b0000_1000;
+                        this.#encode(blockTextureSide, i, x, y, Direction.RIGHT, shadows);
                     }
 
                     if (adj.get(0, -1, 0) === BLOCK_EMPTY) {
-                        this.#encode(blockTextureSide, i, x, y, Direction.LEFT);
+                        let shadows = 0;
+                        if (isSolid(adj.get(-1, -1, 0)))/**/ shadows |= 0b0001_0000;
+                        if (isSolid(adj.get(0, -1, -1)))/**/  shadows |= 0b0010_0000;
+                        if (isSolid(adj.get(1, -1, 0)))/**/  shadows |= 0b0100_0000;
+                        if (isSolid(adj.get(0, -1, 1)))/**/ shadows |= 0b1000_0000;
+
+                        if (isSolid(adj.get(-1, -1, 1)))/**/shadows |= 0b0000_0001;
+                        if (isSolid(adj.get(-1, -1, -1)))/**/ shadows |= 0b0000_0010;
+                        if (isSolid(adj.get(1, -1, -1)))/**/  shadows |= 0b0000_0100;
+                        if (isSolid(adj.get(1, -1, 1)))/**/ shadows |= 0b0000_1000;
+                        this.#encode(blockTextureSide, i, x, y, Direction.LEFT, shadows);
                     }
 
                     if (adj.get(0, 0, -1) === BLOCK_EMPTY) {
                         let shadows = 0;
-                        if (isSolid(adj.get(-1, 0, -1))) {
-                            shadows |= 3;
-                        }
+                        if (isSolid(adj.get(-1, 0, -1)))/**/ shadows |= 0b0001_0000;
+                        if (isSolid(adj.get(0, 1, -1)))/**/  shadows |= 0b0010_0000;
+                        if (isSolid(adj.get(1, 0, -1)))/**/  shadows |= 0b0100_0000;
+                        if (isSolid(adj.get(0, -1, -1)))/**/ shadows |= 0b1000_0000;
+
+                        if (isSolid(adj.get(-1, -1, -1)))/**/shadows |= 0b0000_0001;
+                        if (isSolid(adj.get(-1, 1, -1)))/**/ shadows |= 0b0000_0010;
+                        if (isSolid(adj.get(1, 1, -1)))/**/  shadows |= 0b0000_0100;
+                        if (isSolid(adj.get(1, -1, -1)))/**/ shadows |= 0b0000_1000;
                         this.#encode(blockTextureSide, i, x, y, Direction.FRONT, shadows);
                     }
 
                     if (adj.get(0, 0, 1) === BLOCK_EMPTY) {
-                        this.#encode(blockTextureSide, i, x, y, Direction.BACK);
+                        let shadows = 0;
+                        if (isSolid(adj.get(-1, 0, 1)))/**/ shadows |= 0b0001_0000;
+                        if (isSolid(adj.get(0, -1, 1)))/**/  shadows |= 0b0010_0000;
+                        if (isSolid(adj.get(1, 0, 1)))/**/  shadows |= 0b0100_0000;
+                        if (isSolid(adj.get(0, 1, 1)))/**/ shadows |= 0b1000_0000;
+
+                        if (isSolid(adj.get(-1, 1, 1)))/**/shadows |= 0b0000_0001;
+                        if (isSolid(adj.get(-1, -1, 1)))/**/ shadows |= 0b0000_0010;
+                        if (isSolid(adj.get(1, -1, 1)))/**/  shadows |= 0b0000_0100;
+                        if (isSolid(adj.get(1, 1, 1)))/**/ shadows |= 0b0000_1000;
+                        this.#encode(blockTextureSide, i, x, y, Direction.BACK, shadows);
                     }
                 }
         const meshTime = performance.now() - now;

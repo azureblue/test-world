@@ -31,7 +31,7 @@ const vec3 normal_0_up = vec3(-1, 0, 0);
 uniform vec3 m_translation;
 
 out highp vec3 v_tex_coord;
-out highp vec3 s_tex_coord;
+flat out int o_block_shadow;
 out vec3 v_tex_ids;
 out vec3 v_bary;
 flat out uint o_norm;
@@ -55,22 +55,13 @@ void main() {
     uint p_1 = (p >> 1) & 1u;
 
     fading = clamp(cam_to_pos_dist_sq / VIEW_DISTANCE_SQ, 0.0f, 1.0f);
+    o_block_shadow = int((cam_to_pos_dist_sq * 32.0 < VIEW_DISTANCE_SQ));
+    
     v_tex_coord = vec3(float(p_0 ^ p_1), float(p_1), float(tex_idx));
     v_tex_ids = vec3(0.0, 0.0, 0.0);
     v_bary = vec3(0.0, 0.0, 0.0);
-    int a = gl_VertexID % 6;
     v_tex_ids[vertex_idx % 3] = float(32u + p * 5u + shadow_idx);
     v_bary[vertex_idx % 3] = 1.0;
-    // if (a == 0) {
-    //     v_tex_ids[0] = float(32 + 1);
-    //     v_bary[0] = 1.0;
-    // } else if (a == 1) {
-    //     v_tex_ids[1] = float(32 + 9);
-    //     v_bary[1] = 1.0;
-    // } else if (a == 2) {
-    //     v_tex_ids[2] = float(32 + 12);
-    //     v_bary[2] = 1.0;
-    // } 
     o_norm = n;
     gl_Position = cam_proj * cam_view * vec4(pos, 1.0f);
 }
