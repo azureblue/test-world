@@ -48,6 +48,8 @@ export class TextureArray {
         // gl.texParameterf(gl.TEXTURE_2D, ext.TEXTURE_MAX_ANISOTROPY_EXT, max);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
         gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
         // }
         return new TextureArray(texture, size);
@@ -77,7 +79,7 @@ export class EdgeShadowGenerator {
 
     generate(shadowStart, shadowEnd, alphaStart, alphaEnd, r, g, b) {
         const size = this.#size;
-        const imageDataArray = Array(20);
+        const imageDataArray = Array(21);
         const shadowLen = shadowEnd - shadowStart;
         const shadowLenInPixelsOnImage = shadowEnd * size;
         const alphaRange = alphaEnd - alphaStart;
@@ -143,6 +145,20 @@ export class EdgeShadowGenerator {
         const tmp0 = new Uint8Array([r, g, b, 0]);
         const tmp1 = new Uint8Array([r, g, b, 0]);
 
+
+        const all = new ImageData(size, size);
+        const cross3 = imageDataArray[14];
+        for (let x = 0; x < size; x++) {
+            for (let y = 0; y < size; y++) {
+                const a0 = this.#getA(cross0, x, y);                
+                const a1 = this.#getA(cross3, x, y);
+                pixel[3] = Math.max(a0, a1);
+                this.#setPixel(all, x, y, pixel);
+            }
+        }
+        imageDataArray[20] = all;
+
+        
         for(let data of imageDataArray) {
             for (let y = 0; y < size / 2; y++)
                 for (let x = 0; x < size; x++) {
