@@ -21,12 +21,13 @@ void main() {
     vec4 shadow_color = vec4(0.0, 0.0, 0.0, 0.0);
     if (o_block_shadow == 1) {
         vec3 ids = v_tex_ids / v_bary;
-        bvec2 yz = greaterThan(vec2(v_bary.y, v_bary.z), vec2(v_bary.x, max(v_bary.x, v_bary.y)));
-        int idx = int(yz.x) + int(yz.y) * 2;
+        bool b_0 = v_bary.y > v_bary.x;
+        bool b_1 = v_bary.z > max(v_bary.x, v_bary.y);
+        // bvec2 yz = greaterThan(vec2(v_bary.y, v_bary.z), vec2(v_bary.x, max(v_bary.x, v_bary.y)));
+        int idx = int(b_0) + int(b_1) * 2;
         float t_shadow_idx = ids[idx];
         shadow_color = texture(u_array_sampler, vec3(v_tex_coord.xy, t_shadow_idx));
     }
     vec4 shadow_mix = vec4(mix(tex_lighted.xyz, shadow_color.xyz, shadow_color.a * 0.5f), 1.0f);
     color_out = mix(shadow_mix, sky_color, smoothstep(edge0, edge1, fading));
-
 }
