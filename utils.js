@@ -192,6 +192,29 @@ class ImagePixels {
     }
 }
 
+export class Array2D {
+    #size
+    #data
+    constructor(size) {
+        this.#size = size;
+        this.#data = new Uint32Array(size * size);
+    }
+
+    get(x, y) {
+        return this.#data[y * this.#size + x];
+    }
+
+    set(x, y, v) {
+        this.#data[y * this.#size + x] = v;
+    }
+    
+    each(consumer) {
+        this.#data.forEach((v, idx) => {
+            consumer(idx % this.#size, Math.floor(idx / this.#size), v);
+        });
+    }
+}
+
 export function is2Pow(n) {
     return (n & (n - 1)) === 0;
 }

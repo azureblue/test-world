@@ -1,6 +1,6 @@
 import { CubeGen, Direction } from "./cube.js";
 import { Vec2, vec3, Vec3 } from "./geom.js";
-import { Float32Buffer, UInt16Buffer, UInt32Buffer } from "./utils.js";
+import { Array2D, Float32Buffer, UInt16Buffer, UInt32Buffer } from "./utils.js";
 
 const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 128;
@@ -366,13 +366,14 @@ class ChunkManager {
 
 export class BlockAdjs {
 
+    /**@type {Array<ChunkData>} */
     #chunks
     #x;
     #y;
     #h;
 
     /**
-     * @param {ArrayLike} data 
+     * @param {Array<ChunkData>} data 
      */
     constructor(chunks) {
         this.#chunks = chunks;
@@ -385,6 +386,9 @@ export class BlockAdjs {
     }
 
     get(dh, dx, dy) {
+        const h = this.#h + dh;
+        if (h < 0 || h >= CHUNK_HEIGHT)
+            return BLOCK_CHUNK_EDGE;
         let chunk = 4;
         let px = this.#x + dx;
         let py = this.#y + dy;
@@ -402,7 +406,7 @@ export class BlockAdjs {
             py -= CHUNK_SIZE;
             chunk -= 3;
         }
-        return this.#chunks[chunk].atCheck(dh + this.#h, px, py);
+        return this.#chunks[chunk].at(h, px, py);
     }
 }
 
@@ -521,7 +525,7 @@ class UIntChunkMesher {
      * @param {number} y 
      * @param {number} direction
      */
-    #encode(textureIdx, h, x, y, direction, shadows = 0) {
+    #encode(textureIdx, h, x, y, direction, shadows = 0, merge = 0) {
         const dirBits = Direction.directions[direction].bits;
         const bits = 0
             | ((textureIdx & 0b11111111) << 19)
@@ -570,13 +574,18 @@ class UIntChunkMesher {
         else if ((shadows & 0b0000_1000) == 0b0000_1000)
             corner3 = 1;
 
+        // corner0 = Math.min(corner0, 1);
+        // corner1 = Math.min(corner1, 1);
+        // corner2 = Math.min(corner2, 1);
+        // corner3 = Math.min(corner3, 1);
+
 
         this.#tmpArr[0] = bits | (corner0 << 27);
-        this.#tmpArr[1] = bits | (corner1 << 27);
-        this.#tmpArr[2] = bits | (corner2 << 27);
+        this.#tmpArr[1] = bits | (corner1 << 27) | ((merge & 0b01) << 30);
+        this.#tmpArr[2] = bits | (corner2 << 27) | ((merge & 0b11) << 30);
         this.#tmpArr[3] = bits | (corner0 << 27);
-        this.#tmpArr[4] = bits | (corner2 << 27);
-        this.#tmpArr[5] = bits | (corner3 << 27)
+        this.#tmpArr[4] = bits | (corner2 << 27) | ((merge & 0b11) << 30);
+        this.#tmpArr[5] = bits | (corner3 << 27) | ((merge & 0b10) << 30)
         this.#buffer.add(this.#tmpArr);
     }
 
@@ -592,7 +601,8 @@ class UIntChunkMesher {
         const H = CHUNK_HEIGHT;
         const S = CHUNK_SIZE;
 
-        for (let i = 0; i < H; i++)
+        for (let i = 0; i < H; i++) {
+            const layer = new Array2D(CHUNK_SIZE);
             for (let y = 0; y < S; y++)
                 for (let x = 0; x < S; x++) {
                     adj.setPosition(i, x, y);
@@ -605,6 +615,8 @@ class UIntChunkMesher {
                     const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
                     const above = adj.get(1, 0, 0);
                     const below = adj.get(-1, 0, 0);
+
+                    layer.set(x, y, 0);
                     if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
                         let shadows = 0;
                         if (isSolid(adj.get(1, 0, -1)))/**/ shadows |= 0b0001_0000;
@@ -617,11 +629,11 @@ class UIntChunkMesher {
                         if (isSolid(adj.get(1, 1, 1)))/**/  shadows |= 0b0000_0100;
                         if (isSolid(adj.get(1, -1, 1)))/**/ shadows |= 0b0000_1000;
 
-                        this.#encode(blockTextureUp, i, x, y, Direction.UP, shadows);
+                        layer.set(x, y, (blockTextureUp << 8) | (shadows));
                     }
 
                     if (below === BLOCK_EMPTY || below === BLOCK_CHUNK_EDGE) {
-                        this.#encode(blockTextureDown, i, x, y, Direction.DOWN);
+                        // this.#encode(blockTextureDown, i, x, y, Direction.DOWN);
                     }
 
                     if (adj.get(0, 1, 0) === BLOCK_EMPTY) {
@@ -680,6 +692,29 @@ class UIntChunkMesher {
                         this.#encode(blockTextureSide, i, x, y, Direction.BACK, shadows);
                     }
                 }
+            layer.each((x, y, v) => {
+                if (v === 0)
+                    return;
+                if (x < CHUNK_SIZE - 1 && layer.get(x + 1, y) == v) {
+                    layer.set(x + 1, y, 0);
+                    if (y == CHUNK_SIZE - 1) {
+                        this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b1);
+                    } else if (layer.get(x, y + 1) == v && layer.get(x + 1, y + 1) == v) {
+                        layer.set(x, y + 1, 0);
+                        layer.set(x + 1, y + 1, 0);
+                        this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b11);
+                    } else {
+                        this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b1);
+                    }
+                } else if (layer.get(x, y + 1) == v) {
+                    layer.set(x, y + 1, 0);
+                    this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b10);
+                }
+                else
+                    this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0);
+            })
+        }
+
         const meshTime = performance.now() - now;
         return new UIntMesh(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5),
             this.#buffer.trimmed());
