@@ -1,6 +1,6 @@
-import { CubeGen, Direction } from "./cube.js";
+import { Direction } from "./cube.js";
 import { Vec2, vec3, Vec3 } from "./geom.js";
-import { Array2D, Float32Buffer, UInt16Buffer, UInt32Buffer } from "./utils.js";
+import { Array2D, UInt32Buffer } from "./utils.js";
 
 const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 128;
@@ -77,91 +77,6 @@ class ChunkData {
     }
 }
 
-class Mesh {
-
-    /** @type {WebGL2RenderingContext} */
-    static #gl;
-    static #a_pos;
-    static #a_norm;
-    static #a_uv;
-
-    /** @type {Array<WebGLVertexArrayObject>} */
-    #va;
-    #textureId;
-    #idxsLen;
-    #mTranslation;
-
-    /**
-     * 
-     * @param {Vec3} mTranslation 
-     * @param {number} textureId 
-     * @param {Float32Array} verts 
-     * @param {Float32Array} uvs 
-     * @param {Float32Array} normals 
-     * @param {Uint16Array} idxs
-     */
-    constructor(mTranslation, textureId, verts, uvs, normals, idxs) {
-        this.#mTranslation = mTranslation;
-        this.#textureId = textureId;
-        const gl = Mesh.#gl;
-        this.#va = gl.createVertexArray();
-        const vb = gl.createBuffer();
-        const vn = gl.createBuffer();
-        const uvb = gl.createBuffer();
-        const ib = gl.createBuffer();
-
-        gl.bindVertexArray(this.#va);
-        gl.enableVertexAttribArray(Mesh.#a_pos);
-        gl.enableVertexAttribArray(Mesh.#a_uv);
-        gl.enableVertexAttribArray(Mesh.#a_norm);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
-        gl.vertexAttribPointer(Mesh.#a_pos, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vn);
-        gl.vertexAttribPointer(Mesh.#a_norm, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, uvb);
-        gl.vertexAttribPointer(Mesh.#a_uv, 2, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
-        gl.bindVertexArray(null);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
-        gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-        gl.bindBuffer(gl.ARRAY_BUFFER, uvb);
-        gl.bufferData(gl.ARRAY_BUFFER, uvs, gl.STATIC_DRAW);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vn);
-        gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idxs, gl.STATIC_DRAW);
-
-        this.#idxsLen = idxs.length;
-    }
-
-    bindVA() {
-        Mesh.#gl.bindVertexArray(this.#va);
-    }
-
-    get textureId() {
-        return this.#textureId;
-    }
-
-    get idxsLen() {
-        return this.#idxsLen;
-    }
-
-    get modelTranslation() {
-        return this.#mTranslation;
-    }
-
-    /**
-     * @param {WebGL2RenderingContext} gl 
-     */
-    static setGL(gl, a_pos, a_norm, a_uv) {
-        Mesh.#gl = gl;
-        Mesh.#a_pos = a_pos;
-        Mesh.#a_norm = a_norm;
-        Mesh.#a_uv = a_uv;
-    }
-}
-
 class UIntMesh {
 
     /** @type {WebGL2RenderingContext} */
@@ -206,8 +121,7 @@ class UIntMesh {
     }
 
     /**
-     * 
-     * @param {WebGL2RenderingContext} gl 
+     * @param {WebGL2RenderingContext} gl
      */
     static setGL(gl, a_in) {
         UIntMesh.#gl = gl;
@@ -215,18 +129,11 @@ class UIntMesh {
     }
 }
 
-class Buffer {
-    constructor() {
-        this.vs = new Float32Buffer();
-        this.uvs = new Float32Buffer();
-        this.norms = new Float32Buffer();
-        this.idxs = new UInt16Buffer();
-    }
-}
 
 class ChunkDataLoader {
     /** @type {Map<number, ChunkData>} */
     #cache = new Map();
+
     /** @type {function(number, number): ChunkData} */
     #generator
 
@@ -250,26 +157,21 @@ class ChunkDataLoader {
         }
         return chunkData;
     }
-
 }
 
 class Chunk {
     #data
     #mesh
     #position
+
     /**@type {Vec3} */
     #worldCenterPosition
-    /**@type {Array<Vec3>} */
-    #worldCoordCorners
 
+    /**@type {Array<Vec3>} */    
+    #worldCoordCorners
+    
     /** @type {Float32Array} */
     worldCorners = new Float32Array(8 * 4);
-    // /** @type {Float32Array} */
-    // worldCornersX = new Float32Array(8);
-    // /** @type {Float32Array} */
-    // worldCornersY = new Float32Array(8);
-    // /** @type {Float32Array} */
-    // worldCornersZ = new Float32Array(8);
 
     /**
      * @param {ChunkData} data 
@@ -299,9 +201,6 @@ class Chunk {
         ];
 
         this.#worldCoordCorners.forEach((corner, idx) => {
-            // this.worldCornersX[idx] = corner.x;
-            // this.worldCornersY[idx] = corner.y;
-            // this.worldCornersZ[idx] = corner.z
             const offset = idx << 2;
             this.worldCorners[offset] = corner.x;
             this.worldCorners[offset + 1] = corner.y;
@@ -407,101 +306,6 @@ export class BlockAdjs {
             chunk -= 3;
         }
         return this.#chunks[chunk].at(h, px, py);
-    }
-}
-
-class Scene {
-    #chunkMap = new Map();
-
-    iterateChunks() {
-
-    }
-
-}
-
-class ChunkMesher {
-
-    /**
-     * @type {Array<Buffer>}
-     */
-    #buffers = new Array(128);
-    #cubeGen = new CubeGen()
-    /**
-     * @param {Vec2} position 
-     * @param {ChunkData} chunkData 
-     * @param {ChunkData} chunkDataLeft
-     * @param {ChunkData} chunkDataRight
-     * @param {ChunkData} chunkDataUp
-     * @param {ChunkData} chunkDataDown
-     * 
-     * @returns {Array<Mesh>}
-     */
-    createMeshes(position, chunkData, chunkDataLeft, chunkDataRight, chunkDataUp, chunkDataDown) {
-        const now = performance.now();
-        this.#buffers.fill(null);
-        const H = CHUNK_HEIGHT;
-        const S = CHUNK_SIZE;
-        const pos = new Vec3(0, 0, 0);
-
-        for (let i = 0; i < H; i++)
-            for (let y = 0; y < S; y++)
-                for (let x = 0; x < S; x++) {
-                    const blockType = chunkData.atCheck(i, x, y);
-                    pos.x = x; pos.y = i; pos.z = -y;
-                    if (blockType == BLOCK_EMPTY)
-                        continue;
-                    const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
-                    const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
-                    const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
-                    const above = chunkData.atCheck(i + 1, x, y);
-                    const below = chunkData.atCheck(i - 1, x, y);
-                    if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
-                        const buf = this.#bufferAt(blockTextureUp);
-                        this.#cubeGen.genFace(Direction.UP, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
-                    }
-                    if (below === BLOCK_EMPTY || below === BLOCK_CHUNK_EDGE) {
-                        const buf = this.#bufferAt(blockTextureDown);
-                        this.#cubeGen.genFace(Direction.DOWN, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
-                    }
-                    const buf = this.#bufferAt(blockTextureSide);
-                    const right = (x == CHUNK_SIZE - 1 ? chunkDataRight.at(i, 0, y) : chunkData.at(i, x + 1, y));
-                    if (right === BLOCK_EMPTY) {
-                        this.#cubeGen.genFace(Direction.RIGHT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
-                    }
-
-                    const left = (x == 0 ? chunkDataLeft.at(i, CHUNK_SIZE - 1, y) : chunkData.at(i, x - 1, y));
-                    if (left === BLOCK_EMPTY) {
-                        this.#cubeGen.genFace(Direction.LEFT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
-                    }
-
-                    const down = (y == 0 ? chunkDataDown.at(i, x, CHUNK_SIZE - 1) : chunkData.at(i, x, y - 1));
-                    if (down === BLOCK_EMPTY) {
-                        this.#cubeGen.genFace(Direction.FRONT, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
-                    }
-
-                    const up = (y == CHUNK_SIZE - 1 ? chunkDataUp.at(i, x, 0) : chunkData.at(i, x, y + 1));
-                    if (up === BLOCK_EMPTY) {
-                        this.#cubeGen.genFace(Direction.BACK, buf.vs, buf.norms, buf.uvs, buf.idxs, pos);
-                    }
-                }
-        const meshes = [];
-        for (let id = 0; id < 128; id++) {
-            const buf = this.#buffers[id];
-            if (buf !== null) {
-                meshes.push(new Mesh(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5), id, buf.vs.trimmed(), buf.uvs.trimmed(), buf.norms.trimmed(), buf.idxs.trimmed()));
-            }
-        }
-        const meshTime = performance.now() - now;
-
-        // console.debug("chunk " + chunk.position.toPosString() + " gen time: " + (performance.now() - now));
-        return meshes;
-    }
-
-    #bufferAt(idx) {
-        if (this.#buffers[idx] == null)
-            return this.#buffers[idx] = new Buffer();
-        else
-            return this.#buffers[idx];
     }
 }
 
@@ -722,6 +526,6 @@ class UIntChunkMesher {
 }
 
 export {
-    Chunk, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, ChunkMesher, Mesh, UIntChunkMesher, UIntMesh
+    Chunk, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh
 };
 

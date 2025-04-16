@@ -30,7 +30,6 @@ export class TextureArray {
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
         gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 5, gl.RGBA8, size, size, 64);
-        // for (let c = 0; c < columns; c++) {            
         for (let i = 0; i < columns; i++) {
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, size, size, 1, gl.RGBA,
                 gl.UNSIGNED_BYTE,
@@ -42,16 +41,11 @@ export class TextureArray {
                 gl.UNSIGNED_BYTE,
                 shadows[i]);
         }
-        // const ext = gl.getExtension("EXT_texture_filter_anisotropic");                
-        // const max = gl.getParameter(ext.MAX_TEXTURE_MAX_ANISOTROPY_EXT);        
-
-        // gl.texParameterf(gl.TEXTURE_2D, ext.TEXTURE_MAX_ANISOTROPY_EXT, max);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
         gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
-        // }
         return new TextureArray(texture, size);
     }
 
@@ -60,7 +54,7 @@ export class TextureArray {
      * @param {number} textureUnit 
      * @param {number} idx
      */
-    bind(gl, textureUnit, idx) {
+    bind(gl) {
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#texture);
     }
 }
@@ -156,8 +150,8 @@ export class EdgeShadowGenerator {
                 this.#setPixel(all, x, y, pixel);
             }
         }
-        imageDataArray[20] = all;
 
+        imageDataArray[20] = all;
         
         for(let data of imageDataArray) {
             for (let y = 0; y < size / 2; y++)
@@ -168,9 +162,7 @@ export class EdgeShadowGenerator {
                     this.#setPixel(data, x, size - y - 1, tmp0);
                 }
         }
-
         return imageDataArray;
-
     }
 
 

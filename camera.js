@@ -53,7 +53,6 @@ class Camera {
         this.#up.normalizeInPlace();
     }
 
-
     /**
      * @param {number} step 
      */
@@ -120,13 +119,6 @@ class FrustumCuller {
     #camera;
     #posToFar = vec3();
     #tmp = vec3();
-    // #tmpPlanePos = new Float32Array(4);
-    // #chunkCoords = new Float32Array(8 * 4);
-    // #chunkXs = new Float32Array(8);
-    // #chunkYs = new Float32Array(8);
-    // #chunkZs = new Float32Array(8);
-
-
 
     /**
      * @param {Frustum} frustum 
@@ -155,22 +147,18 @@ class FrustumCuller {
         const farMid = posToFar;
         this.#planes.far.direction.setTo(camDir).mulByScalarInPlace(-1.0);
 
-        // this.#planes.left.position.setTo(pos);
         tmp.setTo(farMid).addMulInPlace(camRight, -farHalfH);
         Vec3.cross(tmp, camUp, this.#planes.left.direction);
         this.#planes.left.direction.normalizeInPlace();
 
-        // this.#planes.right.position.setTo(pos);
         tmp.setTo(farMid).addMulInPlace(camRight, farHalfH);
         Vec3.cross(camUp, tmp, this.#planes.right.direction);
         this.#planes.right.direction.normalizeInPlace();
 
-        // this.#planes.top.position.setTo(pos);
         tmp.setTo(farMid).addMulInPlace(camUp, farHalfV);
         Vec3.cross(tmp, camRight, this.#planes.top.direction);
         this.#planes.top.direction.normalizeInPlace();
 
-        // this.#planes.bottom.position.setTo(pos);
         tmp.setTo(farMid).addMulInPlace(camUp, -farHalfV);
         Vec3.cross(camRight, tmp, this.#planes.bottom.direction);
         this.#planes.bottom.direction.normalizeInPlace();
