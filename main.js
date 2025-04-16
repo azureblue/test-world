@@ -1,6 +1,6 @@
 import { TextureArray } from "./textures.js";
 import { Camera, FrustumCuller } from "./camera.js";
-import { BlockAdjs, Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
+import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { PixelDataChunkGenerator } from "./generator.js";
 import { Projection, Vec2, Vec3, mat4 } from "./geom.js";
 import { Program } from "./gl.js";
@@ -82,8 +82,8 @@ export async function start() {
      * @type {Array<Chunk>}
      */
     const chunks = [];
-    for (let cx = -40; cx < 40; cx++)
-        for (let cy = -40; cy < 40; cy++) {
+    for (let cx = -20; cx < 20; cx++)
+        for (let cy = -20; cy < 20; cy++) {
             const chunk = await chunkManager.loadChunk(cx, cy)
             chunks.push(chunk);
         }
@@ -167,7 +167,7 @@ export async function start() {
     const camera = new Camera(new Vec3(0, peak + 2, 0));
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
-    const cameraSpeed = 2;
+    const cameraSpeed = 0.5;
 
     const keys = {
         up: false,
@@ -263,6 +263,7 @@ export async function start() {
             gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
             // gl.uniformMatrix4fv(uModel, false, modelMat.values);
             gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
+            // gl.drawArrays(gl.LINES, 0, mesh.len);
             // gl.drawArrays(gl.POINTS, 0, mesh.len);
         }
         gl.bindVertexArray(null);

@@ -62,6 +62,7 @@ class Direction {
     static RIGHT = 3;
     static UP = 4;
     static DOWN = 5;
+    
     /** @type {Array<Direction>} */
     static directions = [
         new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b000), //front
