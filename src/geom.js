@@ -175,5 +175,19 @@ function vec2(x = 0, y = 0) {
     return new Vec2(x = 0, y = 0);
 }
 
+export class DirXY {
+    x = 0;
+    y = 0;
+
+    set(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    rotateCCW() {                
+        this.set(-this.y, this.x);
+    }
+}
+
 export { Frustum, FrustumPlanes, Mat3, mat3, Mat4, mat4, Projection, Vec2, vec2, Vec3, vec3, Vec4 };
 
