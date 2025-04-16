@@ -1,4 +1,4 @@
-class DataBuffer {
+export class DataBuffer {
     #pos
     #array
 
@@ -83,7 +83,7 @@ class DataBuffer {
     }
 }
 
-class Float32Buffer extends DataBuffer {
+export class Float32Buffer extends DataBuffer {
     /**
      * @param {number} [initialSize]
      */
@@ -92,7 +92,7 @@ class Float32Buffer extends DataBuffer {
     }
 }
 
-class UInt16Buffer extends DataBuffer {
+export class UInt16Buffer extends DataBuffer {
     /**
      * @param {number} initialSize 
      */
@@ -101,7 +101,7 @@ class UInt16Buffer extends DataBuffer {
     }
 }
 
-class UInt32Buffer extends DataBuffer {
+export class UInt32Buffer extends DataBuffer {
     /**
      * @param {number} initialSize 
      */
@@ -110,7 +110,7 @@ class UInt32Buffer extends DataBuffer {
     }
 }
 
-class Resources {
+export class Resources {
     static async loadText(src) {
         return await fetch(Resources.relativeToRoot(src)).then(r => r.text())
     }
@@ -134,7 +134,7 @@ class Resources {
     }
 }
 
-class ImagePixels {
+export class ImagePixels {
 
     #rowLength;
     #data;
@@ -221,8 +221,4 @@ export class Array2D {
 
 export function is2Pow(n) {
     return (n & (n - 1)) === 0;
-}
-
-export {
-    UInt32Buffer, Float32Buffer, UInt16Buffer, ImagePixels, Resources
 }

@@ -38,8 +38,10 @@ export class PixelDataChunkGenerator {
                     chunk.set(e, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_DIRT);
                 if (height > 0)
                     chunk.set(height - 1, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_DIRT_GRASS);
-                if (Math.random() < 0.02)
+                if (Math.random() < 0.1)
                     chunk.set(height, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_ROCK);
+                if (Math.random() < 0.1)
+                    chunk.set(height + 1, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_ROCK);
             }
         return chunk;
     }
