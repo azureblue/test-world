@@ -112,11 +112,10 @@ class UInt32Buffer extends DataBuffer {
 
 class Resources {
     static async loadText(src) {
-        return await fetch(src).then(r => r.text())
+        return await fetch(Resources.relativeToRoot(src)).then(r => r.text())
     }
 
     /**
-     * 
      * @param {string} src 
      * @returns {Promise<HTMLImageElement>}
      */
@@ -124,9 +123,14 @@ class Resources {
         return new Promise((resolve, reject) => {
             const img = new Image();            
             img.onload = () => resolve(img);
-            img.onerror = (err) => reject(err);
-            img.src = src;
+            img.onerror = (err) => reject(err);            
+            img.src = Resources.relativeToRoot(src);
         });
+    }
+
+    static #ROOT = new URL('.', import.meta.url).href;
+    static relativeToRoot(src) {
+        return this.#ROOT + src;
     }
 }
 

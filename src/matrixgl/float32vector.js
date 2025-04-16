@@ -1,4 +1,3 @@
-import { Vec3 } from '../geom.js';
 import { Vector2Base, Vector3Base, Vector4Base } from './vector_base.js';
 /**
  * A 2-dimensional vector of single-precision float numbers.
