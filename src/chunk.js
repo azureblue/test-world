@@ -41,6 +41,7 @@ const BLOCK_TEXTURE_MAP = [
 class ChunkData {
 
     data = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT);
+    #maxHeight
 
     /**
      * @param {number} h 
@@ -72,12 +73,26 @@ class ChunkData {
             if (this.at(peek, x, y) !== BLOCK_EMPTY)
                 return peek;
         return 0;
-
     }
 
     set(h, x, y, id) {
         this.data[CHUNK_PLANE_SIZE * h + y * CHUNK_SIZE + x] = id;
     }
+
+    updateMaxHeight() {
+        for (let i = this.data.length - 1; i >= 0; i--) {
+            if (this.data[i] !== 0) {
+                this.#maxHeight = Math.floor(i / CHUNK_PLANE_SIZE) + 1;
+                return;
+            }
+        }
+        this.#maxHeight = 0;
+    }
+
+    get maxHeight() {
+        return this.#maxHeight;
+    }
+    
 }
 
 class UIntMesh {
@@ -184,6 +199,7 @@ class Chunk {
      */
     constructor(data, position, mesh) {
         this.#data = data;
+        this.#data.updateMaxHeight();
         this.#position = position
         this.#mesh = mesh;
         this.#worldCenterPosition = vec3(position.x * CHUNK_SIZE + CHUNK_SIZE / 2, CHUNK_HEIGHT / 2, -position.y * CHUNK_SIZE - CHUNK_SIZE / 2)
@@ -198,10 +214,10 @@ class Chunk {
             new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
             new Vec3(position.x * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
             //top
-            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1) * CHUNK_SIZE),
-            new Vec3(position.x * CHUNK_SIZE, CHUNK_HEIGHT, -(position.y + 1) * CHUNK_SIZE)
+            new Vec3(position.x * CHUNK_SIZE, this.#data.maxHeight, -position.y * CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, this.#data.maxHeight, -position.y * CHUNK_SIZE),
+            new Vec3((position.x + 1) * CHUNK_SIZE, this.#data.maxHeight, -(position.y + 1) * CHUNK_SIZE),
+            new Vec3(position.x * CHUNK_SIZE, this.#data.maxHeight, -(position.y + 1) * CHUNK_SIZE)
         ];
 
         this.#worldCoordCorners.forEach((corner, idx) => {
@@ -390,13 +406,8 @@ class UIntChunkMesher {
         this.#buffer = new UInt32Buffer(4);
         const now = performance.now();
 
-        const sideDir = new DirXY(-1, 0);
-        const sideDirs = new Int32Array(4 * 4);
-        for (let dir = 0; dir < 8; dir++) {
-            sideDirs[dir * 2] = sideDir.x;
-            sideDirs[dir * 2 + 1] = sideDir.y;
-            sideDir.rotateCCW();
-        }
+        const sideDir0 = new DirXY();
+        const sideDir1 = new DirXY();
         const cornerDir = new DirXY();
 
         const topRow = new Uint32Array(CHUNK_SIZE);
@@ -418,35 +429,39 @@ class UIntChunkMesher {
                     const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
                     const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
                     const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
+                    const above = adj.get(1, 0, 0);
+                    const below = adj.get(-1, 0, 0);
 
                     layer.set(x, y, 0);
-                    layerDown.set(x, y, 0);
-
-                    if (!isSolid(adj.get(1, 0, 0))) {
-                        sideDir.set(-1, 0);
+                    if (above === BLOCK_EMPTY || above === BLOCK_CHUNK_EDGE) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
-                        for (let dir = 0; dir < 4; dir++) {                            
-                            const sideA = isSolidInt(adj.get(1, sideDirs[dir * 2], sideDirs[dir * 2 + 1]));
-                            const sideB = isSolidInt(adj.get(1, sideDirs[dir * 2 + 2], sideDirs[dir * 2 + 1 + 2]));
-                            const corner = isSolidInt(adj.get(1, cornerDir.x, cornerDir.y));
-                            shadows |= ((sideA + sideB == 2) ? 3 : (sideA + sideB + corner)) << (dir * 2);
+                        for (let v = 0; v < 4; v++) {
+                            let s0 = isSolidInt(adj.get(1, sideDir0.x, sideDir0.y));
+                            let s1 = isSolidInt(adj.get(1, sideDir1.x, sideDir1.y));
+                            let c = isSolidInt(adj.get(1, cornerDir.x, cornerDir.y));
+                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
                         layer.set(x, y, (blockTextureUp << 8) | (shadows));
                     }
 
-                    if (!isSolid(adj.get(-1, 0, 0))) {
-                        sideDir.set(-1, 0);
+                    if (below === BLOCK_EMPTY || below === BLOCK_CHUNK_EDGE) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let sideA = isSolidInt(adj.get(-1, sideDir.x, -sideDir.y));
-                            sideDir.rotateCCW();
-                            let sideB = isSolidInt(adj.get(-1, sideDir.x, -sideDir.y));
+                            let s0 = isSolidInt(adj.get(-1, sideDir0.x, -sideDir0.y));
+                            let s1 = isSolidInt(adj.get(-1, sideDir1.x, -sideDir1.y));
                             let c = isSolidInt(adj.get(-1, cornerDir.x, -cornerDir.y));
-                            shadows |= ((sideA + sideB == 2) ? 3 : (sideA + sideB + c)) << (v * 2);
-                            sideDir.rotateCCW();
+                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
 
@@ -456,16 +471,17 @@ class UIntChunkMesher {
                     }
 
                     if (adj.get(0, 1, 0) === BLOCK_EMPTY) {
-                        sideDir.set(-1, 0);
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir.y, 1, sideDir.x));
-                            sideDir.rotateCCW();
-                            let s1 = isSolidInt(adj.get(sideDir.y, 1, sideDir.x));
+                            let s0 = isSolidInt(adj.get(sideDir0.y, 1, sideDir0.x));
+                            let s1 = isSolidInt(adj.get(sideDir1.y, 1, sideDir1.x));
                             let c = isSolidInt(adj.get(cornerDir.y, 1, cornerDir.x));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            sideDir.rotateCCW();
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
 
@@ -473,16 +489,17 @@ class UIntChunkMesher {
                     }
 
                     if (adj.get(0, -1, 0) === BLOCK_EMPTY) {
-                        sideDir.set(-1, 0);
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir.y, -1, -sideDir.x));
-                            sideDir.rotateCCW();
-                            let s1 = isSolidInt(adj.get(sideDir.y, -1, -sideDir.x));
+                            let s0 = isSolidInt(adj.get(sideDir0.y, -1, -sideDir0.x));
+                            let s1 = isSolidInt(adj.get(sideDir1.y, -1, -sideDir1.x));
                             let c = isSolidInt(adj.get(cornerDir.y, -1, -cornerDir.x));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            sideDir.rotateCCW();
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
 
@@ -490,16 +507,17 @@ class UIntChunkMesher {
                     }
 
                     if (adj.get(0, 0, -1) === BLOCK_EMPTY) {
-                        sideDir.set(-1, 0);
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir.y, sideDir.x, -1));
-                            sideDir.rotateCCW();
-                            let s1 = isSolidInt(adj.get(sideDir.y, sideDir.x, -1));
+                            let s0 = isSolidInt(adj.get(sideDir0.y, sideDir0.x, -1));
+                            let s1 = isSolidInt(adj.get(sideDir1.y, sideDir1.x, -1));
                             let c = isSolidInt(adj.get(cornerDir.y, cornerDir.x, -1));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            sideDir.rotateCCW();
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
 
@@ -507,16 +525,17 @@ class UIntChunkMesher {
                     }
 
                     if (adj.get(0, 0, 1) === BLOCK_EMPTY) {
-                        sideDir.set(-1, 0);
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir.y, -sideDir.x, 1));
-                            sideDir.rotateCCW();
-                            let s1 = isSolidInt(adj.get(sideDir.y, -sideDir.x, 1));
+                            let s0 = isSolidInt(adj.get(sideDir0.y, -sideDir0.x, 1));
+                            let s1 = isSolidInt(adj.get(sideDir1.y, -sideDir1.x, 1));
                             let c = isSolidInt(adj.get(cornerDir.y, -cornerDir.x, 1));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            sideDir.rotateCCW();
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
 
@@ -634,49 +653,6 @@ class UIntChunkMesher {
                 this.#encode((top >> 8) & 0xFF, h, i, CHUNK_SIZE - topH, Direction.DOWN, (top & 0xFF), topW, topH);
             }
 
-            // layer.each((x, y, v) => {
-            //     if (v === 0)
-            //         return;
-            //     if (x < CHUNK_SIZE - 1 && layer.get(x + 1, y) == v) {
-            //         layer.set(x + 1, y, 0);
-            //         if (y == CHUNK_SIZE - 1) {
-            //             this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b1);
-            //         } else if (layer.get(x, y + 1) == v && layer.get(x + 1, y + 1) == v) {
-            //             layer.set(x, y + 1, 0);
-            //             layer.set(x + 1, y + 1, 0);
-            //             this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b11);
-            //         } else {
-            //             this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b1);
-            //         }
-            //     } else if (layer.get(x, y + 1) == v) {
-            //         layer.set(x, y + 1, 0);
-            //         this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0b10);
-            //     }
-            //     else
-            //         this.#encode(v >> 8, i, x, y, Direction.UP, v & 0b1111_1111, 0);
-            // });
-
-        //     layerDown.each((x, y, v) => {
-        //         if (v === 0)
-        //             return;
-        //         if (x < CHUNK_SIZE - 1 && layerDown.get(x + 1, y) == v) {
-        //             layerDown.set(x + 1, y, 0);
-        //             if (y == CHUNK_SIZE - 1) {
-        //                 this.#encode(v >> 8, h, x, y, Direction.DOWN, v & 0b1111_1111, 2, 1);
-        //             } else if (layerDown.get(x, y + 1) == v && layerDown.get(x + 1, y + 1) == v) {
-        //                 layerDown.set(x, y + 1, 0);
-        //                 layerDown.set(x + 1, y + 1, 0);
-        //                 this.#encode(v >> 8, h, x, y, Direction.DOWN, v & 0b1111_1111, 2, 2);
-        //             } else {
-        //                 this.#encode(v >> 8, h, x, y, Direction.DOWN, v & 0b1111_1111, 2, 1);
-        //             }
-        //         } else if (layerDown.get(x, y + 1) == v) {
-        //             layerDown.set(x, y + 1, 0);
-        //             this.#encode(v >> 8, h, x, y, Direction.DOWN, v & 0b1111_1111, 1, 2);
-        //         }
-        //         else
-        //             this.#encode(v >> 8, h, x, y, Direction.DOWN, v & 0b1111_1111);
-        //     });
         }
 
         const meshTime = performance.now() - now;
