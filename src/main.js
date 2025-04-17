@@ -224,6 +224,8 @@ export async function start() {
 
     canvas.addEventListener("click", async () => canvas.requestPointerLock());
 
+    let frameCounter = 0;
+    let renderTimeMetric = 0;
     function draw() {
         const now = performance.now();
         const cameraSpeedMultiplier = keys.ctrl ? 0.2 : 1;
@@ -279,11 +281,18 @@ export async function start() {
         const pos = camera.position;
         const dir = camera.direction;
         const nowDiff = performance.now() - now;
+        renderTimeMetric += nowDiff;        
+        if (frameCounter == 4) {
         statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
             `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
-            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${nowDiff.toFixed(1)}ms  fps: ${fps} chunk culled: ${chunkCulled}`;
-
+            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${(renderTimeMetric / 5).toFixed(1)}ms  fps: ${fps} chunk culled: ${chunkCulled}`;
+            frameCounter = 0;
+            renderTimeMetric = 0;
+        } else {
+            frameCounter++;
+        }
         fpsCounter++;
+        
         if (!pause)
             requestAnimationFrame(draw);
     }
