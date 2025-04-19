@@ -55,34 +55,6 @@ class Face {
     }
 }
 
-class Direction {
-    static FRONT = 0;
-    static LEFT = 1;
-    static BACK = 2;
-    static RIGHT = 3;
-    static UP = 4;
-    static DOWN = 5;
-    
-    /** @type {Array<Direction>} */
-    static directions = [
-        new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b000), //front
-        new Direction(Direction.LEFT, new Vec3(-1, 0, 0), 0b001), //left
-        new Direction(Direction.BACK, new Vec3(0, 0, -1), 0b010), //back
-        new Direction(Direction.RIGHT, new Vec3(1, 0, 0), 0b011), //right
-        new Direction(Direction.UP, new Vec3(0, 1, 0), 0b100), //up
-        new Direction(Direction.DOWN, new Vec3(0, -1, 0), 0b101) //down
-    ];
-
-    /**
-     * @param {Vec3} direction 
-     * @param {number} bits 
-     */
-    constructor(id, direction, bits) {
-        this.id = id;
-        this.v = direction;
-        this.bits = bits;
-    }
-}
 
 class CubeGen {
 
@@ -219,5 +191,4 @@ class CubeSpec {
     ]);
 }
 
-export { CubeGen, CubeSpec, Direction, Face };
-
+export { CubeGen, CubeSpec, Face };
