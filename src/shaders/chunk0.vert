@@ -7,9 +7,10 @@
 #define b_0000_1111 15u
 #define b_1111_1111 255u
 // consider calculating uvs in js
-//mmfshttttTTTTnnnzzzzzzzzxxxxyyyy
+//mmfshttttTTTTnnnzzzzzzzzyyyyxxxx
+//                        yyyyxxxx
 //01234567890123456789012345678901
-layout (location = 0) in uint a_in;
+layout (location = 0) in uvec2 a_in;
 layout (std140) uniform Camera {
     mat4 cam_proj;
     mat4 cam_view;
@@ -41,18 +42,22 @@ smooth out float fading;
 smooth out float v_shadow;
 
 void main() {
-    uint z = (a_in >> 0) & b_0000_1111;
-    uint x = (a_in >> 4) & b_0000_1111;
-    uint y = (a_in >> 8) & b_1111_1111;
-    uint normal_idx = (a_in >> 16) & b_0000_0111;
-    uint tex_idx = (a_in >> 19) & b_1111_1111;
-    uint shadow = (a_in >> 27) & b_0000_0011;
-    int flip = int((a_in >> 29) & b_0000_0001);
-    uint m = (a_in >> 30) & b_0000_0011;
+    uint a_in_bits = a_in.x;
+    uint a_in_aux_bits = a_in.y;
+
+    uint x = (a_in_bits >> 0) & b_0000_1111;
+    uint z = (a_in_bits >> 4) & b_0000_1111;
+    uint y = (a_in_bits >> 8) & b_1111_1111;
+
+    uint normal_idx = (a_in_bits >> 16) & b_0000_0111;
+    uint tex_idx = (a_in_bits >> 19) & b_1111_1111;
+    uint shadow = (a_in_bits >> 27) & b_0000_0011;
+    int flip = int((a_in_bits >> 29) & b_0000_0001);
+    uint m = a_in_aux_bits & b_1111_1111;
     int vertex_idx = (gl_VertexID) % 6;
     uint vertex_quad_idx = idx_to_face_point_idx[vertex_idx + flip * 6]; 
-    uint m_x = m & 1u;
-    uint m_y = m >> 1;
+    uint m_x = m & b_0000_1111;
+    uint m_y = m >> 4;
     vec3 pos = vec3(x + m_x * normal_merge_mask[normal_idx * 8u + vertex_quad_idx * 2u] , y, -float(z + m_y * normal_merge_mask[normal_idx * 8u + vertex_quad_idx * 2u + 1u])) + m_translation + vertex_offest_map[normal_idx * 4u + vertex_quad_idx];
     vec3 pos_to_cam_diff = cam_pos - pos;
 

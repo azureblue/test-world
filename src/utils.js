@@ -204,6 +204,10 @@ export class Array2D {
         this.#data = new Uint32Array(size * size);
     }
 
+    fill(v) {
+        this.#data.fill(v);
+    }
+
     get(x, y) {
         return this.#data[y * this.#size + x];
     }
@@ -211,6 +215,16 @@ export class Array2D {
     set(x, y, v) {
         this.#data[y * this.#size + x] = v;
     }
+
+    /**
+     * @param {number} y 
+     * @param {Uint32Array} output 
+     */
+    getRow(y, output) {
+        const offset = y * this.#size;
+        for (let i = 0; i < this.#size; i++)
+            output[i] = this.#data[offset + i];
+    }   
     
     each(consumer) {
         this.#data.forEach((v, idx) => {
