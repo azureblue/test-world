@@ -217,6 +217,11 @@ export class DirXY {
     rotateCCW() {                
         this.set(-this.y, this.x);
     }
+
+    constructor(x = 0, y = 0) {
+        this.x = x;
+        this.y = y;
+    }
 }
 
 export { Frustum, FrustumPlanes, Mat3, mat3, Mat4, mat4, Projection, Vec2, vec2, Vec3, vec3, Vec4 };
