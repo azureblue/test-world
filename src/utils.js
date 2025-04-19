@@ -196,6 +196,39 @@ export class ImagePixels {
     }
 }
 
+export class Array3D {
+    #sizeSq
+    #size
+    #height
+    #data
+
+    constructor(size, height) {
+        this.#size = size | 0;
+        this.#height = height | 0;
+        this.#sizeSq = (size * size) | 0;
+        this.#data = new Uint32Array(this.#sizeSq * height);
+    }
+
+    set(h, x, y, v) {
+        this.#data[this.#sizeSq * h + y * this.#size + x] = v;
+    }
+
+    get(h, x, y) {
+        return this.#data[this.#sizeSq * h + y * this.#size + x];
+    }
+}
+
+export class Cube27 {
+    data = new Uint32Array(27);
+    set(dh, dx, dy, v) {
+        this.data[12 + 9 * dh + 3 * dy + dx] = v;
+    }
+
+    get(dh, dx, dy) {
+        return this.data[12 + 9 * dh + 3 * dy + dx];
+    }
+}
+
 export class Array2D {
     #size
     #data
