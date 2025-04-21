@@ -22,8 +22,6 @@ export class TextureArray {
         let imageCtx = imageCanvas.getContext("2d", { willReadFrequently: true });
         if (!is2Pow(size))
             throw "invalid size";
-        const edgeShadow = new EdgeShadowGenerator(size);
-        const shadows = edgeShadow.generate(0, 0.25, 0, 150, 0, 0, 0);
         const columns = Math.floor(width / size);
         imageCtx.scale(1, -1);
         imageCtx.drawImage(image, 0, 0, width, -size);
@@ -34,12 +32,6 @@ export class TextureArray {
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, size, size, 1, gl.RGBA,
                 gl.UNSIGNED_BYTE,
                 imageCtx.getImageData(i * size, 0, (i + 1) * size, size));
-        }
-
-        for (let i = 0; i < shadows.length; i++) {
-            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 32 + i, size, size, 1, gl.RGBA,
-                gl.UNSIGNED_BYTE,
-                shadows[i]);
         }
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -208,4 +200,3 @@ export class EdgeShadowGenerator {
         ctx.putImageData(this.#ctx2d.getImageData(0, 0, this.#size, this.#size), 0, 0);
     }
 }
-
