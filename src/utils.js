@@ -197,25 +197,62 @@ export class ImagePixels {
 }
 
 export class Array3D {
-    #sizeSq
+    #planeSize
     #size
     #height
-    #data
+    data
 
-    constructor(size, height) {
-        this.#size = size | 0;
+    constructor(width, height) {
+        this.#size = width | 0;
         this.#height = height | 0;
-        this.#sizeSq = (size * size) | 0;
-        this.#data = new Uint32Array(this.#sizeSq * height);
+        this.#planeSize = (width * width) | 0;
+        this.data = new Uint32Array(this.#planeSize * height);
     }
 
     set(h, x, y, v) {
-        this.#data[this.#sizeSq * h + y * this.#size + x] = v;
+        this.data[this.#planeSize * h + y * this.#size + x] = v;
     }
 
     get(h, x, y) {
-        return this.#data[this.#sizeSq * h + y * this.#size + x];
+        return this.data[this.#planeSize * h + y * this.#size + x];
     }
+
+    fill(v) {
+        this.data.fill(v);
+    }
+
+    index(h, x, y) {
+        return this.#planeSize * h + y * this.#size + x;
+    }
+    
+    /**
+     * @param {number} h 
+     * @param {number} x 
+     * @param {number} y 
+     * @param {Uint32Array} array 
+     * @param {number} len 
+     */
+    put(h, x, y, array, len ) {
+        const startIdx = this.#planeSize * h + y * this.#size + x;
+        for (let i = 0; i < len; i++) {
+            this.data[startIdx + i] = array[i];
+        }
+    }
+
+    /**
+     * @param {number} h 
+     * @param {number} x 
+     * @param {number} y 
+     * @param {Uint32Array} array 
+     * @param {number} len 
+     */
+    fetch(h, x, y, array, len ) {
+        const startIdx = this.#planeSize * h + y * this.#size + x;
+        for (let i = 0; i < len; i++) {
+            array[i] = this.data[startIdx + i];
+        }
+    }
+
 }
 
 export class Cube27 {
@@ -230,11 +267,11 @@ export class Cube27 {
 }
 
 export class Array2D {
-    #size
+    #width
     #data
-    constructor(size) {
-        this.#size = size;
-        this.#data = new Uint32Array(size * size);
+    constructor(width, height = width) {
+        this.#width = width;
+        this.#data = new Uint32Array(width * height);
     }
 
     fill(v) {
@@ -242,11 +279,37 @@ export class Array2D {
     }
 
     get(x, y) {
-        return this.#data[y * this.#size + x];
+        return this.#data[y * this.#width + x];
     }
 
     set(x, y, v) {
-        this.#data[y * this.#size + x] = v;
+        this.#data[y * this.#width + x] = v;
+    }
+
+    /**
+     * @param {number} x 
+     * @param {number} y 
+     * @param {Uint32Array} array 
+     * @param {number} len 
+     */
+    put(x, y, array, len ) {
+        const startIdx = y * this.#width + x;
+        for (let i = 0; i < len; i++) {
+            this.#data[startIdx + i] = array[i];
+        }
+    }
+
+    /**
+     * @param {number} x 
+     * @param {number} y 
+     * @param {Uint32Array} array 
+     * @param {number} len 
+     */
+    fetch(x, y, array, len ) {
+        const startIdx = y * this.#width + x;
+        for (let i = 0; i < len; i++) {
+            array[i] = this.#data[startIdx + i];
+        }
     }
 
     /**
@@ -254,14 +317,14 @@ export class Array2D {
      * @param {Uint32Array} output 
      */
     getRow(y, output) {
-        const offset = y * this.#size;
-        for (let i = 0; i < this.#size; i++)
+        const offset = y * this.#width;
+        for (let i = 0; i < this.#width; i++)
             output[i] = this.#data[offset + i];
     }   
     
     each(consumer) {
         this.#data.forEach((v, idx) => {
-            consumer(idx % this.#size, Math.floor(idx / this.#size), v);
+            consumer(idx % this.#width, Math.floor(idx / this.#width), v);
         });
     }
 }
