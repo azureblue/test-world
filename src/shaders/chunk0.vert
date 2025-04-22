@@ -7,7 +7,7 @@
 #define b_0000_1111 15u
 #define b_1111_1111 255u
 // consider calculating uvs in js
-//mmfshttttTTTTnnnzzzzzzzzyyyyxxxx
+//  fshttttTTTTnnnzzzzzzzzyyyyxxxx
 //                        yyyyxxxx
 //01234567890123456789012345678901
 layout (location = 0) in uvec2 a_in;
@@ -19,23 +19,18 @@ layout (std140) uniform Camera {
 const uint idx_to_face_point_idx[] = uint[](0u, 1u, 2u, 0u, 2u, 3u, 1u, 2u, 3u, 1u, 3u, 0u);
 
 const vec3 merge_vectors_w[] = vec3[](vec3(1, 0, 0), vec3(0, 0, 1), vec3(-1, 0, 0), vec3(0, 0, -1), vec3(1, 0, 0), vec3(1, 0, 0));
-
 const vec3 merge_vectors_h[] = vec3[](vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 0, -1), vec3(0, 0, 1));
 
-const uint normal_merge_mask[] = uint[](0u, 0u, 0u, 0u, /**/ 1u, 0u, 0u, 0u, /**/ 1u, 1u, 0u, 0u, /**/ 0u, 1u, 0u, 0u, /**/ 
-0u, 0u, 1u, 0u, /**/ 0u, 0u, 0u, 0u, /**/ 0u, 1u, 0u, 0u, /**/ 0u, 1u, 1u, 0u, /**/ 
-1u, 0u, 0u, 0u, /**/ 0u, 0u, 0u, 0u, /**/ 0u, 1u, 0u, 0u, /**/ 1u, 1u, 0u, 0u, /**/ 
-0u, 0u, 0u, 0u, /**/ 0u, 0u, 1u, 0u, /**/ 0u, 1u, 1u, 0u, /**/ 0u, 1u, 0u, 0u, /**/ 
-0u, 0u, 0u, 0u, /**/ 1u, 0u, 0u, 0u, /**/ 1u, 0u, 1u, 0u, /**/ 0u, 0u, 1u, 0u, /**/ 
-0u, 0u, 1u, 0u, /**/ 1u, 0u, 1u, 0u, /**/ 1u, 0u, 0u, 0u, /**/ 0u, 0u, 0u, 0u  /**/ 
-);
 const vec3 vertex_offest_map[24] = vec3[24](
+    //TODO: optimize?
 /* 000 */ vec3(-0.5f, -0.5f, +0.5f), vec3(+0.5f, -0.5f, +0.5f), vec3(+0.5f, +0.5f, +0.5f), vec3(-0.5f, +0.5f, +0.5f),
 /* 001 */ vec3(-0.5f, -0.5f, -0.5f), vec3(-0.5f, -0.5f, +0.5f), vec3(-0.5f, +0.5f, +0.5f), vec3(-0.5f, +0.5f, -0.5f),
 /* 010 */ vec3(+0.5f, -0.5f, -0.5f), vec3(-0.5f, -0.5f, -0.5f), vec3(-0.5f, +0.5f, -0.5f), vec3(+0.5f, +0.5f, -0.5f),
 /* 011 */ vec3(+0.5f, -0.5f, +0.5f), vec3(+0.5f, -0.5f, -0.5f), vec3(+0.5f, +0.5f, -0.5f), vec3(+0.5f, +0.5f, +0.5f),
 /* 100 */ vec3(-0.5f, +0.5f, +0.5f), vec3(+0.5f, +0.5f, +0.5f), vec3(+0.5f, +0.5f, -0.5f), vec3(-0.5f, +0.5f, -0.5f),
-/* 101 */ vec3(-0.5f, -0.5f, -0.5f), vec3(+0.5f, -0.5f, -0.5f), vec3(+0.5f, -0.5f, +0.5f), vec3(-0.5f, -0.5f, +0.5f));
+/* 101 */ vec3(-0.5f, -0.5f, -0.5f), vec3(+0.5f, -0.5f, -0.5f), vec3(+0.5f, -0.5f, +0.5f), vec3(-0.5f, -0.5f, +0.5f)
+);
+
 const float[4] shadow_values = float[4](0.0f, 0.3f, 0.4f, 0.5f);
 
 uniform vec3 m_translation;
@@ -56,12 +51,13 @@ void main() {
     uint normal_idx = (a_in_bits >> 16) & b_0000_0111;
     uint tex_idx = (a_in_bits >> 19) & b_1111_1111;
     uint shadow = (a_in_bits >> 27) & b_0000_0011;
-    int flip = int((a_in_bits >> 29) & b_0000_0001);
-    uint m = a_in_aux_bits & b_1111_1111;
-    int vertex_idx = (gl_VertexID) % 6;
-    uint vertex_quad_idx = idx_to_face_point_idx[vertex_idx + flip * 6];
-    uint m_x = m & b_0000_1111;
-    uint m_y = m >> 4;
+    uint flip = (a_in_bits >> 29) & b_0000_0001;
+
+    uint merge_bits = a_in_aux_bits & b_1111_1111;
+    uint vertex_idx = uint(gl_VertexID % 6);
+    uint vertex_quad_idx = idx_to_face_point_idx[vertex_idx + flip * 6u];
+    uint m_x = merge_bits & b_0000_1111;
+    uint m_y = merge_bits >> 4;
     vec3 pos = vec3(x, y, -float(z)) + m_translation + vertex_offest_map[normal_idx * 4u + vertex_quad_idx] + merge_vectors_w[normal_idx] * float(m_x) + merge_vectors_h[normal_idx] * float(m_y);
     vec3 pos_to_cam_diff = cam_pos - pos;
 
