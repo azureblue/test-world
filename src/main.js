@@ -17,14 +17,6 @@ export async function start() {
     const gl = canvas.getContext("webgl2", {
         powerPreference: "high-performance"
     });
-    gl.lineWidth(2);
-    
-
-    const baseProgram = new Program(
-        gl,
-        await Resources.loadText("shaders/base.vert"),
-        await Resources.loadText("shaders/base.frag")
-    );
 
     const chunk0Program = new Program(
         gl,
@@ -52,28 +44,22 @@ export async function start() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     gl.viewport(0, 0, canvas.width, canvas.height);
-
+    gl.lineWidth(2);
     gl.clearColor(0.522, 0.855, 1, 1);
     gl.enable(gl.DEPTH_TEST);
     gl.frontFace(gl.CCW);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
 
-
     document.body.style.margin = "0";
     document.body.style.overflow = "hidden";
-    const aPosition = baseProgram.getAttribLocation("a_position");
-    const aTexCoord = baseProgram.getAttribLocation("a_tex_coord");
-    const aNormal = baseProgram.getAttribLocation("a_normal");
     const aIn = chunk0Program.getAttribLocation("a_in");
     const attrCoordLines = coordsProgram.getAttribLocation("a_position");
     const attrCoordLinesColors = coordsProgram.getAttribLocation("a_color");
     gl.enableVertexAttribArray(attrCoordLines);
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
-
-    UIntMesh.setGL(gl, aIn, aNormal, aTexCoord);
-    baseProgram.use();
+    UIntMesh.setGL(gl, aIn);
     const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
     const texArray = TextureArray.create(gl, textures, 16);
     const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
@@ -101,22 +87,22 @@ export async function start() {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
         0.8, 0.0, 0.0,
         0.8, 0.0, 0.0,
-        0, 0.8, 0.0,
-        0, 0.8, 0.0,
-        0.0, 0, 0.8,
-        0.0, 0, 0.8
+        0.0, 0.8, 0.0,
+        0.0, 0.8, 0.0,
+        0.0, 0.0, 0.8,
+        0.0, 0.0, 0.8
     ]), gl.STATIC_DRAW);
 
-
-    const uCamera = gl.getUniformBlockIndex(baseProgram.program, "Camera");
-    const uCameraSize = gl.getActiveUniformBlockParameter(baseProgram.program, uCamera, gl.UNIFORM_BLOCK_DATA_SIZE);
+    const uCamera = gl.getUniformBlockIndex(chunk0Program.program, "Camera");
+    const uCameraSize = gl.getActiveUniformBlockParameter(chunk0Program.program, uCamera, gl.UNIFORM_BLOCK_DATA_SIZE);
     const uCameraBuffer = gl.createBuffer();
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
     gl.bufferData(gl.UNIFORM_BUFFER, uCameraSize, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
     gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, uCameraBuffer);
-    const uCameraIndices = gl.getUniformIndices(baseProgram.program, ["cam_proj", "cam_view", "cam_pos"]);
-    const uCameraOffsets = gl.getActiveUniforms(baseProgram.program, uCameraIndices, gl.UNIFORM_OFFSET);
+    
+    const uCameraIndices = gl.getUniformIndices(chunk0Program.program, ["cam_proj", "cam_view", "cam_pos"]);
+    const uCameraOffsets = gl.getActiveUniforms(chunk0Program.program, uCameraIndices, gl.UNIFORM_OFFSET);
 
     const uCameraVariableInfo = {
         proj: {
@@ -133,7 +119,6 @@ export async function start() {
         }
     };
 
-    gl.uniformBlockBinding(baseProgram.program, gl.getUniformBlockIndex(baseProgram.program, "Camera"), 0);
     gl.uniformBlockBinding(coordsProgram.program, gl.getUniformBlockIndex(coordsProgram.program, "Camera"), 0);
     gl.uniformBlockBinding(chunk0Program.program, gl.getUniformBlockIndex(chunk0Program.program, "Camera"), 0);
 
@@ -149,9 +134,6 @@ export async function start() {
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
     gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.proj.offset, mProjection._values, 0);
 
-
-    // const uModel = baseProgram.getUniformLocation("m_matrix");
-    const uTranslation = baseProgram.getUniformLocation("m_translation");
     const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
 
     let run = true;
@@ -254,7 +236,6 @@ export async function start() {
         texArray.bind(gl);
 
         for (let chunk of chunks) {
-
             if (!frustumCuller.shouldDraw(chunk)) {
                 chunkCulled++;
                 continue;
@@ -263,7 +244,6 @@ export async function start() {
             mesh.bindVA();            
             const modelTranslation = mesh.modelTranslation;
             gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-            // gl.uniformMatrix4fv(uModel, false, modelMat.values);
             gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
             // gl.drawArrays(gl.LINES, 0, mesh.len);
             // gl.drawArrays(gl.POINTS, 0, mesh.len);
