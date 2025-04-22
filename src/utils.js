@@ -1,6 +1,6 @@
 export class DataBuffer {
     #pos
-    #array
+    array
 
     /**
      * @param {Function} ArrayClass
@@ -10,27 +10,27 @@ export class DataBuffer {
         this.#pos = 0;
         if (initialSize === undefined) 
             initialSize = 4;
-        this.#array = new ArrayClass(initialSize);
+        this.array = new ArrayClass(initialSize);
     }
 
     /**
      * @param {ArrayLike<number>} elements 
      */
     add(elements) {
-        if (this.#array.length - this.#pos < elements.length) {
-            this.extendSize();
+        if (this.array.length - this.#pos < elements.length) {
+            this.#extendSize();
             this.add(elements);
         } else {
-            this.#array.set(elements, this.#pos);
+            this.array.set(elements, this.#pos);
             this.#pos += elements.length;            
         }        
     }
 
-    extendSize() {
-        const tmp = this.#array;
-        this.#array.slice;
-        this.#array = new this.#array.constructor(tmp.length * 2);
-        this.#array.set(tmp);
+    #extendSize() {
+        const tmp = this.array;
+        this.array.slice;
+        this.array = new this.array.constructor(tmp.length * 2);
+        this.array.set(tmp);
     }
 
     /**
@@ -40,11 +40,11 @@ export class DataBuffer {
      * @param {number} [thirdCoord]  
      */
     addTranslated(elements, firstCoord = 0, secondCoord, thirdCoord) {
-        if (this.#array.length - this.#pos < elements.length) {
-            this.extendSize();
+        if (this.array.length - this.#pos < elements.length) {
+            this.#extendSize();
             this.addTranslated(elements, firstCoord, secondCoord, thirdCoord);
         } else {
-            this.#array.set(elements, this.#pos);
+            this.array.set(elements, this.#pos);
             let stride = 1;
             if (secondCoord !== undefined)
                 stride++;
@@ -53,18 +53,18 @@ export class DataBuffer {
 
             if (stride == 1) {
                 for (let i = 0; i < elements.length; i++) {
-                    this.#array[this.#pos + i] += firstCoord;
+                    this.array[this.#pos + i] += firstCoord;
                 }
             } else if (stride == 2) {
                 for (let i = 0; i < elements.length; i+=2) {
-                    this.#array[this.#pos + i] += firstCoord;
-                    this.#array[this.#pos + i + 1] += secondCoord;
+                    this.array[this.#pos + i] += firstCoord;
+                    this.array[this.#pos + i + 1] += secondCoord;
                 }
             } else if (stride == 3) {
                 for (let i = 0; i < elements.length; i+=3) {
-                    this.#array[this.#pos + i] += firstCoord;
-                    this.#array[this.#pos + i + 1] += secondCoord;
-                    this.#array[this.#pos + i + 2] += thirdCoord;
+                    this.array[this.#pos + i] += firstCoord;
+                    this.array[this.#pos + i + 1] += secondCoord;
+                    this.array[this.#pos + i + 2] += thirdCoord;
                 }
             }
             this.#pos += elements.length;
@@ -75,7 +75,14 @@ export class DataBuffer {
      * @returns {Float32Array | Uint32Array | Uint16Array | Uint8Array}
      */
     trimmed() {
-        return this.#array.subarray(0, this.#pos);
+        return this.array.subarray(0, this.#pos);
+    }
+
+    reset(size = 0) {
+        this.#pos = 0;
+        if (size !== 0) {
+            this.array = new this.array.constructor(size);
+        }
     }
 
     get length() {
