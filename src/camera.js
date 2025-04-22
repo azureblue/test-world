@@ -114,6 +114,8 @@ class Camera {
 }
 
 class FrustumCuller {
+    static #DELTA = 0.1;
+    
     #planes = new FrustumPlanes();
     #frustum;
     #camera;
@@ -187,7 +189,7 @@ class FrustumCuller {
                 const ctcy = corners[offset + 1] - planey;
                 const ctcz = corners[offset + 2] - planez;
                 const dot = ctcx * planedx + ctcy * planedy + ctcz * planedz;
-                if (dot >= -FrustumCuller.DELTA) {
+                if (dot >= -FrustumCuller.#DELTA) {
                     continue plane_loop;
                 }
             }
@@ -195,10 +197,6 @@ class FrustumCuller {
         }
         return true;
     }
-
-
-    static DELTA = 0.1;
-
 }
 
 export { Camera, FrustumCuller };
