@@ -77,7 +77,6 @@ class ChunkData extends Array3D {
     get maxHeight() {
         return this.#maxHeight;
     }
-
 }
 
 class UIntMesh {
@@ -411,9 +410,8 @@ class UIntChunkMesher {
      */
     #buffer = new UInt32Buffer(4);
     #tmpArr = new Uint32Array(12);
-    #upLayer = new Array2D(CHUNK_SIZE);
-    #downLayer = new Array2D(CHUNK_SIZE);
-    #layers = [new Array3D(CHUNK_SIZE, 4), new Array3D(CHUNK_SIZE, 4)];
+    #upDownLayers = [new Array2D(CHUNK_SIZE), new Array2D(CHUNK_SIZE)];
+    #sideLayers = [new Array3D(CHUNK_SIZE, 4), new Array3D(CHUNK_SIZE, 4)];
     #topRow = new Uint32Array(CHUNK_SIZE);
     #currentRow = new Uint32Array(CHUNK_SIZE);
     #directionEncode = new Int32Array([
@@ -422,8 +420,6 @@ class UIntChunkMesher {
         -1, 0, CHUNK_SIZE - 1, 0, -1, CHUNK_SIZE - 1,
         0, -1, CHUNK_SIZE - 1, 1, 0, 0
     ]);
-
-
 
     /*
        fshttttTTTTnnnzzzzzzzzxxxxyyyy
@@ -457,7 +453,6 @@ class UIntChunkMesher {
             | ((h & 0b11111111) << 8)
             | ((y & 0b1111) << 4)
             | ((x & 0b1111));
-
 
         if (flip) {
             this.#tmpArr[0 * 2] = bits | (corner1Shadow << 27);
@@ -498,11 +493,11 @@ class UIntChunkMesher {
     createMeshes(position, adj) {
         this.#buffer.reset();
         const now = performance.now();
-        this.#upLayer.fill(0);
-        this.#downLayer.fill(0);
-
-        const layers = this.#layers;
+        const layers = this.#sideLayers;
         layers[0].fill(0);
+
+        const upLayer = this.#upDownLayers[0];
+        const downLayer = this.#upDownLayers[1];
 
         const sideDir0 = new DirXY();
         const sideDir1 = new DirXY();
@@ -512,8 +507,8 @@ class UIntChunkMesher {
         let currentRow = this.#currentRow;
 
         for (let h = 0; h < CHUNK_HEIGHT; h++) {
-            this.#upLayer.fill(0);
-            this.#downLayer.fill(0);
+            upLayer.fill(0);
+            downLayer.fill(0);
             const topLayer = h & 1;
             const currentLayer = 1 - topLayer;
             const layersTop = layers[topLayer];
@@ -531,8 +526,7 @@ class UIntChunkMesher {
                     const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
                     const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
 
-                    this.#upLayer.set(x, y, 0);
-                    if (adj.get(1, 0, 0) === BLOCK_EMPTY || adj.get(1, 0, 0) === BLOCK_CHUNK_EDGE) {
+                    if (!isSolid(adj.get(1, 0, 0))) {
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
@@ -546,10 +540,10 @@ class UIntChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        this.#upLayer.set(x, y, (blockTextureUp << 8) | (shadows));
+                        upLayer.set(x, y, (blockTextureUp << 8) | (shadows));
                     }
 
-                    if (adj.get(-1, 0, 0) === BLOCK_EMPTY || adj.get(-1, 0, 0) === BLOCK_CHUNK_EDGE) {
+                    if (!isSolid(adj.get(-1, 0, 0))) {
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
@@ -564,7 +558,7 @@ class UIntChunkMesher {
                             cornerDir.rotateCCW();
                         }
 
-                        this.#downLayer.set(x, CHUNK_SIZE - y - 1, (blockTextureDown << 8) | (shadows));
+                        downLayer.set(x, CHUNK_SIZE - y - 1, (blockTextureDown << 8) | (shadows));
                     }
 
                     if (adj.get(0, 1, 0) === BLOCK_EMPTY) {
@@ -643,12 +637,13 @@ class UIntChunkMesher {
             for (let dir = 0; dir < 4; dir++) {
                 const layerStartIdx = layersCurrent.planeIdx(dir);
                 const layerEndIdx = layerStartIdx + layerLen;
-                const dirXXMul = this.#directionEncode[dir * 6];
-                const dirXYMul = this.#directionEncode[dir * 6 + 1];
-                const dirXAdd = this.#directionEncode[dir * 6 + 2];
-                const dirYXMul = this.#directionEncode[dir * 6 + 3];
-                const dirYYMul = this.#directionEncode[dir * 6 + 4];
-                const dirYAdd = this.#directionEncode[dir * 6 + 5];
+                const dirEncodeBaseIdx = dir * 6;
+                const dirXXMul = this.#directionEncode[dirEncodeBaseIdx + 0];
+                const dirXYMul = this.#directionEncode[dirEncodeBaseIdx + 1];
+                const dirXXAdd = this.#directionEncode[dirEncodeBaseIdx + 2];
+                const dirYXMul = this.#directionEncode[dirEncodeBaseIdx + 3];
+                const dirYYMul = this.#directionEncode[dirEncodeBaseIdx + 4];
+                const dirYYAdd = this.#directionEncode[dirEncodeBaseIdx + 5];
 
                 for (let y = layerStartIdx; y < layerEndIdx; y += CHUNK_SIZE) {
                     const rowEnd = y + CHUNK_SIZE;
@@ -679,99 +674,63 @@ class UIntChunkMesher {
                         let y = i >> 4;
 
                         this.#encode(top & 0xFFFF, h - topH,
-                            dirXAdd + dirXXMul * x + dirXYMul * y,
-                            dirYAdd + dirYXMul * x + dirYYMul * y,
+                            dirXXAdd + dirXXMul * x + dirXYMul * y,
+                            dirYYAdd + dirYXMul * x + dirYYMul * y,
                             dir, (top >> 16) & 0xFF, topH);
                     }
                 }
             }
 
-            topRow.fill(0);
-            for (let y = 0; y < CHUNK_SIZE; y++) {
-                this.#upLayer.getRow(y, currentRow);
-                for (let i = 0; i < CHUNK_SIZE; i++) {
-                    if (currentRow[i] == 0)
-                        continue;
-                    let j = i + 1;
-                    for (; j < CHUNK_SIZE; j++) {
-                        if (currentRow[i] != currentRow[j])
-                            break;
-                        currentRow[j] = 0;
+            for (let upDown = 0; upDown < 2; upDown++) {
+                topRow.fill(0);
+                const layer = this.#upDownLayers[upDown];
+                for (let y = 0; y < CHUNK_SIZE; y++) {
+                    layer.getRow(y, currentRow);
+                    for (let i = 0; i < CHUNK_SIZE; i++) {
+                        if (currentRow[i] == 0)
+                            continue;
+                        let j = i + 1;
+                        for (; j < CHUNK_SIZE; j++) {
+                            if (currentRow[i] != currentRow[j])
+                                break;
+                            currentRow[j] = 0;
+                        }
+                        currentRow[i] |= (j - i) << 16 | 1 << 24;
+                        i = j - 1;
                     }
-                    currentRow[i] |= (j - i) << 16 | 1 << 24;
-                    i = j - 1;
+                    for (let i = 0; i < CHUNK_SIZE; i++) {
+                        const top = topRow[i];
+                        if (top === 0)
+                            continue;
+                        const topH = top >> 24;
+                        let cur = currentRow[i];
+                        if ((top & 0x00_FF_FF_FF) == (cur & 0x00_FF_FF_FF)) {
+                            currentRow[i] = cur & 0x00_FF_FF_FF | (topH + 1) << 24;
+                        } else {
+                            const topW = top >> 16 & 0xFF;
+                            const yy = (y - topH) * (0b1 - (upDown << 1)) + (CHUNK_SIZE - 1) * (upDown);
+                            this.#encode(top & 0xFFFF, h, i, yy, Direction.UP + upDown, topW, topH);
+                        }
+                    }
+                    const tmp = currentRow;
+                    currentRow = topRow;
+                    topRow = tmp;
                 }
+
                 for (let i = 0; i < CHUNK_SIZE; i++) {
                     const top = topRow[i];
                     if (top === 0)
                         continue;
                     const topH = top >> 24;
-                    let cur = currentRow[i];
-                    if ((top & 0x00_FF_FF_FF) == (cur & 0x00_FF_FF_FF)) {
-                        currentRow[i] = cur & 0x00_FF_FF_FF | (topH + 1) << 24;
-                    } else {
-                        const topW = top >> 16 & 0xFF;
-                        this.#encode(top & 0xFFFF, h, i, y - topH, Direction.UP, topW, topH);
-                    }
+                    const topW = top >> 16 & 0xFF;
+                    const y = (CHUNK_SIZE - topH) * (0b1 - (upDown << 1)) + (CHUNK_SIZE - 1) * (upDown);
+                    this.#encode(top & 0xFFFF, h, i, y, Direction.UP + upDown, topW, topH);
                 }
-                const tmp = currentRow;
-                currentRow = topRow;
-                topRow = tmp;
-            }
-
-            for (let i = 0; i < CHUNK_SIZE; i++) {
-                const top = topRow[i];
-                if (top === 0)
-                    continue;
-                const topH = top >> 24;
-                const topW = top >> 16 & 0xFF;
-                this.#encode(top & 0xFFFF, h, i, CHUNK_SIZE - topH, Direction.UP, topW, topH);
-            }
-
-            topRow.fill(0);
-            for (let y = 0; y < CHUNK_SIZE; y++) {
-                this.#downLayer.getRow(y, currentRow);
-                for (let i = 0; i < CHUNK_SIZE; i++) {
-                    let j = i + 1;
-                    for (; j < CHUNK_SIZE; j++) {
-                        if (currentRow[i] != currentRow[j])
-                            break;
-                        currentRow[j] = 0;
-                    }
-                    if (currentRow[i] == 0)
-                        continue;
-                    currentRow[i] |= ((j - i) << 16);
-                    currentRow[i] |= (1 << 24);
-                    i = j - 1;
-                }
-                for (let i = 0; i < CHUNK_SIZE; i++) {
-                    const top = topRow[i];
-                    if (top === 0)
-                        continue;
-                    const topH = top >> 24;
-                    let cur = currentRow[i];
-                    if ((top & 0x00FFFFFF) == (cur & 0x00FFFFFF)) {
-                        currentRow[i] = (cur & 0x00FFFFFF) | ((topH + 1) << 24);
-                    } else {
-                        const topW = (top >> 16) & 0xFF;
-                        this.#encode(top & 0xFFFF, h, i, CHUNK_SIZE - 1 - y + topH, Direction.DOWN, topW, topH);
-                    }
-                }
-                topRow.set(currentRow);
-            }
-
-            for (let i = 0; i < CHUNK_SIZE; i++) {
-                const top = topRow[i];
-                if (top === 0)
-                    continue;
-                const topH = top >> 24;
-                const topW = (top >> 16) & 0xFF;
-                this.#encode(top & 0xFFFF, h, i, topH - 1, Direction.DOWN, topW, topH);
             }
         }
 
         const layerLen = CHUNK_SIZE * CHUNK_SIZE;
-        const layersTop = this.#layers[CHUNK_HEIGHT & 1];
+        const layersTop = this.#sideLayers[CHUNK_HEIGHT & 1];
         const layersTopData = layersTop.data;
 
         for (let dir = 0; dir < 4; dir++) {
@@ -779,10 +738,10 @@ class UIntChunkMesher {
             const dirEncodeBaseIdx = dir * 6;
             const dirXXMul = this.#directionEncode[dirEncodeBaseIdx];
             const dirXYMul = this.#directionEncode[dirEncodeBaseIdx + 1];
-            const dirXAdd = this.#directionEncode[dirEncodeBaseIdx + 2];
+            const dirXXAdd = this.#directionEncode[dirEncodeBaseIdx + 2];
             const dirYXMul = this.#directionEncode[dirEncodeBaseIdx + 3];
             const dirYYMul = this.#directionEncode[dirEncodeBaseIdx + 4];
-            const dirYAdd = this.#directionEncode[dirEncodeBaseIdx + 5];
+            const dirYYAdd = this.#directionEncode[dirEncodeBaseIdx + 5];
 
             for (let i = 0; i < layerLen; i++) {
                 const top = layersTopData[layerStartIdx + i];
@@ -792,8 +751,8 @@ class UIntChunkMesher {
                 let x = i & 0xF;
                 let y = i >> 4;
                 this.#encode(top & 0xFFFF, CHUNK_HEIGHT - topH,
-                    dirXAdd + dirXXMul * x + dirXYMul * y,
-                    dirYAdd + dirYXMul * x + dirYYMul * y,
+                    dirXXAdd + dirXXMul * x + dirXYMul * y,
+                    dirYYAdd + dirYXMul * x + dirYYMul * y,
                     dir, (top >> 16) & 0xFF, topH);
             }
         }
