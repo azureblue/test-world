@@ -231,6 +231,14 @@ export class Array3D {
     index(h, x, y) {
         return this.#planeSize * h + y * this.#size + x;
     }
+
+    rowIdx(h, y) {
+        return this.#planeSize * h + y * this.#size;
+    }
+
+    planeIdx(h) {
+        return this.#planeSize * h;
+    }
     
     /**
      * @param {number} h 
@@ -275,22 +283,22 @@ export class Cube27 {
 
 export class Array2D {
     #width
-    #data
+    data
     constructor(width, height = width) {
         this.#width = width;
-        this.#data = new Uint32Array(width * height);
+        this.data = new Uint32Array(width * height);
     }
 
     fill(v) {
-        this.#data.fill(v);
+        this.data.fill(v);
     }
 
     get(x, y) {
-        return this.#data[y * this.#width + x];
+        return this.data[y * this.#width + x];
     }
 
     set(x, y, v) {
-        this.#data[y * this.#width + x] = v;
+        this.data[y * this.#width + x] = v;
     }
 
     /**
@@ -302,8 +310,12 @@ export class Array2D {
     put(x, y, array, len ) {
         const startIdx = y * this.#width + x;
         for (let i = 0; i < len; i++) {
-            this.#data[startIdx + i] = array[i];
+            this.data[startIdx + i] = array[i];
         }
+    }
+
+    rowIdx(y) {
+        return y * this.#width;
     }
 
     /**
@@ -315,7 +327,7 @@ export class Array2D {
     fetch(x, y, array, len ) {
         const startIdx = y * this.#width + x;
         for (let i = 0; i < len; i++) {
-            array[i] = this.#data[startIdx + i];
+            array[i] = this.data[startIdx + i];
         }
     }
 
@@ -326,11 +338,11 @@ export class Array2D {
     getRow(y, output) {
         const offset = y * this.#width;
         for (let i = 0; i < this.#width; i++)
-            output[i] = this.#data[offset + i];
+            output[i] = this.data[offset + i];
     }   
     
     each(consumer) {
-        this.#data.forEach((v, idx) => {
+        this.data.forEach((v, idx) => {
             consumer(idx % this.#width, Math.floor(idx / this.#width), v);
         });
     }

@@ -410,18 +410,19 @@ class UIntChunkMesher {
      * @type {UInt32Buffer}
      */
     #buffer = new UInt32Buffer(4);
-    #tuple3 = new Uint32Array(3);
-    #processingOut = new UInt32Buffer(1024);
     #tmpArr = new Uint32Array(12);
     #upLayer = new Array2D(CHUNK_SIZE);
     #downLayer = new Array2D(CHUNK_SIZE);
-    #frontLayer = new Array3D(CHUNK_SIZE, CHUNK_HEIGHT);
-    #leftLayer = new Array3D(CHUNK_SIZE, CHUNK_HEIGHT);
-    #rightLayer = new Array3D(CHUNK_SIZE, CHUNK_HEIGHT);
-    #backLayer = new Array3D(CHUNK_SIZE, CHUNK_HEIGHT);
-
+    #layers = [new Array3D(CHUNK_SIZE, 4), new Array3D(CHUNK_SIZE, 4)];
     #topRow = new Uint32Array(CHUNK_SIZE);
     #currentRow = new Uint32Array(CHUNK_SIZE);
+    #directionEncode = new Int32Array([
+        1, 0, 0, 0, 1, 0,
+        0, 1, 0, -1, 0, CHUNK_SIZE - 1,
+        -1, 0, CHUNK_SIZE - 1, 0, -1, CHUNK_SIZE - 1,
+        0, -1, CHUNK_SIZE - 1, 1, 0, 0
+    ]);
+
 
 
     /*
@@ -489,64 +490,6 @@ class UIntChunkMesher {
     }
 
     /**
-     * 
-     * @param {Array3D} arr3d 
-     * @returns 
-     */
-    #processSideFaces(arr3d) {
-        this.#processingOut.reset();
-        let topRow = this.#topRow;
-        let currentRow = this.#currentRow;
-        for (let y = 0; y < CHUNK_SIZE; y++) {
-            topRow.fill(0);
-            for (let h = 0; h < CHUNK_HEIGHT; h++) {
-                arr3d.fetch(h, 0, y, currentRow, CHUNK_SIZE);
-                for (let i = 0; i < CHUNK_SIZE; i++) {
-                    let j = i + 1;
-                    for (; j < CHUNK_SIZE; j++) {
-                        if (currentRow[i] != currentRow[j])
-                            break;
-                        currentRow[j] = 0;
-                    }
-                    if (currentRow[i] == 0)
-                        continue;
-                    currentRow[i] |= ((j - i) << 16);
-                    currentRow[i] |= (1 << 24);
-                    i = j - 1;
-                }
-                for (let x = 0; x < CHUNK_SIZE; x++) {
-                    const top = topRow[x];
-                    if (top === 0)
-                        continue;
-                    const topH = top >> 24;
-                    let cur = currentRow[x];
-                    if ((top & 0x00FFFFFF) == (cur & 0x00FFFFFF) && topH < 16) {
-                        currentRow[x] = (cur & 0x00FFFFFF) | ((topH + 1) << 24);
-                    } else {
-                        const topW = (top >> 16) & 0xFF;
-                        this.#tuple3[0] = top & 0xFFFF;
-                        this.#tuple3[1] = (h - topH) << 8 | x << 4 | y;
-                        this.#tuple3[2] = topW << 8 | topH;
-                        this.#processingOut.add(this.#tuple3);               
-                    }
-                }
-                topRow.set(currentRow);
-            }
-            for (let x = 0; x < CHUNK_SIZE; x++) {
-                const top = topRow[x];
-                if (top === 0)
-                    continue;
-                const topH = top >> 24;
-                const topW = (top >> 16) & 0xFF;
-                this.#tuple3[0] = top & 0xFFFF;
-                this.#tuple3[1] = (CHUNK_HEIGHT - topH) << 8 | x << 4 | y;
-                this.#tuple3[2] = topW << 8 | topH;
-                this.#processingOut.add(this.#tuple3);
-            }
-        }
-    }
-
-    /**
      * @param {Vec2} position 
      * @param {DataAdj} adj
      * 
@@ -557,10 +500,9 @@ class UIntChunkMesher {
         const now = performance.now();
         this.#upLayer.fill(0);
         this.#downLayer.fill(0);
-        this.#leftLayer.fill(0);
-        this.#rightLayer.fill(0);
-        this.#frontLayer.fill(0);
-        this.#backLayer.fill(0);
+
+        const layers = this.#layers;
+        layers[0].fill(0);
 
         const sideDir0 = new DirXY();
         const sideDir1 = new DirXY();
@@ -572,6 +514,12 @@ class UIntChunkMesher {
         for (let h = 0; h < CHUNK_HEIGHT; h++) {
             this.#upLayer.fill(0);
             this.#downLayer.fill(0);
+            const topLayer = h & 1;
+            const currentLayer = 1 - topLayer;
+            const layersTop = layers[topLayer];
+            const layersCurrent = layers[currentLayer];
+            layersCurrent.fill(0);
+
             for (let y = 0; y < CHUNK_SIZE; y++)
                 for (let x = 0; x < CHUNK_SIZE; x++) {
                     adj.setPosition(h, x, y);
@@ -633,7 +581,7 @@ class UIntChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        this.#rightLayer.set(h, y, CHUNK_SIZE - 1 - x, (blockTextureSide << 8) | (shadows));
+                        layersCurrent.set(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextureSide << 8) | (shadows));
                     }
 
                     if (adj.get(0, -1, 0) === BLOCK_EMPTY) {
@@ -650,7 +598,7 @@ class UIntChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        this.#leftLayer.set(h, CHUNK_SIZE - 1 - y, x, (blockTextureSide << 8) | (shadows));
+                        layersCurrent.set(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextureSide << 8) | (shadows));
                     }
 
                     if (adj.get(0, 0, -1) === BLOCK_EMPTY) {
@@ -667,7 +615,7 @@ class UIntChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        this.#frontLayer.set(h, x, y, (blockTextureSide << 8) | shadows);
+                        layersCurrent.set(Direction.FRONT, x, y, (blockTextureSide << 8) | shadows);
                     }
 
                     if (adj.get(0, 0, 1) === BLOCK_EMPTY) {
@@ -684,9 +632,59 @@ class UIntChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        this.#backLayer.set(h, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextureSide << 8) | shadows);
+                        layersCurrent.set(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextureSide << 8) | shadows);
                     }
                 }
+
+            const layerLen = CHUNK_SIZE * CHUNK_SIZE;
+            const layersCurrentData = layersCurrent.data;
+            const layersTopData = layersTop.data;
+
+            for (let dir = 0; dir < 4; dir++) {
+                const layerStartIdx = layersCurrent.planeIdx(dir);
+                const layerEndIdx = layerStartIdx + layerLen;
+                const dirXXMul = this.#directionEncode[dir * 6];
+                const dirXYMul = this.#directionEncode[dir * 6 + 1];
+                const dirXAdd = this.#directionEncode[dir * 6 + 2];
+                const dirYXMul = this.#directionEncode[dir * 6 + 3];
+                const dirYYMul = this.#directionEncode[dir * 6 + 4];
+                const dirYAdd = this.#directionEncode[dir * 6 + 5];
+
+                for (let y = layerStartIdx; y < layerEndIdx; y += CHUNK_SIZE) {
+                    const rowEnd = y + CHUNK_SIZE;
+                    for (let i = y; i < rowEnd; i++) {
+                        let j = i + 1;
+                        for (; j < rowEnd; j++) {
+                            if (layersCurrentData[i] != layersCurrentData[j])
+                                break;
+                            layersCurrentData[j] = 0;
+                        }
+                        if (layersCurrentData[i] == 0)
+                            continue;
+                        layersCurrentData[i] |= (1 << 24) | ((j - i) << 16);
+                        i = j - 1;
+                    }
+                }
+
+                for (let i = 0; i < layerLen; i++) {
+                    const top = layersTopData[layerStartIdx + i];
+                    if (top === 0)
+                        continue;
+                    const topH = top >> 24;
+                    let cur = layersCurrentData[layerStartIdx + i];
+                    if ((top & 0x00FFFFFF) == (cur & 0x00FFFFFF) && topH < 16) {
+                        layersCurrentData[layerStartIdx + i] = (cur & 0x00FFFFFF) | ((topH + 1) << 24);
+                    } else {
+                        let x = i & 0xF;
+                        let y = i >> 4;
+
+                        this.#encode(top & 0xFFFF, h - topH,
+                            dirXAdd + dirXXMul * x + dirXYMul * y,
+                            dirYAdd + dirYXMul * x + dirYYMul * y,
+                            dir, (top >> 16) & 0xFF, topH);
+                    }
+                }
+            }
 
             topRow.fill(0);
             for (let y = 0; y < CHUNK_SIZE; y++) {
@@ -772,33 +770,32 @@ class UIntChunkMesher {
             }
         }
 
-        this.#processSideFaces(this.#frontLayer);
-        for (let i = 0; i < this.#processingOut.length; i += 3) {
-            const data = this.#processingOut.array[i];
-            const pos = this.#processingOut.array[i + 1];
-            const wh = this.#processingOut.array[i + 2];
-            this.#encode(data, pos >> 8, pos >> 4 & 0xF, pos & 0xF, Direction.FRONT, wh >> 8, wh & 0xFF);
-        }
-        this.#processSideFaces(this.#backLayer);
-        for (let i = 0; i < this.#processingOut.length; i += 3) {
-            const data = this.#processingOut.array[i];
-            const pos = this.#processingOut.array[i + 1];
-            const wh = this.#processingOut.array[i + 2];
-            this.#encode(data, pos >> 8, CHUNK_SIZE - 1 - (pos >> 4 & 0xF), CHUNK_SIZE - 1 - (pos & 0xF), Direction.BACK, wh >> 8, wh & 0xFF);
-        }
-        this.#processSideFaces(this.#rightLayer);
-        for (let i = 0; i < this.#processingOut.length; i += 3) {
-            const data = this.#processingOut.array[i];
-            const pos = this.#processingOut.array[i + 1];
-            const wh = this.#processingOut.array[i + 2];
-            this.#encode(data, pos >> 8, CHUNK_SIZE - 1 - (pos & 0xF), pos >> 4 & 0xF, Direction.RIGHT, wh >> 8, wh & 0xFF);
-        }
-        this.#processSideFaces(this.#leftLayer);
-        for (let i = 0; i < this.#processingOut.length; i += 3) {
-            const data = this.#processingOut.array[i];
-            const pos = this.#processingOut.array[i + 1];
-            const wh = this.#processingOut.array[i + 2];
-            this.#encode(data, pos >> 8, (pos & 0xF), CHUNK_SIZE - 1 - (pos >> 4 & 0xF), Direction.LEFT, wh >> 8, wh & 0xFF);
+        const layerLen = CHUNK_SIZE * CHUNK_SIZE;
+        const layersTop = this.#layers[CHUNK_HEIGHT & 1];
+        const layersTopData = layersTop.data;
+
+        for (let dir = 0; dir < 4; dir++) {
+            const layerStartIdx = layersTop.planeIdx(dir);
+            const dirEncodeBaseIdx = dir * 6;
+            const dirXXMul = this.#directionEncode[dirEncodeBaseIdx];
+            const dirXYMul = this.#directionEncode[dirEncodeBaseIdx + 1];
+            const dirXAdd = this.#directionEncode[dirEncodeBaseIdx + 2];
+            const dirYXMul = this.#directionEncode[dirEncodeBaseIdx + 3];
+            const dirYYMul = this.#directionEncode[dirEncodeBaseIdx + 4];
+            const dirYAdd = this.#directionEncode[dirEncodeBaseIdx + 5];
+
+            for (let i = 0; i < layerLen; i++) {
+                const top = layersTopData[layerStartIdx + i];
+                if (top === 0)
+                    continue;
+                const topH = top >> 24;
+                let x = i & 0xF;
+                let y = i >> 4;
+                this.#encode(top & 0xFFFF, CHUNK_HEIGHT - topH,
+                    dirXAdd + dirXXMul * x + dirXYMul * y,
+                    dirYAdd + dirYXMul * x + dirYYMul * y,
+                    dir, (top >> 16) & 0xFF, topH);
+            }
         }
 
         const meshTime = performance.now() - now;
