@@ -6,7 +6,7 @@ import { ImagePixels } from "./utils.js";
 export class PixelDataChunkGenerator {
     #pixels
     #originPosition
-    #ppv = 4
+    #ppv = 1
 
     /**
      * @param {ImagePixels} pixels 
@@ -34,13 +34,20 @@ export class PixelDataChunkGenerator {
                 if (cx < 0 || cy < 0 || cx >= w || cy >= h)
                     continue;
                 let height = this.#pixels.getR(cx, cy);
+                if (height == 0)
+                    height = 1;
+                const dirtLayer = Math.max(10, 10 - Math.floor((10 / 70) * height));
                 
-                for (let e = 0; e < height - 1; e++)
+                for (let r = 0; r < height - dirtLayer; r++) {
+                    chunk.set(r, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_ROCK);
+                }
+                for (let e = height - dirtLayer; e < height - 1; e++) {
                     chunk.set(e, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_DIRT);
-                if (height > 0)
+                }
+                if (dirtLayer > 0)                    
                     chunk.set(height - 1, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_DIRT_GRASS);
-                if (Math.random() < 0.1)
-                    chunk.set(height, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_ROCK);
+                // if (Math.random() < 0.1)
+                //     chunk.set(height, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_ROCK);
                 // if (Math.random() < 0.1)
                 //     chunk.set(height + 1, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_ROCK);
             }
