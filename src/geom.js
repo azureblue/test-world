@@ -172,7 +172,7 @@ function vec3(x = 0, y = 0, z = 0) {
  * @returns {Vec2}
  */
 function vec2(x = 0, y = 0) {
-    return new Vec2(x = 0, y = 0);
+    return new Vec2(x, y);
 }
 
 export class Direction {
