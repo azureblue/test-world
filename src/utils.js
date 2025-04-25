@@ -26,6 +26,19 @@ export class DataBuffer {
         }        
     }
 
+    /**
+     * @param {number} elements 
+     */
+    put(element) {
+        if (this.array.length - this.#pos < 1) {
+            this.#extendSize();
+            this.put(element);
+        } else {
+            this.array[this.#pos] = element;
+            this.#pos++;            
+        }        
+    }
+
     #extendSize() {
         const tmp = this.array;
         this.array.slice;
@@ -75,7 +88,7 @@ export class DataBuffer {
      * @returns {Float32Array | Uint32Array | Uint16Array | Uint8Array}
      */
     trimmed() {
-        return this.array.subarray(0, this.#pos);
+        return new this.array.constructor(this.array.subarray(0, this.#pos));
     }
 
     reset(size = 0) {
@@ -117,6 +130,15 @@ export class UInt32Buffer extends DataBuffer {
     }
 }
 
+export class Int32Buffer extends DataBuffer {
+    /**
+     * @param {number} initialSize 
+     */
+    constructor(initialSize) {
+        super(Int32Array, initialSize);
+    }
+}
+
 export class Resources {
     static async loadText(src) {
         return await fetch(Resources.relativeToRoot(src)).then(r => r.text())
@@ -124,15 +146,13 @@ export class Resources {
 
     /**
      * @param {string} src 
-     * @returns {Promise<HTMLImageElement>}
+     * @returns {Promise<ImageBitmap>}
      */
-    static loadImage(src) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();            
-            img.onload = () => resolve(img);
-            img.onerror = (err) => reject(err);            
-            img.src = Resources.relativeToRoot(src);
-        });
+    static async loadImage(src) {
+        const res = await fetch(Resources.relativeToRoot(src));
+        const blob = await res.blob();
+        const bitmap = await createImageBitmap(blob);
+        return bitmap;
     }
 
     static #ROOT = new URL('.', import.meta.url).href;
@@ -157,7 +177,7 @@ export class ImagePixels {
     }
 
     /**
-     * @param {HTMLImageElement} image 
+     * @param {CanvasImageSource} image 
      * @returns {ImagePixels}
      */
     static from(image) {
@@ -267,7 +287,6 @@ export class Array3D {
             array[i] = this.data[startIdx + i];
         }
     }
-
 }
 
 export class Cube27 {
@@ -350,4 +369,72 @@ export class Array2D {
 
 export function is2Pow(n) {
     return (n & (n - 1)) === 0;
+}
+
+export function logHash(buffer, msg = "") {
+    crypto.subtle.digest("SHA-1", buffer).then(hashBuffer => {
+    const hashHex = (Array.from(new Uint8Array(hashBuffer)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    console.info("data hash: " + hashHex + " " + msg);
+    });
+}
+
+const LOG_LEVEL_ERROR = 0;
+const LOG_LEVEL_WARN = 1;
+const LOG_LEVEL_INFO = 2;
+const LOG_LEVEL_DEBUG = 3;
+export class Logger {    
+    #name;
+    static #logFunctions = [
+        console.error,
+        console.warn,
+        console.info,
+        console.debug
+    ]
+
+    static #logLevel = 2;
+
+    constructor(name) {
+        this.#name = name;           
+    }
+
+    /**
+     * @param {string} msg 
+     */
+    error(msg) {
+        this.#log(msg, LOG_LEVEL_ERROR);
+    }
+
+    /**
+     * @param {string} msg 
+     */
+    debug(msg) {
+        this.#log(msg, LOG_LEVEL_DEBUG);
+    }
+
+    /**
+     * @param {string} msg 
+     */
+    warn(msg) {
+        this.#log(msg, LOG_LEVEL_WARN);
+    }
+
+    /**
+     * @param {string} msg 
+     */
+    info(msg) {
+        this.#log(msg, LOG_LEVEL_INFO);
+    }
+
+    #log(msg, level) {
+        if (level < Logger.#logLevel) {
+            Logger.#logFunctions[level](this.#prepareMsg(msg));
+        }
+    }
+    
+    #prepareMsg(msg) {
+        return `${this.#name}: ${msg}`;
+    }
+
 }
