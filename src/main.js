@@ -59,22 +59,9 @@ export async function start() {
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
     UIntMesh.setGL(gl, aIn);
-    // const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
     const texArray = TextureArray.create(gl, textures, 16);
-    // const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
-    // const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
-    const chunkLoaderWorker = new Worker("/src/chunkLoader.js", {type: "module"});
+    const chunkLoaderWorker = new Worker(Resources.relativeToRoot("./chunkLoader.js"), {type: "module"});
     const world = new World(chunkLoaderWorker);
-
-    /**
-     * @type {Array<Chunk>}
-     */
-    // const chunks = [];
-    // for (let cx = -20; cx < 20; cx++)
-    //     for (let cy = -20; cy < 20; cy++) {
-    //         const chunk = await chunkManager.loadChunk(cx, cy)
-    //         chunks.push(chunk);
-    //     }
 
     const vCoordsLines = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
@@ -146,13 +133,11 @@ export async function start() {
             run = !run;
     })
 
-    // const chunkData00 = await chunkLoader.getChunk(0, 0);
-    // const peak = chunkData00.peak(0, 0);
-    world.moveTo(1050, 0);
+    world.moveTo(0, 0);
     world.updateChunks();
     const currentChunk = await world.getCurrentChunk();
-    const peek = currentChunk.peek(1050, 0);
-    const camera = new Camera(new Vec3(1050, peek + 2, 0));
+    const peek = currentChunk.peek(0, 0);
+    const camera = new Camera(new Vec3(0, peek + 2, 0));
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     const cameraSpeed = 0.5;
@@ -242,15 +227,17 @@ export async function start() {
         world.moveTo(camera.position.x, camera.position.z);
 
         frustumCuller.updatePlanes();
-        let chunkCulled = 0;
+        let allChunks = 0;
+        let chunksDrawn = 0;
         texArray.bind(gl);
 
         world.updateChunks();
         world.render(chunk => {
+            allChunks++;
             if (!frustumCuller.shouldDraw(chunk)) {
-                chunkCulled++;
                 return;
             }
+            chunksDrawn++;
             const mesh = chunk.mesh;
             mesh.bindVA();            
             const modelTranslation = mesh.modelTranslation;
@@ -271,11 +258,11 @@ export async function start() {
         const pos = camera.position;
         const dir = camera.direction;
         const nowDiff = performance.now() - now;
-        renderTimeMetric += nowDiff;        
+        renderTimeMetric = Math.max(renderTimeMetric, nowDiff);
         if (frameCounter == 4) {
         statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
             `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
-            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${(renderTimeMetric / 5).toFixed(1)}ms  fps: ${fps} chunk culled: ${chunkCulled}`;
+            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${(renderTimeMetric).toFixed(1)}ms  fps: ${fps} chunks: ${chunksDrawn}/${allChunks}`;
             frameCounter = 0;
             renderTimeMetric = 0;
         } else {
