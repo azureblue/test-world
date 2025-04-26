@@ -34,9 +34,10 @@ export class PixelDataChunkGenerator {
                 if (cx < 0 || cy < 0 || cx >= w || cy >= h)
                     continue;
                 let height = this.#pixels.getR(cx, cy);
+                height = Math.floor((height / 255) * 127);
                 if (height == 0)
                     height = 1;
-                const dirtLayer = Math.max(10, 10 - Math.floor((10 / 70) * height));
+                const dirtLayer = Math.max(0, 10 - Math.floor((10 / 58) * height));
                 
                 for (let r = 0; r < height - dirtLayer; r++) {
                     chunk.set(r, x, CHUNK_SIZE - y - 1, BLOCKS.BLOCK_ROCK);
