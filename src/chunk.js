@@ -5,6 +5,18 @@ const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 128;
 const CHUNK_PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
 
+function posToKey(x, y) {
+    return (x + 32767) << 16 | (y + 32767);
+}
+
+function keyToX(key) {
+    return (key >>> 16) - 32767;
+}
+
+function keyToY(key) {
+    return (key & 0xFFFF) - 32767;
+}
+
 export const BLOCKS = {
     BLOCK_EMPTY: 0,
     BLOCK_DIRT: 1,
@@ -77,6 +89,18 @@ class ChunkData extends Array3D {
     get maxHeight() {
         return this.#maxHeight;
     }
+}
+
+export class UIntMeshData {
+
+     /**
+     * @param {Vec3} mTranslation 
+     * @param {Uint32Array} data 
+     */
+     constructor(mTranslation, data) {
+        this.mTranslation = mTranslation;
+        this.input = data;
+     }
 }
 
 class UIntMesh {
@@ -152,7 +176,7 @@ class ChunkDataLoader {
      * @returns {ChunkData}
      */
     async getChunk(x, y) {
-        const key = (x << 15) + y;
+        const key = posToKey(x, y);
         let chunkData = this.#cache.get(key);
         if (chunkData === undefined) {
             chunkData = this.#generator(x, y);
@@ -212,6 +236,10 @@ class Chunk {
         });
     }
 
+    peek(x, y) {
+        return this.#data.peak(x, y);
+    }
+
     get worldCenterPosition() {
         return this.#worldCenterPosition;
     }
@@ -220,8 +248,12 @@ class Chunk {
         return this.#mesh;
     }
 
+    set mesh(mesh) {
+        this.#mesh = mesh;
+    }
+
     get data() {
-        return this.#data;
+        return this.data;
     }
 
     get position() {
@@ -230,6 +262,17 @@ class Chunk {
 
     get worldCoordCorners() {
         return this.#worldCoordCorners;
+    }
+}
+
+export class ChunkSpec {
+    /**
+     * @param {ChunkData} chunkData 
+     * @param {UIntMeshData} meshData 
+     */
+    constructor(chunkData, meshData) {
+        this.chunkData = chunkData;
+        this.meshData = meshData;
     }
 }
 
@@ -246,7 +289,7 @@ class ChunkManager {
         this.#chunkMesher = chunkMesher;
     }
 
-    async loadChunk(cx, cy) {
+    async load(cx, cy) {
         const position = new Vec2(cx, cy);
         const chunks = [
             await this.#chunkLoader.getChunk(cx - 1, cy + 1),
@@ -260,10 +303,11 @@ class ChunkManager {
             await this.#chunkLoader.getChunk(cx + 1, cy - 1)
         ];
         const dataAdj = new BlockAdjsLoader(chunks).load();
-        const mesh = this.#chunkMesher.createMeshes(
+        const meshData = this.#chunkMesher.createMeshes(
             position, dataAdj
         );
-        return new Chunk(chunks[4], position, mesh);
+
+        return new ChunkSpec(chunks[4], meshData);
     }
 }
 
@@ -488,7 +532,7 @@ class UIntChunkMesher {
      * @param {Vec2} position 
      * @param {DataAdj} adj
      * 
-     * @returns {UIntMesh}
+     * @returns {UIntMeshData}
      */
     createMeshes(position, adj) {
         this.#buffer.reset();
@@ -759,7 +803,7 @@ class UIntChunkMesher {
 
         const meshTime = performance.now() - now;
         // console.log(meshTime);
-        return new UIntMesh(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5),
+        return new UIntMeshData(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5),
             this.#buffer.trimmed());
     }
 }

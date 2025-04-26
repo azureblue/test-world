@@ -5,11 +5,10 @@ import { PixelDataChunkGenerator } from "./generator.js";
 import { Projection, Vec2, Vec3, mat4 } from "./geom.js";
 import { Program } from "./gl.js";
 import { ImagePixels, Resources } from "./utils.js";
+import { World } from "./world.js";
 
 export async function start() {
     const textures = await Resources.loadImage("./images/textures.png");
-    const heightmap = await Resources.loadImage("./images/heightmap.png");
-    const heightmapPixels = ImagePixels.from(heightmap);
     const statsDiv = document.getElementById("stats");
 
     const canvas = document.createElement("canvas");
@@ -60,19 +59,22 @@ export async function start() {
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
     UIntMesh.setGL(gl, aIn);
-    const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
+    // const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
     const texArray = TextureArray.create(gl, textures, 16);
-    const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
-    const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
+    // const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
+    // const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
+    const chunkLoaderWorker = new Worker("/src/chunkLoader.js", {type: "module"});
+    const world = new World(chunkLoaderWorker);
+
     /**
      * @type {Array<Chunk>}
      */
-    const chunks = [];
-    for (let cx = -20; cx < 20; cx++)
-        for (let cy = -20; cy < 20; cy++) {
-            const chunk = await chunkManager.loadChunk(cx, cy)
-            chunks.push(chunk);
-        }
+    // const chunks = [];
+    // for (let cx = -20; cx < 20; cx++)
+    //     for (let cy = -20; cy < 20; cy++) {
+    //         const chunk = await chunkManager.loadChunk(cx, cy)
+    //         chunks.push(chunk);
+    //     }
 
     const vCoordsLines = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
@@ -144,9 +146,13 @@ export async function start() {
             run = !run;
     })
 
-    const chunkData00 = await chunkLoader.getChunk(0, 0);
-    const peak = chunkData00.peak(0, 0);
-    const camera = new Camera(new Vec3(0, peak + 2, 0));
+    // const chunkData00 = await chunkLoader.getChunk(0, 0);
+    // const peak = chunkData00.peak(0, 0);
+    world.moveTo(1050, 0);
+    world.updateChunks();
+    const currentChunk = await world.getCurrentChunk();
+    const peek = currentChunk.peek(1050, 0);
+    const camera = new Camera(new Vec3(1050, peek + 2, 0));
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     const cameraSpeed = 0.5;
@@ -175,7 +181,6 @@ export async function start() {
                 pause = true;
             } else {
                 pause = false;
-                draw();
             }
         }
         if (ev.key == "Control")
@@ -209,6 +214,10 @@ export async function start() {
     let frameCounter = 0;
     let renderTimeMetric = 0;
     function draw() {
+        if (pause) {
+            requestAnimationFrame(draw);
+            return;
+        }
         const now = performance.now();
         const cameraSpeedMultiplier = keys.ctrl ? 0.2 : 1;
         if (run)
@@ -230,24 +239,25 @@ export async function start() {
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.pos.offset, camera.position._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+        world.moveTo(camera.position.x, camera.position.z);
 
         frustumCuller.updatePlanes();
         let chunkCulled = 0;
         texArray.bind(gl);
 
-        for (let chunk of chunks) {
+        world.updateChunks();
+        world.render(chunk => {
             if (!frustumCuller.shouldDraw(chunk)) {
                 chunkCulled++;
-                continue;
+                return;
             }
             const mesh = chunk.mesh;
             mesh.bindVA();            
             const modelTranslation = mesh.modelTranslation;
             gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
             gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
-            // gl.drawArrays(gl.LINES, 0, mesh.len);
-            // gl.drawArrays(gl.POINTS, 0, mesh.len);
-        }
+
+        });
         gl.bindVertexArray(null);
 
         coordsProgram.use();
@@ -273,8 +283,8 @@ export async function start() {
         }
         fpsCounter++;
         
-        if (!pause)
-            requestAnimationFrame(draw);
+    
+        requestAnimationFrame(draw);
     }
 
     draw();
