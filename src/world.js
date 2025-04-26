@@ -28,13 +28,13 @@ function keyToY(key) {
 }
 
 class ChunkLoadPromise {
-    
+
     constructor(key) {
-        this.key = key;        
+        this.key = key;
         this.resolve = null;
         this.promise = new Promise((res, rej) => {
             this.resolve = (chunk) => {
-                res(chunk);                
+                res(chunk);
             }
         });
     }
@@ -48,6 +48,7 @@ export class World {
 
     /** @type {Map<number, ChunkEntry>} */
     #chunks = new Map();
+    #chunkDataQueue = new Map();
 
     /**@type {ChunkLoadPromise} */
     #currentChunkPromise = null;
@@ -65,29 +66,39 @@ export class World {
      */
     constructor(chunkLoader) {
         this.#chunkLoader = chunkLoader;
-        this.#chunkLoader.onmessage = (me) => {
-            const data = me.data;
-            const chunkPos = vec2(data.chunkPos[0], data.chunkPos[1]);
-            const key = posToKey(chunkPos.x, chunkPos.y);
-            logger.info(`got chunk (${chunkPos.x}, ${chunkPos.y})`);
-            if (!this.#chunks.has(key)) {
-                logger.info("missing entry for key: " + key);
-                return;
-            }
-            const chunkData = new ChunkData();
-            chunkData.data.set(data.data);
-            const mTranslation = data.meshTranslation;
-            const mesh = new UIntMesh(new Vec3(mTranslation[0], mTranslation[1], mTranslation[2]), data.meshData);
+        this.#chunkLoader.onmessage = (me) => this.onChunk(me.data);
+    }
 
-            const chunk = new Chunk(chunkData, vec2(chunkPos.x, chunkPos.y), mesh);
-            const entry = this.#chunks.get(key);
-            entry.chunk = chunk;
-            entry.loaded = true;
-            if (this.#currentChunkPromise !== null) {
-                if (this.#currentChunkPromise.key === key) {
-                    this.#currentChunkPromise.resolve(chunk);
-                    this.#currentChunkPromise = null;
-                }
+    onChunk(data) {
+        const chunkPos = vec2(data.chunkPos[0], data.chunkPos[1]);
+        const key = posToKey(chunkPos.x, chunkPos.y);
+        if (this.#currentChunkPromise != null && this.#currentChunkPromise.key == key)
+            this.processChunkData(data);
+        else
+            this.#chunkDataQueue.set(key, data);
+    }
+
+    processChunkData(data) {
+        const chunkPos = vec2(data.chunkPos[0], data.chunkPos[1]);
+        const key = posToKey(chunkPos.x, chunkPos.y);
+        logger.info(`got chunk (${chunkPos.x}, ${chunkPos.y})`);
+        if (!this.#chunks.has(key)) {
+            logger.info("missing entry for key: " + key);
+            return;
+        }
+        const chunkData = new ChunkData();
+        chunkData.data.set(data.data);
+        const mTranslation = data.meshTranslation;
+        const mesh = new UIntMesh(new Vec3(mTranslation[0], mTranslation[1], mTranslation[2]), data.meshData);
+
+        const chunk = new Chunk(chunkData, vec2(chunkPos.x, chunkPos.y), mesh);
+        const entry = this.#chunks.get(key);
+        entry.chunk = chunk;
+        entry.loaded = true;
+        if (this.#currentChunkPromise !== null) {
+            if (this.#currentChunkPromise.key === key) {
+                this.#currentChunkPromise.resolve(chunk);
+                this.#currentChunkPromise = null;
             }
         }
     }
@@ -136,6 +147,7 @@ export class World {
             this.#chunks.delete(key);
         }
 
+        let reqs = [];
         for (let cx = this.#chunkPos[0] - CHUNK_RENDER_DIST; cx < this.#chunkPos[0] + CHUNK_RENDER_DIST; cx++)
             for (let cy = this.#chunkPos[1] - CHUNK_RENDER_DIST; cy < this.#chunkPos[1] + CHUNK_RENDER_DIST; cy++) {
                 const dx = cx - this.#chunkPos[0];
@@ -146,10 +158,24 @@ export class World {
                         const entry = new ChunkEntry();
                         logger.info(`requesting chunk  (${cx}, ${cy})`);
                         this.#chunks.set(key, entry);
-                        this.#chunkLoader.postMessage({ cx: cx, cy: cy });
+                        reqs.push({ cx: cx, cy: cy });                        
                     }
                 }
             }
+        reqs.sort((a, b) => {
+            const dxa = this.#chunkPos[0] - a.cx;
+            const dya = this.#chunkPos[1] - a.cy;
+            const dxb = this.#chunkPos[0] - b.cx;
+            const dyb = this.#chunkPos[1] - b.cy;
+            return (dxa * dxa) + (dya * dya) - (dxb * dxb) - (dyb * dyb);
+        });
+        reqs.forEach(req => this.#chunkLoader.postMessage(req));
+
+        if (this.#chunkDataQueue.size > 0) {
+            const entry = this.#chunkDataQueue.entries().next().value;
+            this.#chunkDataQueue.delete(entry[0]);
+            this.processChunkData(entry[1]);
+        }
     }
 
     render(renderChunk) {
