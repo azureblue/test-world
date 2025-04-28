@@ -175,6 +175,16 @@ function vec2(x = 0, y = 0) {
     return new Vec2(x, y);
 }
 
+/**
+ * @param {number} [x] 
+ * @param {number} [y] 
+ * @returns {Vec2}
+ */
+export function ivec2(x = 0, y = 0) {
+    return new IVec2(x, y);
+}
+
+
 export class Direction {
     static FRONT = 0;
     static LEFT = 1;
@@ -182,7 +192,7 @@ export class Direction {
     static RIGHT = 3;
     static UP = 4;
     static DOWN = 5;
-    
+
     /** @type {Array<Direction>} */
     static directions = [
         new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b000), //front
@@ -204,6 +214,30 @@ export class Direction {
     }
 }
 
+export class IVec2 {
+    data = new Int32Array(2);
+
+    constructor(x, y) {
+        this.data[0] = x;
+        this.data[1] = y;
+    }
+
+    get x() {
+        return this.data[0];
+    }
+
+    get y() {
+        return this.data[1];
+    }
+
+    set x(value) {
+        this.data[0] = value;
+    }
+
+    set y(value) {
+        this.data[1] = value;
+    }
+}
 
 export class DirXY {
     x = 0;
@@ -214,7 +248,7 @@ export class DirXY {
         this.y = y;
     }
 
-    rotateCCW() {                
+    rotateCCW() {
         this.set(-this.y, this.x);
     }
 
