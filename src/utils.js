@@ -8,7 +8,7 @@ export class DataBuffer {
      */
     constructor(ArrayClass, initialSize) {
         this.#pos = 0;
-        if (initialSize === undefined) 
+        if (initialSize === undefined)
             initialSize = 4;
         this.array = new ArrayClass(initialSize);
     }
@@ -22,8 +22,8 @@ export class DataBuffer {
             this.add(elements);
         } else {
             this.array.set(elements, this.#pos);
-            this.#pos += elements.length;            
-        }        
+            this.#pos += elements.length;
+        }
     }
 
     /**
@@ -35,8 +35,8 @@ export class DataBuffer {
             this.put(element);
         } else {
             this.array[this.#pos] = element;
-            this.#pos++;            
-        }        
+            this.#pos++;
+        }
     }
 
     #extendSize() {
@@ -69,12 +69,12 @@ export class DataBuffer {
                     this.array[this.#pos + i] += firstCoord;
                 }
             } else if (stride == 2) {
-                for (let i = 0; i < elements.length; i+=2) {
+                for (let i = 0; i < elements.length; i += 2) {
                     this.array[this.#pos + i] += firstCoord;
                     this.array[this.#pos + i + 1] += secondCoord;
                 }
             } else if (stride == 3) {
-                for (let i = 0; i < elements.length; i+=3) {
+                for (let i = 0; i < elements.length; i += 3) {
                     this.array[this.#pos + i] += firstCoord;
                     this.array[this.#pos + i + 1] += secondCoord;
                     this.array[this.#pos + i + 2] += thirdCoord;
@@ -172,7 +172,7 @@ export class ImagePixels {
      * @param {ImageData} data 
      */
     constructor(data) {
-        this.#data = data;        
+        this.#data = data;
         this.#rowLength = this.width * this.#stride;
     }
 
@@ -182,10 +182,10 @@ export class ImagePixels {
      */
     static from(image) {
         const width = image.width;
-        const height = image.height;                
+        const height = image.height;
         let canvas = new OffscreenCanvas(width, height);
         let ctx = canvas.getContext("2d");
-        ctx.drawImage(image,0, 0);
+        ctx.drawImage(image, 0, 0);
         let data = ctx.getImageData(0, 0, width, height);
         return new ImagePixels(data, width, height);
     }
@@ -216,9 +216,9 @@ export class ImagePixels {
      * @param {ArrayLike} out
      * 
      */
-    getRectR(x, y, w, h, out) {        
-        for (let oy = 0; oy < h; oy++) 
-            for (let ox = 0; ox < w; ox++) 
+    getRectR(x, y, w, h, out) {
+        for (let oy = 0; oy < h; oy++)
+            for (let ox = 0; ox < w; ox++)
                 out[oy * w + ox] = this.#data.data[this.#rowLength * y + x * this.#stride];
     }
 }
@@ -229,11 +229,15 @@ export class Array3D {
     #height
     data
 
-    constructor(width, height) {
-        this.#size = width | 0;
+    /**
+     * @param {number} size 
+     * @param {number} height 
+     */
+    constructor(size, height) {
+        this.#size = size | 0;
         this.#height = height | 0;
-        this.#planeSize = (width * width) | 0;
-        this.data = new Uint32Array(this.#planeSize * height);
+        this.#planeSize = (size * size) | 0;
+        this.data = new Uint32Array((this.#planeSize * height));
     }
 
     set(h, x, y, v) {
@@ -259,7 +263,7 @@ export class Array3D {
     planeIdx(h) {
         return this.#planeSize * h;
     }
-    
+
     /**
      * @param {number} h 
      * @param {number} x 
@@ -267,7 +271,7 @@ export class Array3D {
      * @param {Uint32Array} array 
      * @param {number} len 
      */
-    put(h, x, y, array, len ) {
+    put(h, x, y, array, len) {
         const startIdx = this.#planeSize * h + y * this.#size + x;
         for (let i = 0; i < len; i++) {
             this.data[startIdx + i] = array[i];
@@ -281,7 +285,7 @@ export class Array3D {
      * @param {Uint32Array} array 
      * @param {number} len 
      */
-    fetch(h, x, y, array, len ) {
+    fetch(h, x, y, array, len) {
         const startIdx = this.#planeSize * h + y * this.#size + x;
         for (let i = 0; i < len; i++) {
             array[i] = this.data[startIdx + i];
@@ -326,7 +330,7 @@ export class Array2D {
      * @param {Uint32Array} array 
      * @param {number} len 
      */
-    put(x, y, array, len ) {
+    put(x, y, array, len) {
         const startIdx = y * this.#width + x;
         for (let i = 0; i < len; i++) {
             this.data[startIdx + i] = array[i];
@@ -343,7 +347,7 @@ export class Array2D {
      * @param {Uint32Array} array 
      * @param {number} len 
      */
-    fetch(x, y, array, len ) {
+    fetch(x, y, array, len) {
         const startIdx = y * this.#width + x;
         for (let i = 0; i < len; i++) {
             array[i] = this.data[startIdx + i];
@@ -358,8 +362,8 @@ export class Array2D {
         const offset = y * this.#width;
         for (let i = 0; i < this.#width; i++)
             output[i] = this.data[offset + i];
-    }   
-    
+    }
+
     each(consumer) {
         this.data.forEach((v, idx) => {
             consumer(idx % this.#width, Math.floor(idx / this.#width), v);
@@ -373,10 +377,10 @@ export function is2Pow(n) {
 
 export function logHash(buffer, msg = "") {
     crypto.subtle.digest("SHA-1", buffer).then(hashBuffer => {
-    const hashHex = (Array.from(new Uint8Array(hashBuffer)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    console.info("data hash: " + hashHex + " " + msg);
+        const hashHex = (Array.from(new Uint8Array(hashBuffer)))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+        console.info("data hash: " + hashHex + " " + msg);
     });
 }
 
@@ -384,7 +388,8 @@ const LOG_LEVEL_ERROR = 0;
 const LOG_LEVEL_WARN = 1;
 const LOG_LEVEL_INFO = 2;
 const LOG_LEVEL_DEBUG = 3;
-export class Logger {    
+
+export class Logger {
     #name;
     static #logFunctions = [
         console.error,
@@ -393,10 +398,10 @@ export class Logger {
         console.debug
     ]
 
-    static #logLevel = 2;
+    static #logLevel = 4;
 
     constructor(name) {
-        this.#name = name;           
+        this.#name = name;
     }
 
     /**
@@ -432,9 +437,49 @@ export class Logger {
             Logger.#logFunctions[level](this.#prepareMsg(msg));
         }
     }
-    
+
     #prepareMsg(msg) {
         return `${this.#name}: ${msg}`;
     }
+}
 
+export function perfDiff(startTime, precision = 2) {
+    return (performance.now() - startTime).toPrecision(precision);
+}
+
+/**
+ * @param {string} value 
+ * @param {string} [type] 
+ */
+export function stringToBlobURL(value, type = "") {
+    return URL.createObjectURL(new Blob([value], { type: type }));
+}
+
+export class Replacer {
+    static replace(source, replaceMap, { keepComments = false, commentPrefix = '@' } = {}) {
+        function escapeRegExp(text) {
+            return text.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
+        }
+
+        const tokenPattern = '(?:\'[^\']*\'|"[^"]*"|`[^`]*`|[-+]?\\d*\\.\\d+|[-+]?\\d+(?:e[-+]?\\d+)?|true|false|null)';
+        const commentPattern = `/\\*\\s*${escapeRegExp(commentPrefix)}(\\w+)\\s*\\*/`;
+        const fullPattern = new RegExp(`(${tokenPattern})\\s*${commentPattern}`, 'gi');
+
+        return source.replace(fullPattern, (fullMatch, token, key) => {
+            if (!token) {
+                console.warn(`Warning: No valid token found before key '${key}'.`);
+                return fullMatch;
+            }
+            if (!(key in replaceMap)) {
+                console.warn(`Warning: Key '${key}' not found in values map.`);
+                return fullMatch;
+            }
+            const replacement = replaceMap[key];
+            if (typeof replacement !== 'string') {
+                console.warn(`Warning: Value for key '${key}' is not a string.`);
+                return fullMatch;
+            }
+            return keepComments ? `${replacement} /*${commentPrefix}${key}*/` : replacement;
+        });
+    }
 }
