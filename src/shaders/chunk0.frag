@@ -1,5 +1,5 @@
 #version 300 es
-const mediump vec4 sky_color = vec4(0.54f, 0.72f, 0.79f, 1.0f);
+const mediump vec4 sky_color = vec4(0.53f, 0.7f, 0.77f, 1.0f);
 
 precision mediump float;
 uniform mediump sampler2DArray u_array_sampler;
