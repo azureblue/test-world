@@ -4,8 +4,11 @@ import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from 
 import { PixelDataChunkGenerator } from "./generator.js";
 import { Projection, Vec2, Vec3, mat4 } from "./geom.js";
 import { Program } from "./gl.js";
-import { ImagePixels, Resources } from "./utils.js";
+import { ImagePixels, Resources, Replacer } from "./utils.js";
 import { World } from "./world.js";
+
+const VIEW_DISTANCE_SQ = (11 * 15) ** 2;
+// const VIEW_DISTANCE_SQ = 409600.0;
 
 export async function start() {
     const textures = await Resources.loadImage("./images/textures.png");
@@ -17,9 +20,16 @@ export async function start() {
         powerPreference: "high-performance"
     });
 
+    const chunk0VertShaderSource = Replacer.replace(await Resources.loadText("shaders/chunk0.vert"),
+        {
+            "viewDistanceSq": VIEW_DISTANCE_SQ.toFixed(1),
+            "edgeShadowDistanceSq": (800.0).toFixed(1)
+        }
+    )
+
     const chunk0Program = new Program(
         gl,
-        await Resources.loadText("shaders/chunk0.vert"),
+        chunk0VertShaderSource,
         await Resources.loadText("shaders/chunk0.frag")
     );
 
@@ -37,8 +47,6 @@ export async function start() {
         fpsCounter = 0;
     }, 1000);
 
-    // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    // gl.enable(gl.BLEND);
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -60,7 +68,8 @@ export async function start() {
 
     UIntMesh.setGL(gl, aIn);
     const texArray = TextureArray.create(gl, textures, 16);
-    const chunkLoaderWorker = new Worker(Resources.relativeToRoot("./chunkLoader.js"), {type: "module"});
+
+    const chunkLoaderWorker = new Worker(Resources.relativeToRoot("./chunkLoader.js"), { type: "module" });
     const world = new World(chunkLoaderWorker);
 
     const vCoordsLines = gl.createBuffer();
@@ -89,7 +98,7 @@ export async function start() {
     gl.bufferData(gl.UNIFORM_BUFFER, uCameraSize, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
     gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, uCameraBuffer);
-    
+
     const uCameraIndices = gl.getUniformIndices(chunk0Program.program, ["cam_proj", "cam_view", "cam_pos"]);
     const uCameraOffsets = gl.getActiveUniforms(chunk0Program.program, uCameraIndices, gl.UNIFORM_OFFSET);
 
@@ -113,7 +122,7 @@ export async function start() {
 
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const fieldOfView = (68 * Math.PI) / 180;
-    const projection = new Projection(fieldOfView, aspect, 0.1, 640.0);    
+    const projection = new Projection(fieldOfView, aspect, 0.1, 640.0);
 
     const mProjection = mat4();
     const mView = mat4();
@@ -134,7 +143,7 @@ export async function start() {
     })
 
     world.moveTo(0, 0);
-    world.updateChunks();
+    world.update();
     const currentChunk = await world.getCurrentChunk();
     const peek = currentChunk.peek(0, 0);
     const camera = new Camera(new Vec3(0, peek + 2, 0));
@@ -231,7 +240,7 @@ export async function start() {
         let chunksDrawn = 0;
         texArray.bind(gl);
 
-        world.updateChunks();
+        world.update();
         world.render(chunk => {
             allChunks++;
             if (!frustumCuller.shouldDraw(chunk)) {
@@ -239,7 +248,7 @@ export async function start() {
             }
             chunksDrawn++;
             const mesh = chunk.mesh;
-            mesh.bindVA();            
+            mesh.bindVA();
             const modelTranslation = mesh.modelTranslation;
             gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
             gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
@@ -260,20 +269,19 @@ export async function start() {
         const nowDiff = performance.now() - now;
         renderTimeMetric = Math.max(renderTimeMetric, nowDiff);
         if (frameCounter == 4) {
-        statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
-            `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
-            ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${(renderTimeMetric).toFixed(1)}ms  fps: ${fps} chunks: ${chunksDrawn}/${allChunks}`;
+            statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
+                `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
+                ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${(renderTimeMetric).toFixed(1)}ms  fps: ${fps} chunks: ${chunksDrawn}/${allChunks}`;
             frameCounter = 0;
             renderTimeMetric = 0;
         } else {
             frameCounter++;
         }
         fpsCounter++;
-        
-    
+
+
         requestAnimationFrame(draw);
     }
 
     draw();
-
 }

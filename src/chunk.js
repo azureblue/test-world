@@ -1,19 +1,20 @@
 import { Direction, DirXY, Vec2, vec3, Vec3 } from "./geom.js";
 import { Array2D, Array3D, UInt32Buffer } from "./utils.js";
 
-const CHUNK_SIZE = 16;
-const CHUNK_HEIGHT = 128;
-const CHUNK_PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
+export const CHUNK_SIZE_BIT_POS = 4 | 0;
+export const CHUNK_SIZE = 16 | 0;
+const CHUNK_HEIGHT = 128 | 0;
+const CHUNK_PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE | 0;
 
-function posToKey(x, y) {
+export function posToKey(x, y) {
     return (x + 32767) << 16 | (y + 32767);
 }
 
-function keyToX(key) {
+export function keyToX(key) {
     return (key >>> 16) - 32767;
 }
 
-function keyToY(key) {
+export function keyToY(key) {
     return (key & 0xFFFF) - 32767;
 }
 
@@ -50,12 +51,15 @@ const BLOCK_TEXTURE_MAP = [
  * 01 11 21
  */
 
-class ChunkData extends Array3D {
+export class ChunkData extends Array3D {
 
     #maxHeight
 
-    constructor() {
-        super(CHUNK_SIZE, CHUNK_HEIGHT);
+    /**
+     * @param {Uint32Array} [data]
+     */
+    constructor(data = null) {
+        super(CHUNK_SIZE, CHUNK_HEIGHT, data);
     }
 
     /**
@@ -93,45 +97,41 @@ class ChunkData extends Array3D {
 
 export class UIntMeshData {
 
-     /**
-     * @param {Vec3} mTranslation 
-     * @param {Uint32Array} data 
-     */
-     constructor(mTranslation, data) {
+    /**
+    * @param {Vec3} mTranslation 
+    * @param {Uint32Array} data 
+    */
+    constructor(mTranslation, data) {
         this.mTranslation = mTranslation;
         this.input = data;
-     }
+    }
 }
 
-class UIntMesh {
+export class UIntMesh {
 
     /** @type {WebGL2RenderingContext} */
     static #gl;
     static #a_in;
 
-    /** @type {Array<WebGLVertexArrayObject>} */
+    /** @type {WebGLVertexArrayObject} */
     #va;
+    /** @type {WebGLBuffer} */
+    #vb;
     #mTranslation;
     #len;
 
-    /**
-     * @param {Vec3} mTranslation 
-     * @param {Uint32Array} input 
-     */
-    constructor(mTranslation, input) {
-        this.#mTranslation = mTranslation;
-        const gl = UIntMesh.#gl;
-        this.#va = gl.createVertexArray();
-        const vb = gl.createBuffer();
 
-        gl.bindVertexArray(this.#va);
-        gl.enableVertexAttribArray(UIntMesh.#a_in);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
-        gl.vertexAttribIPointer(UIntMesh.#a_in, 2, gl.UNSIGNED_INT, false, 0, 0);
-        gl.bindVertexArray(null);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
-        gl.bufferData(gl.ARRAY_BUFFER, input, gl.STATIC_DRAW);
-        this.#len = input.length >> 1;
+    /**
+     * @param {WebGLVertexArrayObject} va 
+     * @param {WebGLBuffer} vb 
+     * @param {Vec3} translation 
+     * @param {number} len 
+     */
+    constructor(va, vb, translation, len) {
+        this.#va = va;
+        this.#vb = vb;
+        this.#mTranslation = translation;
+        this.#len = len;
     }
 
     bindVA() {
@@ -153,10 +153,32 @@ class UIntMesh {
         UIntMesh.#gl = gl;
         UIntMesh.#a_in = a_in;
     }
+
+    /**
+     * @param {Uint32Array} inputData
+     * @param {Vec3} translation 
+     */
+    static load(inputData, translation) {
+        const gl = UIntMesh.#gl;
+        const va = gl.createVertexArray();
+        const vb = gl.createBuffer();
+        gl.bindVertexArray(va);
+        gl.enableVertexAttribArray(UIntMesh.#a_in);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+        gl.bufferData(gl.ARRAY_BUFFER, inputData, gl.STATIC_DRAW);
+        gl.vertexAttribIPointer(UIntMesh.#a_in, 2, gl.UNSIGNED_INT, false, 0, 0);
+        gl.bindVertexArray(null);
+
+        return new UIntMesh(va, vb, translation, inputData.length >> 1);
+    }
+
+    static unbind() {
+        gl.bindVertexArray(null);
+    }
 }
 
 
-class ChunkDataLoader {
+export class ChunkDataLoader {
     /** @type {Map<number, ChunkData>} */
     #cache = new Map();
 
@@ -186,7 +208,7 @@ class ChunkDataLoader {
     }
 }
 
-class Chunk {
+export class Chunk {
     #data
     #mesh
     #position
@@ -198,19 +220,24 @@ class Chunk {
     #worldCoordCorners
 
     /** @type {Float32Array} */
-    worldCorners = new Float32Array(8 * 4);
+    worldCornersData = new Float32Array(8 * 4);
 
     /**
-     * @param {ChunkData} data 
      * @param {Vec2} position 
+     * @param {ChunkData} data
      * @param {UIntMesh} mesh
      */
-    constructor(data, position, mesh) {
+    constructor(position, data, mesh) {
         this.#data = data;
         this.#data.updateMaxHeight();
         this.#position = position
         this.#mesh = mesh;
         this.#worldCenterPosition = vec3(position.x * CHUNK_SIZE + CHUNK_SIZE / 2, CHUNK_HEIGHT / 2, -position.y * CHUNK_SIZE - CHUNK_SIZE / 2);
+        this.#updateCornersData();
+    }
+
+    #updateCornersData() {
+        const position = this.#position;
         this.#worldCoordCorners = [
             /*
             0, 0
@@ -230,9 +257,9 @@ class Chunk {
 
         this.#worldCoordCorners.forEach((corner, idx) => {
             const offset = idx << 2;
-            this.worldCorners[offset] = corner.x;
-            this.worldCorners[offset + 1] = corner.y;
-            this.worldCorners[offset + 2] = corner.z;
+            this.worldCornersData[offset] = corner.x;
+            this.worldCornersData[offset + 1] = corner.y;
+            this.worldCornersData[offset + 2] = corner.z;
         });
     }
 
@@ -253,7 +280,11 @@ class Chunk {
     }
 
     get data() {
-        return this.data;
+        return this.#data;
+    }
+
+    set data(data) {
+        this.#data = data;
     }
 
     get position() {
@@ -276,7 +307,7 @@ export class ChunkSpec {
     }
 }
 
-class ChunkManager {
+export class ChunkManager {
     #chunkLoader
     #chunkMesher
 
@@ -447,7 +478,7 @@ export class BlockAdjsLoader {
     }
 }
 
-class UIntChunkMesher {
+export class UIntChunkMesher {
 
     /**
      * @type {UInt32Buffer}
@@ -807,7 +838,3 @@ class UIntChunkMesher {
             this.#buffer.trimmed());
     }
 }
-
-export {
-    Chunk, CHUNK_SIZE, ChunkData, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh
-};

@@ -28,9 +28,9 @@ function loadAndPost(cx, cy) {
         const meshDataRaw = chunkSpec.meshData.input;
         
         postMessage({
-            data: chunkDataRaw,
             chunkPos: [cx, cy],
-            meshData: meshDataRaw,
+            rawChunkData: chunkDataRaw,
+            rawMeshData: meshDataRaw,
             meshTranslation: chunkSpec.meshData.mTranslation._values
         }, {"transfer": [chunkDataRaw.buffer, meshDataRaw.buffer]});
     }).catch(r => console.log(r));
@@ -42,12 +42,10 @@ onmessage = (e) => {
     loadAndPost(req.cx, req.cy);
 };
 
-
 for (const e of initialQueue) {
     setTimeout(() => {
         loadAndPost(e.cx, e.cy );
     }, 0);
 }
+
 initialQueue.length = 0;
-
-

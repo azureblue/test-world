@@ -43,10 +43,8 @@ export class TextureArray {
 
     /**
      * @param {WebGLRenderingContext} gl
-     * @param {number} textureUnit 
-     * @param {number} idx
      */
-    bind(gl) {
+    bind(gl) {        
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#texture);
     }
 }
@@ -74,7 +72,7 @@ export class EdgeShadowGenerator {
         const left = new ImageData(size, size);
         const down = new ImageData(size, size);
 
-        const pixel = new Uint8Array([r, g, b, 0]);        
+        const pixel = new Uint8Array([r, g, b, 0]);
 
         for (let x = 0; x < shadowLenInPixelsOnImage; x++) {
             let res = this.#smoothstep(shadowStart, shadowEnd, x / size);
@@ -127,7 +125,7 @@ export class EdgeShadowGenerator {
                 }
             }
         }
-        
+
         const tmp0 = new Uint8Array([r, g, b, 0]);
         const tmp1 = new Uint8Array([r, g, b, 0]);
 
@@ -136,7 +134,7 @@ export class EdgeShadowGenerator {
         const cross3 = imageDataArray[14];
         for (let x = 0; x < size; x++) {
             for (let y = 0; y < size; y++) {
-                const a0 = this.#getA(cross0, x, y);                
+                const a0 = this.#getA(cross0, x, y);
                 const a1 = this.#getA(cross3, x, y);
                 pixel[3] = Math.max(a0, a1);
                 this.#setPixel(all, x, y, pixel);
@@ -144,8 +142,8 @@ export class EdgeShadowGenerator {
         }
 
         imageDataArray[20] = all;
-        
-        for(let data of imageDataArray) {
+
+        for (let data of imageDataArray) {
             for (let y = 0; y < size / 2; y++)
                 for (let x = 0; x < size; x++) {
                     this.#getPixel(data, x, y, tmp0);

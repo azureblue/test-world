@@ -171,7 +171,7 @@ class FrustumCuller {
      */
     shouldDraw(chunk) {
         const camPos = this.#camera.position._values;
-        const corners = chunk.worldCorners;
+        const corners = chunk.worldCornersData;
         plane_loop:
         for (let plane of this.#planes.planes) {
             const planeRelativePos = plane.position._values;

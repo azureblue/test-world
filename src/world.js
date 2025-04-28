@@ -1,8 +1,8 @@
-import { Chunk, CHUNK_SIZE, ChunkData, UIntMesh } from "./chunk.js";
-import { vec2, Vec3 } from "./geom.js";
-import { Int32Buffer, Logger } from "./utils.js";
+import { Chunk, CHUNK_SIZE_BIT_POS, ChunkData, UIntMesh } from "./chunk.js";
+import { ivec2, vec2, vec3 } from "./geom.js";
+import { Int32Buffer, Logger, perfDiff, UInt32Buffer } from "./utils.js";
 const logger = new Logger("World");
-const CHUNK_RENDER_DIST = 14;
+const CHUNK_RENDER_DIST = 11;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 
 class ChunkEntry {
@@ -41,32 +41,49 @@ class ChunkLoadPromise {
 }
 
 export class World {
+    #frame = 0;
     #chunkLoader
     #tmpBuffer = new Int32Buffer(1000);
     #pos = vec2();
-    #chunkPos = new Int32Array(2);
+    #chunkPos = ivec2();
+    #rangeDeltas;
 
     /** @type {Map<number, ChunkEntry>} */
     #chunks = new Map();
+    
+    /** @type {Map<number, object} */
     #chunkDataQueue = new Map();
 
     /**@type {ChunkLoadPromise} */
     #currentChunkPromise = null;
-    /*
-        { 
-            data: chunkSpec.chunkData.data,
-            chunkPos: [req.cx, req.cy],
-            meshData: chunkSpec.meshData.input,
-            meshTranslation: chunkSpec.meshData.mTranslation._values
-        }
-    */
-
+    
     /**
      * @param {Worker} chunkLoader 
      */
     constructor(chunkLoader) {
         this.#chunkLoader = chunkLoader;
         this.#chunkLoader.onmessage = (me) => this.onChunk(me.data);
+        const tmpBuff = new UInt32Buffer(512);
+        tmpBuff.put(posToKey(0, 0));
+        for (let r = 1; r < CHUNK_RENDER_DIST; r++) {
+            const rangeFrom = -r;
+            const rangeTo = r;
+            const rSq = r * r;
+            for (let horizontal = rangeFrom; horizontal <= r; horizontal++) {
+                if ((horizontal * horizontal + rSq) > CHUNK_RENDER_DIST_SQ)
+                    continue;
+                tmpBuff.put(posToKey(horizontal, -r));
+                tmpBuff.put(posToKey(horizontal, r));
+            }
+
+            for (let vert = rangeFrom + 1; vert <= rangeTo - 1; vert++) {
+                if ((vert * vert + rSq) > CHUNK_RENDER_DIST_SQ)
+                    continue;
+                tmpBuff.put(posToKey(-r, vert));
+                tmpBuff.put(posToKey(r, vert));
+            }
+        }
+        this.#rangeDeltas = tmpBuff.trimmed();
     }
 
     onChunk(data) {
@@ -83,18 +100,19 @@ export class World {
         const key = posToKey(chunkPos.x, chunkPos.y);
         logger.info(`got chunk (${chunkPos.x}, ${chunkPos.y})`);
         if (!this.#chunks.has(key)) {
-            logger.info("missing entry for key: " + key);
+            logger.debug("missing entry for key: " + key);
             return;
         }
-        const chunkData = new ChunkData();
-        chunkData.data.set(data.data);
-        const mTranslation = data.meshTranslation;
-        const mesh = new UIntMesh(new Vec3(mTranslation[0], mTranslation[1], mTranslation[2]), data.meshData);
-
-        const chunk = new Chunk(chunkData, vec2(chunkPos.x, chunkPos.y), mesh);
         const entry = this.#chunks.get(key);
+        const now = performance.now();
+        const chunkData = new ChunkData();
+        chunkData.data.set(data.rawChunkData);
+        const translation = data.meshTranslation;
+        const mesh = UIntMesh.load(data.rawMeshData, vec3(...translation));
+        const chunk = new Chunk(chunkPos, chunkData, mesh);
         entry.chunk = chunk;
         entry.loaded = true;
+        // logger.debug(`uploading mesh time: ${perfDiff(now)}`);
         if (this.#currentChunkPromise !== null) {
             if (this.#currentChunkPromise.key === key) {
                 this.#currentChunkPromise.resolve(chunk);
@@ -106,14 +124,13 @@ export class World {
     moveTo(x, y) {
         this.#pos.x = x;
         this.#pos.y = y;
-        this.#chunkPos[0] = Math.floor(x / CHUNK_SIZE);
-        this.#chunkPos[1] = Math.floor(-y / CHUNK_SIZE);
+        this.#chunkPos.x = x >> CHUNK_SIZE_BIT_POS;
+        this.#chunkPos.y = (-y) >> CHUNK_SIZE_BIT_POS;
     }
-
 
     /**@returns {Chunk} */
     async getCurrentChunk() {
-        const key = posToKey(this.#chunkPos[0], this.#chunkPos[1]);
+        const key = posToKey(this.#chunkPos.x, this.#chunkPos.y);
         const entry = this.#chunks.get(key);
         if (entry === undefined) {
             logger.error("missing entry for current chunk");
@@ -128,53 +145,52 @@ export class World {
         }
     }
 
-    updateChunks() {
-        this.#tmpBuffer.reset();
-        for (const key of this.#chunks.keys()) {
-            const x = keyToX(key);
-            const y = keyToY(key);
-            const dx = x - this.#chunkPos[0];
-            const dy = y - this.#chunkPos[1];
-            if (dx * dx + dy * dy > CHUNK_RENDER_DIST_SQ) {
+    update() {
+        if (this.#frame == 1) {
+            this.#tmpBuffer.reset();
+            for (const key of this.#chunks.keys()) {
                 this.#tmpBuffer.put(key);
             }
-        }
-        for (let i = 0; i < this.#tmpBuffer.length; i++) {
-            const key = this.#tmpBuffer.array[i];
-            const x = keyToX(key);
-            const y = keyToY(key);
-            logger.info("removing chunk: " + x + " " + y);
-            this.#chunks.delete(key);
-        }
-
-        let reqs = [];
-        for (let cx = this.#chunkPos[0] - CHUNK_RENDER_DIST; cx < this.#chunkPos[0] + CHUNK_RENDER_DIST; cx++)
-            for (let cy = this.#chunkPos[1] - CHUNK_RENDER_DIST; cy < this.#chunkPos[1] + CHUNK_RENDER_DIST; cy++) {
-                const dx = cx - this.#chunkPos[0];
-                const dy = cy - this.#chunkPos[1];
-                const key = posToKey(cx, cy);
-                if (dx * dx + dy * dy <= CHUNK_RENDER_DIST_SQ) {
-                    if (!this.#chunks.has(key)) {
-                        const entry = new ChunkEntry();
-                        logger.info(`requesting chunk  (${cx}, ${cy})`);
-                        this.#chunks.set(key, entry);
-                        reqs.push({ cx: cx, cy: cy });                        
-                    }
+        } else if (this.#frame == 2) {
+            // const now = performance.now();
+            for (let i = 0; i < this.#tmpBuffer.length; i++) {
+                const key = this.#tmpBuffer.array[i];
+                const x = keyToX(key);
+                const y = keyToY(key);
+                const dx = x - this.#chunkPos.x;
+                const dy = y - this.#chunkPos.y;
+                if (dx * dx + dy * dy > CHUNK_RENDER_DIST_SQ) {
+                    logger.info("removing chunk: " + x + " " + y);
+                    this.#chunks.delete(key);
                 }
             }
-        reqs.sort((a, b) => {
-            const dxa = this.#chunkPos[0] - a.cx;
-            const dya = this.#chunkPos[1] - a.cy;
-            const dxb = this.#chunkPos[0] - b.cx;
-            const dyb = this.#chunkPos[1] - b.cy;
-            return (dxa * dxa) + (dya * dya) - (dxb * dxb) - (dyb * dyb);
-        });
-        reqs.forEach(req => this.#chunkLoader.postMessage(req));
-
-        if (this.#chunkDataQueue.size > 0) {
-            const entry = this.#chunkDataQueue.entries().next().value;
-            this.#chunkDataQueue.delete(entry[0]);
-            this.processChunkData(entry[1]);
+            // logger.debug(`checking chunks time: ${perfDiff(now)}`);
+        } else if (this.#frame == 0) {
+            // const now = performance.now();
+            for (const delta of this.#rangeDeltas) {
+                const dx = keyToX(delta);
+                const dy = keyToY(delta);
+                const cx = this.#chunkPos.x + dx;
+                const cy = this.#chunkPos.y + dy;
+                const key = posToKey(cx, cy);
+                if (!this.#chunks.has(key)) {
+                    const entry = new ChunkEntry();
+                    logger.info(`requesting chunk  (${cx}, ${cy})`);
+                    this.#chunks.set(key, entry);
+                    this.#chunkLoader.postMessage({ cx: cx, cy: cy })
+                }
+            }
+            // logger.debug(`requesting new chunks time: ${perfDiff(now)}`);
+        } else if (this.#frame > 2) {
+            if (this.#chunkDataQueue.size > 0) {
+                const entry = this.#chunkDataQueue.entries().next().value;
+                this.#chunkDataQueue.delete(entry[0]);
+                this.processChunkData(entry[1]);
+            }
+        }
+        this.#frame++;
+        if (this.#frame == 7) {
+            this.#frame = 0;
         }
     }
 
