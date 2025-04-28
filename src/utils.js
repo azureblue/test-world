@@ -398,7 +398,7 @@ export class Logger {
         console.debug
     ]
 
-    static #logLevel = 4;
+    static #logLevel = 2;
 
     constructor(name) {
         this.#name = name;
