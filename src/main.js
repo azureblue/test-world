@@ -57,6 +57,8 @@ export async function start() {
     gl.frontFace(gl.CCW);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     document.body.style.margin = "0";
     document.body.style.overflow = "hidden";
@@ -263,6 +265,7 @@ export async function start() {
         gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
         gl.vertexAttribPointer(attrCoordLinesColors, 3, gl.FLOAT, false, 0, 0);
         gl.drawArrays(gl.LINES, 0, 6);
+        
 
         const pos = camera.position;
         const dir = camera.direction;

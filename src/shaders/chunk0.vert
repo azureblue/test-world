@@ -59,6 +59,9 @@ void main() {
     uint m_x = merge_bits & b_0000_1111;
     uint m_y = merge_bits >> 4;
     vec3 pos = vec3(x, y, -float(z)) + m_translation + vertex_offest_map[normal_idx * 4u + vertex_quad_idx] + merge_vectors_w[normal_idx] * float(m_x) + merge_vectors_h[normal_idx] * float(m_y);
+    if (tex_idx == 7u && normal_idx == 4u) {
+        pos.y -= 0.17;
+    }
     vec3 pos_to_cam_diff = cam_pos - pos;
 
     float cam_to_pos_dist_sq = dot(pos_to_cam_diff, pos_to_cam_diff);
