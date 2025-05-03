@@ -18,16 +18,16 @@ layout (std140) uniform Camera {
 };
 const uint idx_to_face_point_idx[] = uint[](0u, 1u, 2u, 0u, 2u, 3u, 1u, 2u, 3u, 1u, 3u, 0u);
 
-const vec3 merge_vectors_w[] = vec3[](vec3(1, 0, 0), vec3(0, 0, 1), vec3(-1, 0, 0), vec3(0, 0, -1), vec3(1, 0, 0), vec3(1, 0, 0));
-const vec3 merge_vectors_h[] = vec3[](vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 0, -1), vec3(0, 0, 1));
+const vec3 merge_vectors_w[] = vec3[](vec3(1, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), vec3(-1, 0, 0), vec3(0, 0, -1),  vec3(1, 0, 0));
+const vec3 merge_vectors_h[] = vec3[](vec3(0, 0, -1), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 0, 1));
 
 const vec3 vertex_offest_map[24] = vec3[24](
     //TODO: optimize?
-/* 000 */ vec3(-0.5f, -0.5f, +0.5f), vec3(+0.5f, -0.5f, +0.5f), vec3(+0.5f, +0.5f, +0.5f), vec3(-0.5f, +0.5f, +0.5f),
-/* 001 */ vec3(-0.5f, -0.5f, -0.5f), vec3(-0.5f, -0.5f, +0.5f), vec3(-0.5f, +0.5f, +0.5f), vec3(-0.5f, +0.5f, -0.5f),
-/* 010 */ vec3(+0.5f, -0.5f, -0.5f), vec3(-0.5f, -0.5f, -0.5f), vec3(-0.5f, +0.5f, -0.5f), vec3(+0.5f, +0.5f, -0.5f),
-/* 011 */ vec3(+0.5f, -0.5f, +0.5f), vec3(+0.5f, -0.5f, -0.5f), vec3(+0.5f, +0.5f, -0.5f), vec3(+0.5f, +0.5f, +0.5f),
-/* 100 */ vec3(-0.5f, +0.5f, +0.5f), vec3(+0.5f, +0.5f, +0.5f), vec3(+0.5f, +0.5f, -0.5f), vec3(-0.5f, +0.5f, -0.5f),
+/* 000 */ vec3(-0.5f, +0.5f, +0.5f), vec3(+0.5f, +0.5f, +0.5f), vec3(+0.5f, +0.5f, -0.5f), vec3(-0.5f, +0.5f, -0.5f),
+/* 001 */ vec3(-0.5f, -0.5f, +0.5f), vec3(+0.5f, -0.5f, +0.5f), vec3(+0.5f, +0.5f, +0.5f), vec3(-0.5f, +0.5f, +0.5f),
+/* 010 */ vec3(-0.5f, -0.5f, -0.5f), vec3(-0.5f, -0.5f, +0.5f), vec3(-0.5f, +0.5f, +0.5f), vec3(-0.5f, +0.5f, -0.5f),
+/* 011 */ vec3(+0.5f, -0.5f, -0.5f), vec3(-0.5f, -0.5f, -0.5f), vec3(-0.5f, +0.5f, -0.5f), vec3(+0.5f, +0.5f, -0.5f),
+/* 100 */ vec3(+0.5f, -0.5f, +0.5f), vec3(+0.5f, -0.5f, -0.5f), vec3(+0.5f, +0.5f, -0.5f), vec3(+0.5f, +0.5f, +0.5f),
 /* 101 */ vec3(-0.5f, -0.5f, -0.5f), vec3(+0.5f, -0.5f, -0.5f), vec3(+0.5f, -0.5f, +0.5f), vec3(-0.5f, -0.5f, +0.5f)
 );
 
@@ -59,7 +59,7 @@ void main() {
     uint m_x = merge_bits & b_0000_1111;
     uint m_y = merge_bits >> 4;
     vec3 pos = vec3(x, y, -float(z)) + m_translation + vertex_offest_map[normal_idx * 4u + vertex_quad_idx] + merge_vectors_w[normal_idx] * float(m_x) + merge_vectors_h[normal_idx] * float(m_y);
-    if (tex_idx == 7u && normal_idx == 4u) {
+    if (tex_idx == 6u && normal_idx == 0u) {
         pos.y -= 0.17;
     }
     vec3 pos_to_cam_diff = cam_pos - pos;
