@@ -186,20 +186,20 @@ export function ivec2(x = 0, y = 0) {
 
 
 export class Direction {
-    static FRONT = 0;
-    static LEFT = 1;
-    static BACK = 2;
-    static RIGHT = 3;
-    static UP = 4;
+    static UP = 0;
+    static FRONT = 1;
+    static LEFT = 2;
+    static BACK = 3;
+    static RIGHT = 4;
     static DOWN = 5;
 
     /** @type {Array<Direction>} */
     static directions = [
-        new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b000), //front
-        new Direction(Direction.LEFT, new Vec3(-1, 0, 0), 0b001), //left
-        new Direction(Direction.BACK, new Vec3(0, 0, -1), 0b010), //back
-        new Direction(Direction.RIGHT, new Vec3(1, 0, 0), 0b011), //right
-        new Direction(Direction.UP, new Vec3(0, 1, 0), 0b100), //up
+        new Direction(Direction.UP, new Vec3(0, 1, 0), 0b000), //up
+        new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b001), //front
+        new Direction(Direction.LEFT, new Vec3(-1, 0, 0), 0b010), //left
+        new Direction(Direction.BACK, new Vec3(0, 0, -1), 0b011), //back
+        new Direction(Direction.RIGHT, new Vec3(1, 0, 0), 0b100), //right
         new Direction(Direction.DOWN, new Vec3(0, -1, 0), 0b101) //down
     ];
 

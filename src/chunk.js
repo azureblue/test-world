@@ -1,3 +1,4 @@
+import { BLOCK_IDS, BLOCKS, isSolid, isSolidInt } from "./blocks.js";
 import { Direction, DirXY, Vec2, vec3, Vec3 } from "./geom.js";
 import { Array2D, Array3D, UInt32Buffer } from "./utils.js";
 
@@ -18,39 +19,10 @@ export function keyToY(key) {
     return (key & 0xFFFF) - 32767;
 }
 
-export const BLOCKS = {
-    BLOCK_EMPTY: 0,
-    BLOCK_DIRT: 1,
-    BLOCK_DIRT_GRASS: 2,
-    BLOCK_GRASS: 3,
-    BLOCK_GRAVEL: 4,
-    BLOCK_ROCK: 5,
-    BLOCK_WATER: 7,
-    BLOCK_CHUNK_EDGE: 255
-}
+const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
+const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
+const BLOCK_WATER = BLOCK_IDS.WATER;
 
-const BLOCK_EMPTY = BLOCKS.BLOCK_EMPTY;
-const BLOCK_CHUNK_EDGE = BLOCKS.BLOCK_CHUNK_EDGE;
-const BLOCK_WATER = BLOCKS.BLOCK_WATER;
-
-function isSolid(block) {
-    return (block != BLOCK_EMPTY && block != BLOCK_CHUNK_EDGE && block != BLOCK_WATER);
-}
-
-function isSolidInt(block) {
-    return (block != BLOCK_EMPTY && block != BLOCK_CHUNK_EDGE && block != BLOCK_WATER) ? 1 : 0;
-}
-
-const BLOCK_TEXTURE_MAP = [
-    [0, 0, 0], // 0
-    [1, 1, 1], // 1
-    [3, 2, 1], // 2
-    [3, 3, 3], // 3
-    [4, 4, 4], // 4
-    [5, 5, 5], // 5
-    [], // 6
-    [7, 7, 7], // 7
-]
 
 /**
  * 00 10 12
@@ -126,7 +98,6 @@ export class UIntMesh {
     #mTranslation;
     #len;
 
-
     /**
      * @param {WebGLVertexArrayObject} va 
      * @param {WebGLBuffer} vb 
@@ -182,7 +153,6 @@ export class UIntMesh {
         gl.bindVertexArray(null);
     }
 }
-
 
 export class ChunkDataLoader {
     /** @type {Map<number, ChunkData>} */
@@ -450,7 +420,6 @@ export class BlockAdjsLoader {
         return this.#chunks[chunk].get(h, px, py);
     }
 
-
     load() {
         const row = new Uint32Array(CHUNK_SIZE);
         const arr3d = new Array3D(CHUNK_SIZE + 2, CHUNK_HEIGHT + 2);
@@ -493,14 +462,15 @@ export class UIntChunkMesher {
     #bufferWater = new UInt32Buffer(1024);
     #tmpArr = new Uint32Array(12);
     #upDownLayers = [new Array2D(CHUNK_SIZE), new Array2D(CHUNK_SIZE)];
-    #sideLayers = [new Array3D(CHUNK_SIZE, 4), new Array3D(CHUNK_SIZE, 4)];
+    #sideLayers = [new Array3D(CHUNK_SIZE, 5), new Array3D(CHUNK_SIZE, 5)];
     #topRow = new Uint32Array(CHUNK_SIZE);
     #currentRow = new Uint32Array(CHUNK_SIZE);
     #directionEncode = new Int32Array([
-        1, 0, 0, 0, 1, 0,
-        0, 1, 0, -1, 0, CHUNK_SIZE - 1,
-        -1, 0, CHUNK_SIZE - 1, 0, -1, CHUNK_SIZE - 1,
-        0, -1, CHUNK_SIZE - 1, 1, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 1, 0, 0, 0,
+        0, 1, 0, -1, 0, CHUNK_SIZE - 1, 0, 0, 
+        -1, 0, CHUNK_SIZE - 1, 0, -1, CHUNK_SIZE - 1, 0, 0,
+        0, -1, CHUNK_SIZE - 1, 1, 0, 0, 0, 0
     ]);
 
     /*
@@ -604,15 +574,13 @@ export class UIntChunkMesher {
             for (let y = 0; y < CHUNK_SIZE; y++)
                 for (let x = 0; x < CHUNK_SIZE; x++) {
                     adj.setPosition(h, x, y);
-                    const blockType = adj.get(0, 0, 0);
-                    if (blockType == BLOCK_EMPTY)
+                    const blockId = adj.get(0, 0, 0);
+                    if (blockId == BLOCK_EMPTY)
                         continue;
 
-                    const blockTextureUp = BLOCK_TEXTURE_MAP[blockType][0];
-                    const blockTextureSide = BLOCK_TEXTURE_MAP[blockType][1];
-                    const blockTextureDown = BLOCK_TEXTURE_MAP[blockType][2];
-
-                    const isWater = blockType == BLOCK_WATER;
+                    const block = BLOCKS[blockId];
+                    const blockTextures = block.textureIds;
+                    const isWater = blockId == BLOCK_WATER;
                     const above = adj.get(1, 0, 0);
                     if (!isSolid(above)) {
                         if (isWater && above != BLOCK_EMPTY)
@@ -632,7 +600,7 @@ export class UIntChunkMesher {
                                 cornerDir.rotateCCW();
                             }
                         }
-                        upLayer.set(x, y, (blockTextureUp << 8) | (shadows));
+                        upLayer.set(x, y, (blockTextures[0] << 8) | (shadows));
                     }
 
                     if (isWater)
@@ -653,41 +621,7 @@ export class UIntChunkMesher {
                             cornerDir.rotateCCW();
                         }
 
-                        downLayer.set(x, CHUNK_SIZE - y - 1, (blockTextureDown << 8) | (shadows));
-                    }
-
-                    if (!isSolid(adj.get(0, 1, 0))) {
-                        sideDir0.set(-1, 0);
-                        sideDir1.set(0, -1);
-                        cornerDir.set(-1, -1);
-                        let shadows = 0;
-                        for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir0.y, 1, sideDir0.x));
-                            let s1 = isSolidInt(adj.get(sideDir1.y, 1, sideDir1.x));
-                            let c = isSolidInt(adj.get(cornerDir.y, 1, cornerDir.x));
-                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            sideDir0.rotateCCW();
-                            sideDir1.rotateCCW();
-                            cornerDir.rotateCCW();
-                        }
-                        layersCurrent.set(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextureSide << 8) | (shadows));
-                    }
-
-                    if (!isSolid(adj.get(0, -1, 0))) {
-                        sideDir0.set(-1, 0);
-                        sideDir1.set(0, -1);
-                        cornerDir.set(-1, -1);
-                        let shadows = 0;
-                        for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir0.y, -1, -sideDir0.x));
-                            let s1 = isSolidInt(adj.get(sideDir1.y, -1, -sideDir1.x));
-                            let c = isSolidInt(adj.get(cornerDir.y, -1, -cornerDir.x));
-                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            sideDir0.rotateCCW();
-                            sideDir1.rotateCCW();
-                            cornerDir.rotateCCW();
-                        }
-                        layersCurrent.set(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextureSide << 8) | (shadows));
+                        downLayer.set(x, CHUNK_SIZE - y - 1, (blockTextures[5] << 8) | (shadows));
                     }
 
                     if (!isSolid(adj.get(0, 0, -1))) {
@@ -704,7 +638,24 @@ export class UIntChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.FRONT, x, y, (blockTextureSide << 8) | shadows);
+                        layersCurrent.set(Direction.FRONT, x, y, (blockTextures[1] << 8) | shadows);
+                    }
+
+                    if (!isSolid(adj.get(0, -1, 0))) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
+                        cornerDir.set(-1, -1);
+                        let shadows = 0;
+                        for (let v = 0; v < 4; v++) {
+                            let s0 = isSolidInt(adj.get(sideDir0.y, -1, -sideDir0.x));
+                            let s1 = isSolidInt(adj.get(sideDir1.y, -1, -sideDir1.x));
+                            let c = isSolidInt(adj.get(cornerDir.y, -1, -cornerDir.x));
+                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
+                            cornerDir.rotateCCW();
+                        }
+                        layersCurrent.set(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextures[2] << 8) | (shadows));
                     }
 
                     if (!isSolid(adj.get(0, 0, 1))) {
@@ -721,7 +672,24 @@ export class UIntChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextureSide << 8) | shadows);
+                        layersCurrent.set(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextures[3] << 8) | shadows);
+                    }
+
+                    if (!isSolid(adj.get(0, 1, 0))) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
+                        cornerDir.set(-1, -1);
+                        let shadows = 0;
+                        for (let v = 0; v < 4; v++) {
+                            let s0 = isSolidInt(adj.get(sideDir0.y, 1, sideDir0.x));
+                            let s1 = isSolidInt(adj.get(sideDir1.y, 1, sideDir1.x));
+                            let c = isSolidInt(adj.get(cornerDir.y, 1, cornerDir.x));
+                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
+                            cornerDir.rotateCCW();
+                        }
+                        layersCurrent.set(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextures[4] << 8) | (shadows));
                     }
                 }
 
@@ -729,10 +697,10 @@ export class UIntChunkMesher {
             const layersCurrentData = layersCurrent.data;
             const layersTopData = layersTop.data;
 
-            for (let dir = 0; dir < 4; dir++) {
+            for (let dir = 1; dir < 5; dir++) {
                 const layerStartIdx = layersCurrent.planeIdx(dir);
                 const layerEndIdx = layerStartIdx + layerLen;
-                const dirEncodeBaseIdx = dir * 6;
+                const dirEncodeBaseIdx = dir << 3;
                 const dirXXMul = this.#directionEncode[dirEncodeBaseIdx + 0];
                 const dirXYMul = this.#directionEncode[dirEncodeBaseIdx + 1];
                 const dirXXAdd = this.#directionEncode[dirEncodeBaseIdx + 2];
