@@ -1,5 +1,38 @@
 import { is2Pow } from "./utils.js";
 
+class ImageFilters {
+
+    static SetAlpha = class {
+
+        constructor(params) {
+            this.params = params;
+        }
+
+        /**
+         * @param {ImageData} imageData 
+         * @param {number} alpha 
+        */
+        process(imageData) {
+            const data = imageData.data;
+            const alpha = this.params.alpha;
+            for (let i = 3; i < data.length; i += 4) {
+                data[i] = alpha;
+            }
+        }
+    }
+}
+
+const textureFilters = {
+    6: [
+        {
+            "name": "SetAlpha",
+            "params": {
+                alpha: 230
+            }
+        }
+    ]
+};
+
 export class TextureArray {
 
     #size;
@@ -28,10 +61,10 @@ export class TextureArray {
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
         gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 5, gl.RGBA8, size, size, 64);
-        for (let i = 0; i < columns; i++) {
-            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, size, size, 1, gl.RGBA,
-                gl.UNSIGNED_BYTE,
-                imageCtx.getImageData(i * size, 0, (i + 1) * size, size));
+        for (let texId = 0; texId < columns; texId++) {
+            const imageData = imageCtx.getImageData(texId * size, 0, (texId + 1) * size, size);
+            TextureArray.applyFilters(imageData, texId);
+            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, texId, size, size, 1, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
         }
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -41,10 +74,19 @@ export class TextureArray {
         return new TextureArray(texture, size);
     }
 
+    static applyFilters(imageData, id) {
+        const filters = textureFilters[id];
+        if (filters !== undefined) {
+            for (let filter of filters) {
+                new ImageFilters[filter.name](filter.params).process(imageData);
+            }
+        }
+    }
+
     /**
      * @param {WebGLRenderingContext} gl
      */
-    bind(gl) {        
+    bind(gl) {
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#texture);
     }
 }
