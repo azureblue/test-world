@@ -1,5 +1,5 @@
 import { Chunk, CHUNK_SIZE_BIT_POS, ChunkData, UIntMesh } from "./chunk.js";
-import { ivec2, vec2, vec3 } from "./geom.js";
+import { ivec2, Vec2, vec2, vec3 } from "./geom.js";
 import { Int32Buffer, Logger, perfDiff, UInt32Buffer } from "./utils.js";
 const logger = new Logger("World");
 const CHUNK_RENDER_DIST = 14;
@@ -105,13 +105,25 @@ export class World {
             this.#chunkDataQueue.set(key, data);
     }
 
+    /**
+     * 
+     * @param {Vec2} pos 
+     */
+    inRange(pos) {
+        const dx = (pos.x - this.#chunkPos.x) | 0;
+        const dy = (pos.y - this.#chunkPos.y) | 0;
+        return (dx * dx + dy * dy) <= CHUNK_RENDER_DIST_SQ;
+    }
+
     processChunkData(data) {
         const chunkPos = vec2(data.chunkPos[0], data.chunkPos[1]);
         const key = posToKey(chunkPos.x, chunkPos.y);
+        if (!this.inRange(chunkPos))
+            return false;
         logger.info(`got chunk (${chunkPos.x}, ${chunkPos.y})`);
         if (!this.#chunks.has(key)) {
             logger.debug("missing entry for key: " + key);
-            return;
+            return false;
         }
         const entry = this.#chunks.get(key);
         const now = performance.now();
@@ -129,6 +141,7 @@ export class World {
                 this.#currentChunkPromise = null;
             }
         }
+        return true;
     }
 
     moveTo(x, y) {
@@ -206,9 +219,17 @@ export class World {
     update() {
       if (this.#frame > 2) {
             if (this.#chunkDataQueue.size > 0) {
-                const entry = this.#chunkDataQueue.entries().next().value;
-                this.#chunkDataQueue.delete(entry[0]);
-                this.processChunkData(entry[1]);
+                const entriesIter = this.#chunkDataQueue.entries();
+                for (let i = 0; i < 10; i++) {
+                    const next = entriesIter.next();
+                    if (next.done)
+                        break;
+                    const entry = next.value;
+                    this.#chunkDataQueue.delete(entry[0]);
+                    if (this.processChunkData(entry[1]))
+                        break;
+                    // console.log("next");
+                }
             }
         }
         this.#frame++;
