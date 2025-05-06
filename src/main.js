@@ -1,10 +1,9 @@
-import { TextureArray } from "./textures.js";
 import { Camera, FrustumCuller } from "./camera.js";
-import { Chunk, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
-import { PixelDataChunkGenerator } from "./generator.js";
-import { Projection, Vec2, Vec3, mat4 } from "./geom.js";
+import { UIntMesh } from "./chunk.js";
+import { Projection, Vec3, mat4 } from "./geom.js";
 import { Program } from "./gl.js";
-import { ImagePixels, Resources, Replacer } from "./utils.js";
+import { TextureArray } from "./textures.js";
+import { Replacer, Resources } from "./utils.js";
 import { World } from "./world.js";
 
 const VIEW_DISTANCE_SQ = (11 * 15) ** 2;
@@ -58,7 +57,7 @@ export async function start() {
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
     gl.enable(gl.BLEND)
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     document.body.style.margin = "0";
     document.body.style.overflow = "hidden";
@@ -243,6 +242,8 @@ export async function start() {
         texArray.bind(gl);
 
         world.update();
+        // const query = gl.createQuery();
+        // gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
         world.render(chunk => {
             allChunks++;
             if (!frustumCuller.shouldDraw(chunk)) {
@@ -254,29 +255,52 @@ export async function start() {
             const modelTranslation = mesh.modelTranslation;
             gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
             gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
-
         });
-        gl.bindVertexArray(null);
+        // gl.bindVertexArray(null);
+        // gl.endQuery(ext.TIME_ELAPSED_EXT);
+        // queryQueue.push(query);
 
-        coordsProgram.use();
+        // coordsProgram.use();
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
-        gl.vertexAttribPointer(attrCoordLines, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
-        gl.vertexAttribPointer(attrCoordLinesColors, 3, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.LINES, 0, 6);
-        
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsLines);
+        // gl.vertexAttribPointer(attrCoordLines, 3, gl.FLOAT, false, 0, 0);
+        // gl.bindBuffer(gl.ARRAY_BUFFER, vCoordsColors);
+        // gl.vertexAttribPointer(attrCoordLinesColors, 3, gl.FLOAT, false, 0, 0);
+        // gl.drawArrays(gl.LINES, 0, 6);
+
 
         const pos = camera.position;
         const dir = camera.direction;
         const nowDiff = performance.now() - now;
         renderTimeMetric = Math.max(renderTimeMetric, nowDiff);
-        if (frameCounter == 4) {
+        if (frameCounter == 5) {
             statsDiv.textContent = `position x:${pos.x.toFixed(1)} z:${pos.z.toFixed(1)} y:${pos.y.toFixed(1)} ` +
                 `direction x:${dir.x.toFixed(1)} z:${dir.z.toFixed(1)} y:${dir.y.toFixed(1)} ` +
                 ` pitch:${camera.pitch.toFixed(1)} yaw:${camera.yaw.toFixed(1)} render time: ${(renderTimeMetric).toFixed(1)}ms  fps: ${fps} chunks: ${chunksDrawn}/${allChunks}`;
             frameCounter = 0;
             renderTimeMetric = 0;
+
+            // for (let i = 0; i < queryQueue.length; i++) {
+            //     const query = queryQueue[i];
+
+            //     if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) {
+            //         const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
+            //         if (!disjoint) {
+            //             const gpuTimeNs = gl.getQueryParameter(query, gl.QUERY_RESULT);
+            //             const gpuTimeMs = gpuTimeNs / 1e6;
+            //             queryResults.push(gpuTimeMs);
+            //             if (queryResults.length == 100) {
+            //                 const sum = queryResults.reduce((p, c) => p + c);
+            //                 console.log(`GPU shader time: ${(sum / 100).toFixed(2)} ms`);
+            //                 queryResults.length = 0;
+            //             }
+
+            //         }
+            //         gl.deleteQuery(query);
+            //         queryQueue.splice(i, 1);
+            //         i--;
+            //     }
+            // }
         } else {
             frameCounter++;
         }

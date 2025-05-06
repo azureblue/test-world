@@ -27,7 +27,7 @@ const textureFilters = {
         {
             "name": "SetAlpha",
             "params": {
-                alpha: 230
+                alpha: 220
             }
         }
     ]
@@ -56,14 +56,18 @@ export class TextureArray {
         if (!is2Pow(size))
             throw "invalid size";
         const columns = Math.floor(width / size);
+        const rows = Math.floor(height / size);
         imageCtx.scale(1, -1);
-        imageCtx.drawImage(image, 0, 0, width, -size);
+        imageCtx.drawImage(image, 0, 0, width, -height);
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
         gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 5, gl.RGBA8, size, size, 64);
-        for (let texId = 0; texId < columns; texId++) {
-            const imageData = imageCtx.getImageData(texId * size, 0, (texId + 1) * size, size);
+        for (let texId = 0; texId < columns * rows; texId++) {
+            const row = rows - Math.floor(texId / columns) - 1;
+            const col = texId % columns;
+            const imageData = imageCtx.getImageData(col * size, row * size, size, size);
             TextureArray.applyFilters(imageData, texId);
+
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, texId, size, size, 1, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
         }
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
@@ -71,8 +75,10 @@ export class TextureArray {
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.REPEAT);
         gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+
         return new TextureArray(texture, size);
     }
+
 
     static applyFilters(imageData, id) {
         const filters = textureFilters[id];
