@@ -516,8 +516,8 @@ export class UIntChunkMesher {
         const corner1Shadow = (shadows >> 2) & 0b11;
         const corner2Shadow = (shadows >> 4) & 0b11;
         const corner3Shadow = (shadows >> 6) & 0b11;
-        const mergeBitsWidth = (width - 1);
-        const mergeBitsHeight = (height - 1 << 4);
+        const mergeBitsWidth = width;
+        const mergeBitsHeight = height << 5;
         const flip = corner0Shadow + corner2Shadow > corner1Shadow + corner3Shadow;
         const flipBit = (flip ? 1 : 0);
 
@@ -535,9 +535,9 @@ export class UIntChunkMesher {
             this.#tmpArr[1 * 2] = bits | (corner2Shadow << 27);
             this.#tmpArr[1 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
             this.#tmpArr[2 * 2] = bits | (corner3Shadow << 27);
-            this.#tmpArr[2 * 2 + 1] = 0;
+            this.#tmpArr[2 * 2 + 1] = mergeBitsHeight;
             this.#tmpArr[3 * 2] = bits | (corner1Shadow << 27);
-            this.#tmpArr[3 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
+            this.#tmpArr[3 * 2 + 1] = mergeBitsWidth;
             this.#tmpArr[4 * 2] = bits | (corner3Shadow << 27);
             this.#tmpArr[4 * 2 + 1] = mergeBitsHeight;
             this.#tmpArr[5 * 2] = bits | (corner0Shadow << 27);
