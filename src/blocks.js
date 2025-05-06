@@ -24,7 +24,7 @@ export class Block {
     }
 
     get renderable() {
-        
+
     }
 }
 
@@ -37,8 +37,14 @@ export const BLOCK_IDS = {
     ROCK: 5,
     WATER: 6,
     SAND: 7,
+    GRASS_SHORT: 8,
     CHUNK_EDGE: 255
 };
+
+export const MODEL = {
+    CUBE: 0,
+    CROSS_2: 1
+}
 
 const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
 const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
@@ -46,22 +52,36 @@ const BLOCK_WATER = BLOCK_IDS.WATER;
 
 export const BLOCKS = [
     null,
-    new Block(1, "dirt", [1, 1, 1, 1, 1, 1], true),
-    new Block(2, "dirtgrass", [3, 2, 2, 2, 2, 1], true),
-    new Block(1, "grass", [3, 3, 3, 3, 3, 3], true),
-    new Block(1, "gravel", [4, 4, 4, 4, 4, 4], true),
-    new Block(1, "rock", [5, 5, 5, 5, 5, 5], true),
-    new Block(1, "water", [6, 6, 6, 6, 6, 6], false),
-    new Block(1, "sand", [7, 7, 7, 7, 7, 7], true)
+    new Block(1, "block_dirt", [1, 1, 1, 1, 1, 1], true),
+    new Block(2, "block_dirtgrass", [3, 2, 2, 2, 2, 1], true),
+    new Block(3, "block_grass", [3, 3, 3, 3, 3, 3], true),
+    new Block(4, "block_gravel", [4, 4, 4, 4, 4, 4], true),
+    new Block(5, "block_rock", [5, 5, 5, 5, 5, 5], true),
+    new Block(6, "block_water", [6, 6, 6, 6, 6, 6], false),
+    new Block(7, "block_sand", [7, 7, 7, 7, 7, 7], true),
+    new Block(8, "grass_short", [0, 8, 8, 8, 8, 0], true)
 ]
+Object.freeze(BLOCKS);
 
+const BLOCK_SOLID = [
+    false, //0
+    true,  //1
+    true,  //2
+    true,  //3
+    true,  //4
+    true,  //5
+    false, //6
+    true,  //7
+    false, //8
+];
+Object.freeze(BLOCK_SOLID);
 
 export function isSolid(block) {
-    return (block != BLOCK_EMPTY && block != BLOCK_CHUNK_EDGE && block != BLOCK_WATER);
+    return BLOCK_SOLID[block];
 }
 
 export function isSolidInt(block) {
-    return (block != BLOCK_EMPTY && block != BLOCK_CHUNK_EDGE && block != BLOCK_WATER) ? 1 : 0;
+    return isSolid(block) ? 1 : 0;
 }
 
-Object.freeze(BLOCKS);
+

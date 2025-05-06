@@ -47,44 +47,6 @@ export class DataBuffer {
     }
 
     /**
-     * @param {ArrayLike<number>} elements
-     * @param {number} [firstCoord]  
-     * @param {number} [secondCoord]  
-     * @param {number} [thirdCoord]  
-     */
-    addTranslated(elements, firstCoord = 0, secondCoord, thirdCoord) {
-        if (this.array.length - this.#pos < elements.length) {
-            this.#extendSize();
-            this.addTranslated(elements, firstCoord, secondCoord, thirdCoord);
-        } else {
-            this.array.set(elements, this.#pos);
-            let stride = 1;
-            if (secondCoord !== undefined)
-                stride++;
-            if (thirdCoord !== undefined)
-                stride++;
-
-            if (stride == 1) {
-                for (let i = 0; i < elements.length; i++) {
-                    this.array[this.#pos + i] += firstCoord;
-                }
-            } else if (stride == 2) {
-                for (let i = 0; i < elements.length; i += 2) {
-                    this.array[this.#pos + i] += firstCoord;
-                    this.array[this.#pos + i + 1] += secondCoord;
-                }
-            } else if (stride == 3) {
-                for (let i = 0; i < elements.length; i += 3) {
-                    this.array[this.#pos + i] += firstCoord;
-                    this.array[this.#pos + i + 1] += secondCoord;
-                    this.array[this.#pos + i + 2] += thirdCoord;
-                }
-            }
-            this.#pos += elements.length;
-        }
-    }
-
-    /**
      * @returns {Float32Array | Uint32Array | Uint16Array | Uint8Array}
      */
     trimmed() {
@@ -96,6 +58,11 @@ export class DataBuffer {
         if (size !== 0) {
             this.array = new this.array.constructor(size);
         }
+    }
+
+    *[Symbol.iterator]() {
+        for (let i = 0; i < this.#pos; i++)
+            yield this.array[i];
     }
 
     get length() {

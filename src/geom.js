@@ -192,15 +192,19 @@ export class Direction {
     static BACK = 3;
     static RIGHT = 4;
     static DOWN = 5;
+    static DIAGONAL_0 = 6;
+    static DIAGONAL_1 = 7;
 
     /** @type {Array<Direction>} */
     static directions = [
-        new Direction(Direction.UP, new Vec3(0, 1, 0), 0b000), //up
-        new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b001), //front
-        new Direction(Direction.LEFT, new Vec3(-1, 0, 0), 0b010), //left
-        new Direction(Direction.BACK, new Vec3(0, 0, -1), 0b011), //back
-        new Direction(Direction.RIGHT, new Vec3(1, 0, 0), 0b100), //right
-        new Direction(Direction.DOWN, new Vec3(0, -1, 0), 0b101) //down
+        new Direction(Direction.UP, new Vec3(0, 1, 0), 0b000),
+        new Direction(Direction.FRONT, new Vec3(0, 0, 1), 0b001),
+        new Direction(Direction.LEFT, new Vec3(-1, 0, 0), 0b010),
+        new Direction(Direction.BACK, new Vec3(0, 0, -1), 0b011),
+        new Direction(Direction.RIGHT, new Vec3(1, 0, 0), 0b100),
+        new Direction(Direction.DOWN, new Vec3(0, -1, 0), 0b101),
+        new Direction(Direction.DIAGONAL_0, new Vec3(1, 0, 1).normalize(), 0b110),
+        new Direction(Direction.DIAGONAL_1, new Vec3(1, 0, -1).normalize(), 0b111)
     ];
 
     /**
