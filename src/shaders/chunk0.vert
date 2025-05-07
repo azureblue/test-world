@@ -19,21 +19,19 @@ layout (std140) uniform Camera {
     mat4 cam_view;
     vec3 cam_pos;
 };
-const float pixh = 1.0 / 16.0;
+const float pixh = 1.0f / 16.0f;
 
-const vec3 merge_vectors_w[] = vec3[](vec3(1, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), vec3(-1, 0, 0), vec3(0, 0, -1), vec3(1, 0, 0), vec3(1, 0, -1), vec3(1, 0, 1));
-const vec3 merge_vectors_h[] = vec3[](vec3(0, 0, -1), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 1, 0), vec3(0, 0, 1), vec3(0, 1, 0), vec3(0, 1, 0));
-const vec3 vertex_offest_map[] = vec3[](
-    //TODO: optimize?
-/* 000 */ vec3(-0.5f, +0.5f, +0.5f),
-/* 001 */ vec3(-0.5f, -0.5f, +0.5f),
-/* 010 */ vec3(-0.5f, -0.5f, -0.5f),
-/* 011 */ vec3(+0.5f, -0.5f, -0.5f),
-/* 100 */ vec3(+0.5f, -0.5f, +0.5f),
-/* 101 */ vec3(-0.5f, -0.5f, -0.5f),
-/* 110 */ vec3(-0.5f, -0.5f, +0.5f),
-/* 111 */ vec3(-0.5f, -0.5f, -0.5f)
-);
+const float merge_vectors[] = float[](
+/* 0 */ +1.0f, +0.0f, +0.0f, -1.0f,
+/* 1 */ +1.0f, +0.0f, +1.0f, +0.0f,
+/* 2 */ +0.0f, +1.0f, +1.0f, +0.0f,
+/* 3 */ -1.0f, +0.0f, +1.0f, +0.0f,
+/* 4 */ +0.0f, -1.0f, +1.0f, +0.0f,
+/* 5 */ +1.0f, +0.0f, +0.0f, +1.0f,
+/* 6 */ +1.0f, -1.0f, +1.0f, +0.0f,
+/* 7 */ +1.0f, +1.0f, +1.0f, +0.0f);
+
+const uint vertex_offset_bits = 1069606u;
 
 const float[4] shadow_values = float[4](0.0f, 0.3f, 0.4f, 0.5f);
 
@@ -58,11 +56,15 @@ void main() {
     uint lowered = (a_in_bits >> 29) & b_0000_0011;
 
     uint merge_bits = a_in_aux_bits & b_11_1111_1111;
-    uint m_x = merge_bits & b_0001_1111;
-    uint m_y = merge_bits >> 5;
-    vec3 pos = vec3(x, y, -float(z)) + m_translation + vertex_offest_map[normal_idx] + merge_vectors_w[normal_idx] * float(m_x) + merge_vectors_h[normal_idx] * float(m_y);
-    pos.y -= float(lowered) * pixh;    
-    
+    float m_x = float(merge_bits & b_0001_1111);
+    float m_y = float(merge_bits >> 5);
+    uint merge_vector_idx = normal_idx << 2;
+    vec3 merge_vector_w = vec3(merge_vectors[merge_vector_idx], 0.0f, merge_vectors[merge_vector_idx + 1u]);
+    vec3 merge_vector_h = vec3(0.0f, merge_vectors[merge_vector_idx + 2u], merge_vectors[merge_vector_idx + 3u]);
+    uint vertex_offset_bits_shifted = vertex_offset_bits >> (normal_idx * 3u);
+    vec3 vertex_offset = vec3(-0.5 + float(vertex_offset_bits_shifted & 1u), -0.5 + float(vertex_offset_bits_shifted >> 1 & 1u), -0.5 + float(vertex_offset_bits_shifted >> 2 & 1u));
+    vec3 pos = vec3(float(x), float(y) - float(lowered) * pixh, -float(z)) + m_translation + vertex_offset + merge_vector_w * m_x + merge_vector_h * m_y;
+
     gl_Position = cam_proj * cam_view * vec4(pos, 1.0f);
     vec3 pos_to_cam_diff = cam_pos - pos;
 
@@ -70,6 +72,6 @@ void main() {
 
     fading = clamp(cam_to_pos_dist_sq / VIEW_DISTANCE_SQ, 0.0f, 1.0f);
     v_shadow = shadow_values[shadow];
-    v_tex_coord = vec3(m_x, m_y, tex_idx);
+    v_tex_coord = vec3(m_x, m_y, float(tex_idx));
     o_norm = normal_idx;
 }
