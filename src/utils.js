@@ -450,3 +450,267 @@ export class Replacer {
         });
     }
 }
+
+/**
+ * Writes a slightly padded wireframe cube directly into a Float32Array for gl.LINES.
+ * @param {Float32Array} target - Must have length 72 (24 vertices × 3 floats)
+ * @param {number} x - Cube world X
+ * @param {number} y - Cube world Y
+ * @param {number} z - Cube world Z
+ * @param {number} size - Cube size (default 1)
+ * @param {number} pad - Padding to push lines outward (default 0.01)
+ */
+export function writeVoxelWireframe(target, x, y, z, size = 1, pad = 0.001) {
+    const x0 = x - pad, y0 = y - pad, z0 = z - pad;
+    const x1 = x + size + pad * 2, y1 = y + size + pad * 2, z1 = z + size + pad * 2;
+
+    let i = 0;
+
+    // Bottom face
+    target[i++] = x0; target[i++] = y0; target[i++] = z0;
+    target[i++] = x1; target[i++] = y0; target[i++] = z0;
+
+    target[i++] = x1; target[i++] = y0; target[i++] = z0;
+    target[i++] = x1; target[i++] = y0; target[i++] = z1;
+
+    target[i++] = x1; target[i++] = y0; target[i++] = z1;
+    target[i++] = x0; target[i++] = y0; target[i++] = z1;
+
+    target[i++] = x0; target[i++] = y0; target[i++] = z1;
+    target[i++] = x0; target[i++] = y0; target[i++] = z0;
+
+    // Top face
+    target[i++] = x0; target[i++] = y1; target[i++] = z0;
+    target[i++] = x1; target[i++] = y1; target[i++] = z0;
+
+    target[i++] = x1; target[i++] = y1; target[i++] = z0;
+    target[i++] = x1; target[i++] = y1; target[i++] = z1;
+
+    target[i++] = x1; target[i++] = y1; target[i++] = z1;
+    target[i++] = x0; target[i++] = y1; target[i++] = z1;
+
+    target[i++] = x0; target[i++] = y1; target[i++] = z1;
+    target[i++] = x0; target[i++] = y1; target[i++] = z0;
+
+    // Vertical edges
+    target[i++] = x0; target[i++] = y0; target[i++] = z0;
+    target[i++] = x0; target[i++] = y1; target[i++] = z0;
+
+    target[i++] = x1; target[i++] = y0; target[i++] = z0;
+    target[i++] = x1; target[i++] = y1; target[i++] = z0;
+
+    target[i++] = x1; target[i++] = y0; target[i++] = z1;
+    target[i++] = x1; target[i++] = y1; target[i++] = z1;
+
+    target[i++] = x0; target[i++] = y0; target[i++] = z1;
+    target[i++] = x0; target[i++] = y1; target[i++] = z1;
+}
+
+export class Int64 {
+    static ZERO = Int64.fromNumber(0);
+    constructor(low = 0, high = 0) {
+        this.low = low | 0;
+        this.high = high | 0;
+    }
+
+    static fromNumber(n) {
+        return new Int64(n | 0, (n / 4294967296) | 0);
+    }
+
+    static fromBits(low, high) {
+        return new Int64(low, high);
+    }
+
+    static fromBigInt(b) {
+        const l = Number(b & 0xFFFFFFFFn);
+        const h = Number((b >> 32n) & 0xFFFFFFFFn);
+        return new Int64(l, h << 0); // cast to signed 32-bit
+    }
+
+    set(low, high) {
+        this.low = low | 0;
+        this.high = high | 0;
+        return this;
+    }
+
+    toNumber() {
+        return this.high * 4294967296 + (this.low >>> 0);
+    }
+
+    toBigInt() {
+        return (BigInt(this.high) << 32n) | BigInt(this.low >>> 0);
+    }
+
+    toString() {
+        return this.toBigInt().toString();
+    }
+
+    isZero() {
+        return (this.low | this.high) === 0;
+    }
+
+    clone() {
+        return new Int64(this.low, this.high);
+    }
+
+    neg_n() {
+        const low = (~this.low + 1) | 0;
+        const high = (~this.high + (low === 0 ? 1 : 0)) | 0;
+        return new Int64(low, high);
+    }
+
+    add_n(b) {
+        const a = this;
+        const l = (a.low >>> 0) + (b.low >>> 0);
+        const carry = l > 0xFFFFFFFF ? 1 : 0;
+        const h = (a.high + b.high + carry) | 0;
+        return new Int64(l | 0, h);
+    }
+
+    /**
+     * @param {Int64} b 
+     * @param {Int64} dst 
+     * @returns 
+     */
+    add(b, dst) {
+        const l = (this.low >>> 0) + (b.low >>> 0);
+        const carry = l > 0xFFFFFFFF ? 1 : 0;
+        return dst.set(l, this.high + b.high + carry);
+    }
+
+    sub_n(b) {
+        const l = (this.low >>> 0) - (b.low >>> 0);
+        const borrow = l < 0 ? 1 : 0;
+        const h = (this.high - b.high - borrow) | 0;
+        return new Int64(l | 0, h);
+    }
+
+    and_n(b) {
+        return new Int64(this.low & b.low, this.high & b.high);
+    }
+
+    /**
+     * @param {Int64} b 
+     * @param {Int64} dst 
+     * @returns 
+     */
+    and(b, dst) {
+        return dst.set(this.low & b.low, this.high & b.high);
+    }
+
+    or_n(b) {
+        return new Int64(this.low | b.low, this.high | b.high);
+    }
+
+    xor_n(b) {
+        return new Int64(this.low ^ b.low, this.high ^ b.high);
+    }
+
+    /**
+     * @param {Int64} b 
+     * @param {Int64} dst 
+     * @returns 
+     */
+    xor(b, dst) {
+        return dst.set(this.low ^ b.low, this.high ^ b.high);
+    }
+
+    shiftLeft_n(n) {
+        n &= 63;
+        if (n === 0) return this.clone();
+        if (n < 32) {
+            const low = this.low << n;
+            const high = (this.high << n) | (this.low >>> (32 - n));
+            return new Int64(low, high);
+        }
+        return new Int64(0, this.low << (n - 32));
+    }
+
+    shiftRight_n(n) {
+        n &= 63;
+        if (n === 0) return this.clone();
+        if (n < 32) {
+            const low = (this.low >>> n) | (this.high << (32 - n));
+            const high = this.high >> n;
+            return new Int64(low, high);
+        }
+        const high = this.high >> 31;
+        return new Int64(this.high >> (n - 32), high);
+    }
+
+    /**
+   * @param {Int64} b 
+   * @param {Int64} dst 
+   * @returns 
+   */
+    shiftRight(n, dst) {
+        n &= 63;
+        if (n === 0) {
+            return dst.set(this.low, this.high);
+        }
+        if (n < 32) {
+            const low = (this.low >>> n) | (this.high << (32 - n));
+            const high = this.high >> n;
+            return dst.set(low, high);
+        }
+        const high = this.high >> 31;
+        return dst.set(this.high >> (n - 32), high);
+
+    }
+
+    equals(b) {
+        return this.low === b.low && this.high === b.high;
+    }
+
+    compare(b) {
+        return this.high === b.high
+            ? (this.low >>> 0) - (b.low >>> 0)
+            : this.high - b.high;
+    }
+
+    mul_n(b) {
+        const aLow = this.low >>> 0, aHigh = this.high | 0;
+        const bLow = b.low >>> 0, bHigh = b.high | 0;
+
+        const aLowL = aLow & 0xFFFF, aLowH = aLow >>> 16;
+        const bLowL = bLow & 0xFFFF, bLowH = bLow >>> 16;
+
+        const lo = Math.imul(aLowL, bLowL);
+
+        const mid = Math.imul(aLowL, bLowH) + Math.imul(aLowH, bLowL);
+
+        let high = (mid >>> 16) + Math.imul(aLowH, bLowH);
+
+        const low = (lo + ((mid & 0xFFFF) << 16)) >>> 0;
+        high += (low < lo) ? 1 : 0;
+
+        high = (high + Math.imul(aLow, bHigh) + Math.imul(aHigh, bLow)) | 0;
+
+        return new Int64(low | 0, high);
+    }
+
+    /**
+     * @param {Int64} b 
+     * @param {Int64} dst 
+     * @returns 
+     */
+    mul(b, dst) {
+        const aLow = this.low >>> 0, aHigh = this.high | 0;
+        const bLow = b.low >>> 0, bHigh = b.high | 0;
+
+        const aLowL = aLow & 0xFFFF, aLowH = aLow >>> 16;
+        const bLowL = bLow & 0xFFFF, bLowH = bLow >>> 16;
+
+        const lo = Math.imul(aLowL, bLowL);
+
+        const mid = Math.imul(aLowL, bLowH) + Math.imul(aLowH, bLowL);
+
+        let high = (mid >>> 16) + Math.imul(aLowH, bLowH);
+
+        high += ((lo + ((mid & 0xFFFF) << 16)) >>> 0 < lo) ? 1 : 0;
+
+        dst.high = (high + Math.imul(aLow, bHigh) + Math.imul(aHigh, bLow)) | 0;
+        dst.low = (lo + ((mid & 0xFFFF) << 16)) >>> 0;
+        return dst;
+    }
+}
