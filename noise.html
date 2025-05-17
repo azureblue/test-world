@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: black;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+
+  <script type="module">
+    import { Int64 } from "./src/utils.js";
+   import {OpenSimplex2S} from "./src/noise.js"
+
+    const w = 4000;
+    const h = 4000;
+
+    const canvas = document.createElement("canvas")
+    document.body.append(canvas);
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = "800px";
+    canvas.style.height = "800px";
+    const ctx = canvas.getContext('2d');
+    const image = ctx.createImageData(canvas.width, canvas.height);
+    const seed = Int64.fromNumber(1234);
+    // Render noise
+    const scale = 0.01;
+    const now = performance.now();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+
+        const n = OpenSimplex2S.noise2(seed, x * scale, y * scale);
+        const c = Math.max(0, Math.min(255, Math.floor((n + 1) * 127.5)));
+        const i = (y * w + x) * 4;
+        image.data[i + 0] = c;
+        image.data[i + 1] = c;
+        image.data[i + 2] = c;
+        image.data[i + 3] = 255;
+      }
+    }
+
+    console.log((performance.now() - now).toFixed(2));
+
+
+    ctx.putImageData(image, 0, 0);
+  </script>
+</body>
+
+</html>
