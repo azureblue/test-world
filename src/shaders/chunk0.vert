@@ -11,7 +11,7 @@
 
 // consider calculating uvs in js
 // loshttttTTTTnnnzzzzzzzzyyyyxxxx
-//                       yyyyxxxxx
+//                      yyyyyxxxxx
 //01234567890123456789012345678901
 layout (location = 0) in uvec2 a_in;
 layout (std140) uniform Camera {
@@ -40,7 +40,6 @@ void main() {
     uint x = (a_in_bits >> 0) & b_0000_1111;
     uint z = (a_in_bits >> 4) & b_0000_1111;
     uint y = (a_in_bits >> 8) & b_1111_1111;
-
     uint normal_idx = (a_in_bits >> 16) & b_0000_0111;
     uint tex_idx = (a_in_bits >> 19) & b_1111_1111;
     uint shadow = (a_in_bits >> 27) & b_0000_0011;
@@ -51,9 +50,8 @@ void main() {
     float m_y = float(merge_bits >> 5);
 
     uint merge_vector_bits = merge_vector_bits_ar[normal_idx >> 2u] >> ((normal_idx & b_0000_0011) * 8u) & 0xFFu;
-
-    vec3 merge_vector_w = vec3(float(merge_vector_bits & 1u) + -2.0 * float(merge_vector_bits >> 1 & 1u), 0.0f, float(merge_vector_bits >> 2 & 1u) + -2.0 * float(merge_vector_bits >> 3 & 1u));
-    vec3 merge_vector_h = vec3(0.0f, float(merge_vector_bits >> 4 & 1u) + -2.0 * float(merge_vector_bits >> 5 & 1u), float(merge_vector_bits >> 6 & 1u) + -2.0 * float(merge_vector_bits >> 7 & 1u));
+    vec3 merge_vector_w = vec3(float(merge_vector_bits & 1u) -float(merge_vector_bits & 2u), 0.0f, float(merge_vector_bits >> 2 & 1u) -float(merge_vector_bits >> 2 & 2u));
+    vec3 merge_vector_h = vec3(0.0f, float(merge_vector_bits >> 4 & 1u) -float(merge_vector_bits >> 4 & 2u), float(merge_vector_bits >> 6 & 1u) -float(merge_vector_bits >> 6 & 2u));
     uint vertex_offset_bits_shifted = vertex_offset_bits >> (normal_idx * 3u);
     vec3 vertex_offset = vec3(-0.5 + float(vertex_offset_bits_shifted & 1u), -0.5 + float(vertex_offset_bits_shifted >> 1 & 1u), -0.5 + float(vertex_offset_bits_shifted >> 2 & 1u));
     vec3 pos = vec3(float(x), float(y) - float(lowered) * pixh, -float(z)) + m_translation + vertex_offset + merge_vector_w * m_x + merge_vector_h * m_y;
