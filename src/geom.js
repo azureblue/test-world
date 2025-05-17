@@ -184,6 +184,16 @@ export function ivec2(x = 0, y = 0) {
     return new IVec2(x, y);
 }
 
+/**
+ * @param {number} [x] 
+ * @param {number} [y] 
+ * @param {number} [z] 
+ * @returns {Vec3}
+ */
+export function ivec3(x = 0, y = 0, z = 0) {
+    return new IVec3(x, y, z);
+}
+
 
 export class Direction {
     static UP = 0;
@@ -240,6 +250,40 @@ export class IVec2 {
 
     set y(value) {
         this.data[1] = value;
+    }
+}
+
+export class IVec3 {
+    data = new Int32Array(3);
+
+    constructor(x, y, z) {
+        this.data[0] = x;
+        this.data[1] = y;
+        this.data[2] = z;
+    }
+
+    get x() {
+        return this.data[0];
+    }
+
+    get y() {
+        return this.data[1];
+    }
+
+    get z() {
+        return this.data[2];
+    }
+
+    set x(value) {
+        this.data[0] = value;
+    }
+
+    set y(value) {
+        this.data[1] = value;
+    }
+
+    set z(value) {
+        this.data[2] = value;
     }
 }
 
