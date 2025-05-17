@@ -145,12 +145,13 @@ export class UIntMesh {
         gl.bufferData(gl.ARRAY_BUFFER, inputData, gl.STATIC_DRAW);
         gl.vertexAttribIPointer(UIntMesh.#a_in, 2, gl.UNSIGNED_INT, false, 0, 0);
         gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
         return new UIntMesh(va, vb, translation, inputData.length >> 1);
     }
 
     static unbind() {
-        gl.bindVertexArray(null);
+        this.#gl.bindVertexArray(null);
     }
 }
 
