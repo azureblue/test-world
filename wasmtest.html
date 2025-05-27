@@ -21,8 +21,13 @@
 <body>
 
   <script type="module">
-   import { main } from "./noiseMain.js";
-   main();
+   fetch('noise.wasm')
+  .then(response => response.arrayBuffer())
+  .then(bytes => WebAssembly.instantiate(bytes))
+  .then(result => {
+    // Exported Rust function, e.g., "add"
+    console.log("noise2(1231, 1.0, 1.0):", result.instance.exports.noise2(123234214, -12.1241, 1121.586));
+  });
   </script>
 </body>
 

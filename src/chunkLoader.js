@@ -1,19 +1,20 @@
 import { ChunkDataLoader, ChunkManager, UIntChunkMesher } from "./chunk.js";
-import { PixelDataChunkGenerator } from "./generator.js";
+import { NoiseChunkGenerator, PixelDataChunkGenerator } from "./generator.js";
 import { Vec2 } from "./geom.js";
 import { ImagePixels, Logger, Resources } from "./utils.js";
-const logger = new Logger("Chunk load worker");
 const initialQueue = [];
 onmessage = (e) => {
     initialQueue.push(
         { cx: e.data.cx, cy: e.data.cy }
     );
 }
+const logger = new Logger("Chunk load worker");
 
 const heightmap = await Resources.loadImage("./images/heightmap2.png");
+// const heightmap = await Resources.loadImage("./images/test.png");
 const heightmapPixels = ImagePixels.from(heightmap);
 
-const generator = new PixelDataChunkGenerator(heightmapPixels, new Vec2(heightmapPixels.width / 2, heightmapPixels.height / 2));
+const generator = new NoiseChunkGenerator();
 const chunkLoader = new ChunkDataLoader((cx, cy) => generator.generateChunk(new Vec2(cx, cy)));
 const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
 
@@ -49,3 +50,4 @@ for (const e of initialQueue) {
 }
 
 initialQueue.length = 0;
+postMessage("ready");

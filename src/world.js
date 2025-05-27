@@ -1,6 +1,6 @@
 import { Chunk, CHUNK_SIZE_BIT_POS, ChunkData, UIntMesh } from "./chunk.js";
 import { ivec2, IVec3, ivec3, Vec2, vec2, Vec3, vec3 } from "./geom.js";
-import { Int32Buffer, Logger, UInt32Buffer } from "./utils.js";
+import { Int32Buffer, Logger, Resources, UInt32Buffer } from "./utils.js";
 const logger = new Logger("World");
 const CHUNK_RENDER_DIST = 14;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
@@ -64,17 +64,30 @@ export class World {
     /** @type {Map<number, object} */
     #chunkDataQueue = new Map();
 
+    #initialChunkRequestQueue = new Int32Buffer(1000);
+
     /**@type {ChunkLoadPromise} */
     #currentChunkPromise = null;
 
     #chunkKeysSorted;
+    #workerReady = false;
 
     /**
      * @param {Worker} chunkLoader 
      */
-    constructor(chunkLoader) {
-        this.#chunkLoader = chunkLoader;
-        this.#chunkLoader.onmessage = (me) => this.onChunk(me.data);
+    constructor() {        
+        this.#chunkLoader = new Worker(Resources.relativeToRoot("./chunkLoader.js"), { type: "module" });;
+        this.#chunkLoader.onmessage = (me) => {
+            if (me.data === "ready") {
+                this.#chunkLoader.onmessage = (me) => this.onChunk(me.data);
+                this.#workerReady = true;
+                for (let key of this.#initialChunkRequestQueue) {
+                    this.#chunkLoader.postMessage({ cx: keyToX(key), cy: keyToY(key) });
+                }
+                this.#initialChunkRequestQueue.reset(0);
+            }
+        }
+        
         const tmpBuff = new UInt32Buffer(512);
         tmpBuff.put(posToKey(0, 0));
         for (let r = 1; r < CHUNK_RENDER_DIST; r++) {
@@ -104,6 +117,15 @@ export class World {
             return (ax * ax + ay * ay) - (bx * bx + by * by);
         })
         this.#chunkKeysSorted = new Int32Buffer(this.#rangeDeltas.length);
+    }
+
+    #requestChunk(cx, cy) {
+        if (!this.#workerReady) {
+            this.#initialChunkRequestQueue.put(posToKey(cx, cy));
+        } else {
+            this.#chunkLoader.postMessage({ cx: cx, cy: cy });
+        }
+        
     }
 
     onChunk(data) {
@@ -202,7 +224,7 @@ export class World {
                 const entry = new ChunkEntry();
                 logger.info(`requesting chunk  (${cx}, ${cy})`);
                 this.#chunks.set(key, entry);
-                this.#chunkLoader.postMessage({ cx: cx, cy: cy })
+                this.#requestChunk(cx, cy);
             }
         }
         // logger.debug(`requesting new chunks time: ${perfDiff(now)}`);
