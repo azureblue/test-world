@@ -1,49 +1,68 @@
+#![crate_type = "cdylib"]
 #![no_std]
 
 const PRIME_X: i64 = 0x5205402B9270C86F;
 const PRIME_Y: i64 = 0x598CD327003817B5;
 const HASH_MULTIPLIER: i64 = 0x53A3F72DEEC546F5;
-const ROOT2OVER2: f64 = 0.7071067811865476;
 const SKEW_2D: f64 = 0.366025403784439;
 const UNSKEW_2D: f64 = -0.21132486540518713;
 const RSQUARED_2D: f32 = 2.0 / 3.0;
+
+#[no_mangle]
+pub extern "C" fn open_simplex_2_noise_octaves(
+    seed: i32,
+    x: f64,
+    y: f64,
+    mut frequency: f64,
+    octaves: u32,
+    lacunarity: f64,
+    gain: f32
+) -> f32 {
+    let mut sum = 0.0;
+    let mut amplitude = 1.0;
+    let mut total_amplitude = 0.0;
+
+    for i in 0..octaves {
+        let scaled = open_simplex_2_noise_scaled(seed + i as i32, x, y, frequency);
+        sum += scaled * amplitude;
+        total_amplitude += amplitude;
+        frequency *= lacunarity;
+        amplitude *= gain;
+    }
+    sum / total_amplitude
+}
+
+#[no_mangle]
+pub extern "C" fn open_simplex_2_noise_scaled(seed: i32, x: f64, y: f64, frequency: f64) -> f32 {
+    open_simplex_2_noise(seed, x * frequency, y * frequency)
+}
 
 /**
     2D OpenSimplex2S/SuperSimplex noise, standard lattice orientation.
 */
 #[no_mangle]
-pub extern "C" fn noise2(seed: i32, x: f64, y: f64) -> f32 {
+pub extern "C" fn open_simplex_2_noise(seed: i32, x: f64, y: f64) -> f32 {
     // Get points for A2* lattice
     let s = SKEW_2D * (x + y);
     let xs = x + s;
     let ys = y + s;
 
-    noise2_UnskewedBase(seed.into(), xs, ys)
+    normalize(open_simplex_2_noise_unskewed_base(seed.into(), xs, ys))
 }
 
-/**
-    2D OpenSimplex2S/SuperSimplex noise, with Y pointing down the main diagonal.
-    Might be better for a 2D sandbox style game, where Y is vertical.
-    Probably slightly less optimal for heightmaps or continent maps,
-    unless your map is centered around an equator. It's a slight
-    difference, but the option is here to make it easy.
-*/
-pub fn noise2_ImproveX(seed: i64, x: f64, y: f64) -> f32 {
-    // Skew transform and rotation baked into one.
-    let xx = x * ROOT2OVER2;
-    let yy = y * (ROOT2OVER2 * (1.0 + 2.0 * SKEW_2D));
-
-    noise2_UnskewedBase(seed, yy + xx, yy - xx)
+#[inline]
+pub fn normalize(v: f32) -> f32 {
+    return (v + 1.0) * 0.5;
 }
 
 /**
     2D  OpenSimplex2S/SuperSimplex noise base.
 */
-fn noise2_UnskewedBase(seed: i64, xs: f64, ys: f64) -> f32 {
+fn open_simplex_2_noise_unskewed_base(seed: i64, xs: f64, ys: f64) -> f32 {
 
     // Get base points and offsets.
-    let xsb = fastFloor(xs);
-    let ysb = fastFloor(ys);
+    let xsb = fast_floor(xs);
+    let ysb = fast_floor(ys);
     let xi = (xs - xsb as f64) as f32;
     let yi = (ys - ysb as f64) as f32;
 
@@ -215,7 +234,7 @@ static GRADIENTS_2D: [f32; 256] = [
    -16.853374757322378, 6.9808964966064915, -6.9808964966064915, 16.853374757322378
 ];
 
-fn fastFloor(x: f64) -> i64 {
+fn fast_floor(x: f64) -> i64 {
     let xi = x as i64;
     if x < xi as f64 {
         xi - 1
@@ -226,5 +245,5 @@ fn fastFloor(x: f64) -> i64 {
 
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
-    unsafe { core::arch::wasm32::unreachable() }
+    core::arch::wasm32::unreachable()
 }
