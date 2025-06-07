@@ -2,7 +2,13 @@ const wasmResult = await WebAssembly.instantiateStreaming(fetch('/src/noise/nois
 const _noiseScaledWasm = wasmResult.instance.exports.open_simplex_2_noise_scaled;
 const _noiseOctavesWasm = wasmResult.instance.exports.open_simplex_2_noise_octaves;
 
-export class Noise {
+export class NoiseGenerator {
+    gen(x, y) {
+
+    }
+}
+export class Noise extends NoiseGenerator {
+
 
     static parameters() {
         return [
@@ -37,8 +43,8 @@ export class Noise {
     }
 
     /**
-     * @param {number} seed
      * @param {Object} options
+     * @param {number} [options.seed=0]
      * @param {number} [options.octaves=1]
      * @param {number} [options.frequency=1.0]
      * @param {number} [options.lacunarity=2.0]
@@ -51,6 +57,7 @@ export class Noise {
         lacunarity = 2.0,
         gain = 0.5
     } = {}) {
+        super();
         this.seed = seed;
         this.octaves = octaves;
         this.frequency = frequency;
