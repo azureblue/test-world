@@ -1,4 +1,4 @@
-const wasmResult = await WebAssembly.instantiateStreaming(fetch('/src/noise/noise.wasm'));
+const wasmResult = await WebAssembly.instantiateStreaming(fetch('/src/noise/openSimplex2Noise.wasm'));
 const _noiseScaledWasm = wasmResult.instance.exports.open_simplex_2_noise_scaled;
 const _noiseOctavesWasm = wasmResult.instance.exports.open_simplex_2_noise_octaves;
 
@@ -7,8 +7,37 @@ export class NoiseGenerator {
 
     }
 }
-export class Noise extends NoiseGenerator {
 
+export class RandomNoise extends NoiseGenerator {
+
+    #seed;
+
+    constructor(seed) {
+        this.#seed = seed;
+    }
+
+    get(x, y) {
+        //wang_hash2d
+        let h = x;
+        h = (h ^ 61) ^ (h >>> 16);
+        h = h + (h << 3);
+        h = h ^ (h >>> 4);
+        h = h * 0x27d4eb2d;
+        h = h ^ (h >>> 15);
+    
+        h += y + this.#seed;
+        h = (h ^ 61) ^ (h >>> 16);
+        h = h + (h << 3);
+        h = h ^ (h >>> 4);
+        h = h * 0x27d4eb2d;
+        h = h ^ (h >>> 15);
+    
+        return (h >>> 0) / 0x100000000; // [0, 1)
+    }
+    
+}
+
+export class OpenSimplex2Noise extends NoiseGenerator {
 
     static parameters() {
         return [
