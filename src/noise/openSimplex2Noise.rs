@@ -59,7 +59,6 @@ pub fn normalize(v: f64) -> f64 {
     2D  OpenSimplex2S/SuperSimplex noise base.
 */
 fn open_simplex_2_noise_unskewed_base(seed: i64, xs: f64, ys: f64) -> f64 {
-
     // Get base points and offsets.
     let xsb = fast_floor(xs);
     let ysb = fast_floor(ys);
