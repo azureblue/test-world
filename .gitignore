@@ -1,7 +1,7 @@
 .gitignore
-/node_modules
-/package-lock.json
-/other
-node.js
+node_modules
+package-lock.json
+other
 start-server.sh
 .idea
+.vscode
