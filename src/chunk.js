@@ -1,7 +1,6 @@
 import { BLOCK_IDS, BLOCKS, isSolid, isSolidInt } from "./blocks.js";
 import { Direction, DirXY, Vec2, vec3, Vec3 } from "./geom.js";
 import { Array2D, Array3D, UInt32Buffer } from "./utils.js";
-
 export const CHUNK_SIZE_BIT_POS = 4 | 0;
 export const CHUNK_SIZE = 16 | 0;
 export const CHUNK_HEIGHT = 128 | 0;

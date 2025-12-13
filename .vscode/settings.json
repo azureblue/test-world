@@ -2,6 +2,110 @@
     "webgl-glsl-editor.format.placeSpaceAfterKeywords": true,
     "[glsl]": {
         "editor.inlayHints.enabled": "offUnlessPressed"
-    }
+    },
 
+    "[rust]": {
+        "editor.defaultFormatter": "statiolake.vscode-rustfmt",
+        "editor.formatOnSave": true  //optional
+    },
+
+
+    "workbench.colorCustomizations": {
+        "[Default Light Modern]": {
+            "sideBar.foreground":"#000000",
+            "editor.background":"#fffffc"
+        }
+    },
+
+    "editor.tokenColorCustomizations": {
+        "[Default Light Modern]":  {
+            "types": "#2c2a86",
+            "keywords": "#03339b",
+            "functions": "#2b869c",
+            // "variables": "#49a175",
+            "textMateRules": [
+                {
+                    "scope":"variable.other.constant",
+                    "settings": {
+                        "foreground": "#0e0e0e",
+                        
+                    }
+                },
+                {
+                    "scope":"variable.other.constant.object",
+                    "settings": {
+                        "foreground": "#242424"                        
+                    }
+                },
+                {
+                    "scope":"variable",
+                    "settings": {
+                        "foreground": "#362f88"
+                    }
+                },
+                {
+                    "scope":"variable.language.this",
+                    "settings": {
+                        "foreground": "#607ddd"
+                    }
+                },
+                {
+                    "scope":"variable.other.property",
+                    "settings": {
+                        "foreground": "#883f97"
+                    }
+                },
+                {
+                    "scope":"constant.language",
+                    "settings": {
+                        "foreground": "#882678"
+                    }
+                },
+                {
+                    "scope":"constant.numeric",
+                    "settings": {
+                        "foreground": "#5d28c0"
+                    }
+                },
+                {
+                    "scope":"entity.name.function.member",
+                    "settings": {
+                        "foreground": "#a310a8"
+                    }
+                },
+                {
+                    "scope": "keyword.operator",
+                    "settings": {
+                        "foreground": "#b91cb2"
+                    }
+                },
+                {
+                    "scope": "keyword.operator.new",
+                    "settings": {
+                        "foreground": "#5a5a5a"
+                    }
+                },
+                {
+                    "scope": "string",
+                    "settings": {
+                        "foreground": "#757575"
+                    }
+                },
+                {
+                    "scope": "storage.modifier.glsl",
+                    "settings": {
+                        "foreground": "#1f6fb1"
+                    }
+                },
+                {
+                    "scope": "comment",
+                    "settings": {
+                        "foreground": "#d3b1cb"
+                    }
+                }
+            ]
+        },
+        "[Monokai]": {
+        }
+    }
 }
