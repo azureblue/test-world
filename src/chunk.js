@@ -1,22 +1,24 @@
 import { BLOCK_IDS, BLOCKS, isSolid, isSolidInt } from "./blocks.js";
-import { Direction, DirXY, Vec2, vec3, Vec3 } from "./geom.js";
+import { Direction, DirXY, FVec2, fvec3, FVec3, IVec2, IVec3 } from "./geom.js";
 import { Array2D, Array3D, UInt32Buffer } from "./utils.js";
-export const CHUNK_SIZE_BIT_POS = 4 | 0;
-export const CHUNK_SIZE = 16 | 0;
-export const CHUNK_HEIGHT = 128 | 0;
+export const CHUNK_SIZE_BIT_POS = 5 | 0;
+export const CHUNK_SIZE = 32 | 0;
+export const CHUNK_H = 32 | 0;
+
+const CHUNK_SIZE_MASK = (CHUNK_SIZE - 1) | 0;
 const CHUNK_PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE | 0;
 
-export function posToKey(x, y) {
-    return (x + 32767) << 16 | (y + 32767);
+export function posToKey3(cx, cy, cz) {
+    return `${cx},${cy},${cz}`;
 }
 
-export function keyToX(key) {
-    return (key >>> 16) - 32767;
-}
+// export function keyToX(key) {
+//     return (key >>> 16) - 32767;
+// }
 
-export function keyToY(key) {
-    return (key & 0xFFFF) - 32767;
-}
+// export function keyToY(key) {
+//     return (key & 0xFFFF) - 32767;
+// }
 
 const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
 const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
@@ -36,7 +38,7 @@ export class ChunkData extends Array3D {
      * @param {Uint32Array} [data]
      */
     constructor(data = null) {
-        super(CHUNK_SIZE, CHUNK_HEIGHT, data);
+        super(CHUNK_SIZE, CHUNK_SIZE, data);
     }
 
     /**
@@ -45,37 +47,24 @@ export class ChunkData extends Array3D {
      * @param {number} y 
      */
     getCheck(h, x, y) {
-        if (h >= CHUNK_HEIGHT || h < 0 || x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE)
+        if (h >= CHUNK_SIZE || h < 0 || x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE)
             return BLOCK_CHUNK_EDGE;
         return this.get(h, x, y);
     }
 
     peak(x, y) {
-        for (let peek = CHUNK_HEIGHT - 1; peek > 0; peek--)
+        for (let peek = CHUNK_SIZE - 1; peek > 0; peek--)
             if (this.get(peek, x, y) !== BLOCK_EMPTY)
                 return peek;
         return 0;
     }
 
-    updateMaxHeight() {
-        for (let i = this.data.length - 1; i >= 0; i--) {
-            if (this.data[i] !== 0) {
-                this.#maxHeight = Math.floor(i / CHUNK_PLANE_SIZE) + 1;
-                return;
-            }
-        }
-        this.#maxHeight = 0;
-    }
-
-    get maxHeight() {
-        return this.#maxHeight;
-    }
 }
 
 export class UIntMeshData {
 
     /**
-    * @param {Vec3} mTranslation 
+    * @param {FVec3} mTranslation 
     * @param {Uint32Array} data 
     */
     constructor(mTranslation, data) {
@@ -100,7 +89,7 @@ export class UIntMesh {
     /**
      * @param {WebGLVertexArrayObject} va 
      * @param {WebGLBuffer} vb 
-     * @param {Vec3} translation 
+     * @param {FVec3} translation 
      * @param {number} len 
      */
     constructor(va, vb, translation, len) {
@@ -132,7 +121,7 @@ export class UIntMesh {
 
     /**
      * @param {Uint32Array} inputData
-     * @param {Vec3} translation 
+     * @param {FVec3} translation 
      */
     static load(inputData, translation) {
         const gl = UIntMesh.#gl;
@@ -154,81 +143,78 @@ export class UIntMesh {
     }
 }
 
+
 export class ChunkDataLoader {
-    /** @type {Map<number, ChunkData>} */
+    /** @type {Map<string, ChunkData>} */
     #cache = new Map();
 
-    /** @type {function(number, number): ChunkData} */
-    #generator
+    /** @type {(cx:number, cy:number, cz:number) => ChunkData} */
+    #generator;
 
-    /**
-     * @param {function(number, number): ChunkData} generator 
-     */
     constructor(generator) {
         this.#generator = generator;
     }
 
-    /**
-     * @param {number} x 
-     * @param {number} y 
-     * @returns {ChunkData}
-     */
-    async getChunk(x, y) {
-        const key = posToKey(x, y);
+    getChunkSync(cx, cy, cz) {
+        const key = posToKey3(cx, cy, cz);
         let chunkData = this.#cache.get(key);
         if (chunkData === undefined) {
-            chunkData = this.#generator(x, y);
+            chunkData = this.#generator(cx, cy, cz);
             this.#cache.set(key, chunkData);
         }
         return chunkData;
+    }
+
+    async getChunk(cx, cy, cz) {
+        return this.getChunkSync(cx, cy, cz);
     }
 }
 
 export class Chunk {
     #data
     #mesh
-    #position
+    #chunkPosition
 
-    /**@type {Vec3} */
+    /**@type {FVec3} */
     #worldCenterPosition
 
-    /**@type {Array<Vec3>} */
+    /**@type {Array<FVec3>} */
     #worldCoordCorners
 
     /** @type {Float32Array} */
     worldCornersData = new Float32Array(8 * 4);
 
     /**
-     * @param {Vec2} position 
+     * @param {IVec3} chunkPosition 
      * @param {ChunkData} data
      * @param {UIntMesh} mesh
      */
-    constructor(position, data, mesh) {
+    constructor(chunkPosition, data, mesh) {
         this.#data = data;
-        this.#data.updateMaxHeight();
-        this.#position = position
+        // this.#data.updateMaxHeight();
+        this.#chunkPosition = chunkPosition
         this.#mesh = mesh;
-        this.#worldCenterPosition = vec3(position.x * CHUNK_SIZE + CHUNK_SIZE / 2, CHUNK_HEIGHT / 2, -position.y * CHUNK_SIZE - CHUNK_SIZE / 2);
+        this.#worldCenterPosition = fvec3(chunkPosition.x * CHUNK_SIZE + CHUNK_SIZE / 2, chunkPosition.z * CHUNK_SIZE + CHUNK_SIZE / 2, -chunkPosition.y * CHUNK_SIZE - CHUNK_SIZE / 2);
         this.#updateCornersData();
     }
 
     #updateCornersData() {
-        const position = this.#position;
+        const chunkPosition = this.#chunkPosition;
         this.#worldCoordCorners = [
             /*
             0, 0
             0, 0, 0, 16, 0, 0, 16, -16, 0, 0, -16, 0
             */
             // bottom
-            new Vec3(position.x * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
-            new Vec3(position.x * CHUNK_SIZE, 0, -(position.y + 1) * CHUNK_SIZE),
+            new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
+            new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
             //top
-            new Vec3(position.x * CHUNK_SIZE, this.#data.maxHeight, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, this.#data.maxHeight, -position.y * CHUNK_SIZE),
-            new Vec3((position.x + 1) * CHUNK_SIZE, this.#data.maxHeight, -(position.y + 1) * CHUNK_SIZE),
-            new Vec3(position.x * CHUNK_SIZE, this.#data.maxHeight, -(position.y + 1) * CHUNK_SIZE)
+            new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
+            new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE)
         ];
 
         this.#worldCoordCorners.forEach((corner, idx) => {
@@ -264,7 +250,7 @@ export class Chunk {
     }
 
     get position() {
-        return this.#position;
+        return this.#chunkPosition;
     }
 
     get worldCoordCorners() {
@@ -296,25 +282,26 @@ export class ChunkManager {
         this.#chunkMesher = chunkMesher;
     }
 
-    async load(cx, cy) {
-        const position = new Vec2(cx, cy);
-        const chunks = [
-            await this.#chunkLoader.getChunk(cx - 1, cy + 1),
-            await this.#chunkLoader.getChunk(cx, cy + 1),
-            await this.#chunkLoader.getChunk(cx + 1, cy + 1),
-            await this.#chunkLoader.getChunk(cx - 1, cy),
-            await this.#chunkLoader.getChunk(cx, cy),
-            await this.#chunkLoader.getChunk(cx + 1, cy),
-            await this.#chunkLoader.getChunk(cx - 1, cy - 1),
-            await this.#chunkLoader.getChunk(cx, cy - 1),
-            await this.#chunkLoader.getChunk(cx + 1, cy - 1)
-        ];
-        const dataAdj = new BlockAdjsLoader(chunks).load();
+    async load(cx, cy, cz) {
+        const position = new IVec3(cx, cy, cz);
+        // const chunks = [
+        //     await this.#chunkLoader.getChunk(cx - 1, cy + 1),
+        //     await this.#chunkLoader.getChunk(cx, cy + 1),
+        //     await this.#chunkLoader.getChunk(cx + 1, cy + 1),
+        //     await this.#chunkLoader.getChunk(cx - 1, cy),
+        //     await this.#chunkLoader.getChunk(cx, cy),
+        //     await this.#chunkLoader.getChunk(cx + 1, cy),
+        //     await this.#chunkLoader.getChunk(cx - 1, cy - 1),
+        //     await this.#chunkLoader.getChunk(cx, cy - 1),
+        //     await this.#chunkLoader.getChunk(cx + 1, cy - 1)
+        // ];
+        // const dataAdj = new BlockAdjsLoader(chunks).load();
+        const dataAdj = new OnDemandAdj27(this.#chunkLoader, cx, cy, cz);
         const meshData = this.#chunkMesher.createMeshes(
             position, dataAdj
         );
 
-        return new ChunkSpec(chunks[4], meshData);
+        return new ChunkSpec(dataAdj.getChunkData(), meshData);
     }
 }
 
@@ -345,113 +332,179 @@ export class DataAdj {
     }
 }
 
-export class BlockAdjsLoader {
-
-    /**@type {Array<ChunkData>} */
-    #chunks
-    #x;
-    #y;
-    #h;
-
-    #cache = new Int32Array((CHUNK_HEIGHT + 2) * cachePlaneSize);
-    /**
-     * @param {Array<ChunkData>} data 
-     */
-    constructor(chunks) {
-        this.#chunks = chunks;
-        this.#cache.fill(-1);
+export class OnDemandAdj27 {
+    #loader;
+    #cx; #cy; #cz;
+  
+    // 27 slotów: (oz+1)*9 + (oy+1)*3 + (ox+1)
+    /** @type {(ChunkData|null)[]} */
+    #ch = new Array(27).fill(null);
+  
+    #h; #x; #y;
+  
+    constructor(loader, cx, cy, cz) {
+      this.#loader = loader;
+      this.#cx = cx;
+      this.#cy = cy;
+      this.#cz = cz;
+  
+      // center od razu
+      this.#ch[13] = loader.getChunkSync(cx, cy, cz); // (0,0,0) => idx 13
     }
-
+  
     setPosition(h, x, y) {
-        this.#h = h;
-        this.#x = x;
-        this.#y = y;
+      this.#h = h;
+      this.#x = x;
+      this.#y = y;
     }
-
+  
+    #idx(ox, oy, oz) {
+      return (oz + 1) * 9 + (oy + 1) * 3 + (ox + 1);
+    }
+  
+    #getChunk(ox, oy, oz) {
+      const idx = this.#idx(ox, oy, oz);
+      let c = this.#ch[idx];
+      if (c !== null) return c;
+      c = this.#loader.getChunkSync(this.#cx + ox, this.#cy + oy, this.#cz + oz);
+      this.#ch[idx] = c;
+      return c;
+    }
+  
     get(dh, dx, dy) {
-        let px = this.#x + dx;
-        let py = this.#y + dy;
-        const h = this.#h + dh;
-        const cachePos = cacheStartIdx + h * cachePlaneSize + py * cacheRowSize + px;
-        let cacheData = this.#cache[cachePos];
-        if (cacheData != -1)
-            return cacheData;
-        if (h < 0 || h >= CHUNK_HEIGHT)
-            return BLOCK_CHUNK_EDGE;
-        let chunk = 4;
-        if (px < 0) {
-            px += CHUNK_SIZE;
-            chunk -= 1;
-        } else if (px >= CHUNK_SIZE) {
-            px -= CHUNK_SIZE;
-            chunk += 1;
-        }
-        if (py < 0) {
-            py += CHUNK_SIZE;
-            chunk += 3;
-        } else if (py >= CHUNK_SIZE) {
-            py -= CHUNK_SIZE;
-            chunk -= 3;
-        }
-        cacheData = this.#chunks[chunk].get(h, px, py);
-        this.#cache[cachePos] = cacheData;
-        return cacheData;
+      let h = this.#h + dh;
+      let x = this.#x + dx;
+      let y = this.#y + dy;
+  
+      let oz = 0, ox = 0, oy = 0;
+  
+      // pion
+      if (h < 0) { h += CHUNK_H; oz = -1; }
+      else if (h >= CHUNK_H) { h -= CHUNK_H; oz = 1; }
+  
+      // X
+      if (x < 0) { x += CHUNK_SIZE; ox = -1; }
+      else if (x >= CHUNK_SIZE) { x -= CHUNK_SIZE; ox = 1; }
+  
+      // Y (Twoje “planarne Y”, które mapujesz na world Z)
+      if (y < 0) { y += CHUNK_SIZE; oy = -1; }
+      else if (y >= CHUNK_SIZE) { y -= CHUNK_SIZE; oy = 1; }
+  
+      return this.#getChunk(ox, oy, oz).get(h, x, y);
     }
 
-    getAbsolute(h, px, py) {
-        // if (h < 0 || h >= CHUNK_HEIGHT)
-        //     return BLOCK_CHUNK_EDGE;
-        let chunk = 4;
-        if (px < 0) {
-            px += CHUNK_SIZE;
-            chunk -= 1;
-        } else if (px >= CHUNK_SIZE) {
-            px -= CHUNK_SIZE;
-            chunk += 1;
-        }
-        if (py < 0) {
-            py += CHUNK_SIZE;
-            chunk += 3;
-        } else if (py >= CHUNK_SIZE) {
-            py -= CHUNK_SIZE;
-            chunk -= 3;
-        }
-
-        return this.#chunks[chunk].get(h, px, py);
+    getChunkData() {
+        return this.#ch[13];
     }
+  }
 
-    load() {
-        const row = new Uint32Array(CHUNK_SIZE);
-        const arr3d = new Array3D(CHUNK_SIZE + 2, CHUNK_HEIGHT + 2);
-        const ch = this.#chunks[4];
-        arr3d.fill(BLOCKS.BLOCK_CHUNK_EDGE);
-        for (let h = 0; h < CHUNK_HEIGHT; h++)
-            for (let y = 0; y < CHUNK_SIZE; y++) {
-                ch.fetch(h, 0, y, row, CHUNK_SIZE);
-                arr3d.put(h + 1, 1, y + 1, row, CHUNK_SIZE);
-            }
+// export class BlockAdjsLoader {
 
-        const leftChunk = this.#chunks[3];
-        const rightChunk = this.#chunks[5];
-        const upChunk = this.#chunks[1];
-        const downChunk = this.#chunks[7];
+//     /**@type {Array<ChunkData>} */
+//     #chunks
+//     #x;
+//     #y;
+//     #h;
 
-        for (let h = 0; h < CHUNK_HEIGHT; h++) {
-            for (let i = 0; i < CHUNK_SIZE; i++) {
-                arr3d.set(h + 1, 0, i + 1, leftChunk.get(h, 15, i));
-                arr3d.set(h + 1, 17, i + 1, rightChunk.get(h, 0, i));
-                arr3d.set(h + 1, i + 1, 0, downChunk.get(h, i, 15));
-                arr3d.set(h + 1, i + 1, 17, upChunk.get(h, i, 0));
-            }
-            arr3d.set(h + 1, 0, 0, this.getAbsolute(h, -1, -1));
-            arr3d.set(h + 1, 17, 0, this.getAbsolute(h, 16, -1));
-            arr3d.set(h + 1, 17, 17, this.getAbsolute(h, 16, 16));
-            arr3d.set(h + 1, 0, 17, this.getAbsolute(h, -1, 16));
-        }
+//     #cache = new Int32Array((CHUNK_SIZE + 2) * cachePlaneSize);
+//     /**
+//      * @param {Array<ChunkData>} data 
+//      */
+//     constructor(chunks) {
+//         this.#chunks = chunks;
+//         this.#cache.fill(-1);
+//     }
 
-        return new DataAdj(arr3d);
-    }
-}
+//     setPosition(h, x, y) {
+//         this.#h = h;
+//         this.#x = x;
+//         this.#y = y;
+//     }
+
+//     get(dh, dx, dy) {
+//         let px = this.#x + dx;
+//         let py = this.#y + dy;
+//         const h = this.#h + dh;
+//         const cachePos = cacheStartIdx + h * cachePlaneSize + py * cacheRowSize + px;
+//         let cacheData = this.#cache[cachePos];
+//         if (cacheData != -1)
+//             return cacheData;
+//         if (h < 0 || h >= CHUNK_HEIGHT)
+//             return BLOCK_CHUNK_EDGE;
+//         let chunk = 4;
+//         if (px < 0) {
+//             px += CHUNK_SIZE;
+//             chunk -= 1;
+//         } else if (px >= CHUNK_SIZE) {
+//             px -= CHUNK_SIZE;
+//             chunk += 1;
+//         }
+//         if (py < 0) {
+//             py += CHUNK_SIZE;
+//             chunk += 3;
+//         } else if (py >= CHUNK_SIZE) {
+//             py -= CHUNK_SIZE;
+//             chunk -= 3;
+//         }
+//         cacheData = this.#chunks[chunk].get(h, px, py);
+//         this.#cache[cachePos] = cacheData;
+//         return cacheData;
+//     }
+
+//     getAbsolute(h, px, py) {
+//         // if (h < 0 || h >= CHUNK_HEIGHT)
+//         //     return BLOCK_CHUNK_EDGE;
+//         let chunk = 4;
+//         if (px < 0) {
+//             px += CHUNK_SIZE;
+//             chunk -= 1;
+//         } else if (px >= CHUNK_SIZE) {
+//             px -= CHUNK_SIZE;
+//             chunk += 1;
+//         }
+//         if (py < 0) {
+//             py += CHUNK_SIZE;
+//             chunk += 3;
+//         } else if (py >= CHUNK_SIZE) {
+//             py -= CHUNK_SIZE;
+//             chunk -= 3;
+//         }
+
+//         return this.#chunks[chunk].get(h, px, py);
+//     }
+
+//     load() {
+//         const row = new Uint32Array(CHUNK_SIZE);
+//         const arr3d = new Array3D(CHUNK_SIZE + 2, CHUNK_HEIGHT + 2);
+//         const ch = this.#chunks[4];
+//         arr3d.fill(BLOCKS.BLOCK_CHUNK_EDGE);
+//         for (let h = 0; h < CHUNK_HEIGHT; h++)
+//             for (let y = 0; y < CHUNK_SIZE; y++) {
+//                 ch.fetch(h, 0, y, row, CHUNK_SIZE);
+//                 arr3d.put(h + 1, 1, y + 1, row, CHUNK_SIZE);
+//             }
+
+//         const leftChunk = this.#chunks[3];
+//         const rightChunk = this.#chunks[5];
+//         const upChunk = this.#chunks[1];
+//         const downChunk = this.#chunks[7];
+
+//         for (let h = 0; h < CHUNK_HEIGHT; h++) {
+//             for (let i = 0; i < CHUNK_SIZE; i++) {
+//                 arr3d.set(h + 1, 0, i + 1, leftChunk.get(h, 15, i));
+//                 arr3d.set(h + 1, 17, i + 1, rightChunk.get(h, 0, i));
+//                 arr3d.set(h + 1, i + 1, 0, downChunk.get(h, i, 15));
+//                 arr3d.set(h + 1, i + 1, 17, upChunk.get(h, i, 0));
+//             }
+//             arr3d.set(h + 1, 0, 0, this.getAbsolute(h, -1, -1));
+//             arr3d.set(h + 1, 17, 0, this.getAbsolute(h, 16, -1));
+//             arr3d.set(h + 1, 17, 17, this.getAbsolute(h, 16, 16));
+//             arr3d.set(h + 1, 0, 17, this.getAbsolute(h, -1, 16));
+//         }
+
+//         return new DataAdj(arr3d);
+//     }
+// }
 
 export class UIntChunkMesher {
 
@@ -475,7 +528,7 @@ export class UIntChunkMesher {
     ]);
 
     /*
-       fshttttTTTTnnnzzzzzzzzxxxxyyyy
+       fshttttTTTTnnn_zzzzzxxxxxyyyyy
      01234567890123456789012345678901
     */
 
@@ -495,7 +548,7 @@ export class UIntChunkMesher {
         const corner2Shadow = (shadows >> 4) & 0b11;
         const corner3Shadow = (shadows >> 6) & 0b11;
         const mergeBitsWidth = width;
-        const mergeBitsHeight = height << 5;        
+        const mergeBitsHeight = height << 6;
         const flip = corner0Shadow + corner2Shadow > corner1Shadow + corner3Shadow;
         let lower = 0;
         if (textureId == BLOCK_WATER && direction == Direction.UP)
@@ -508,9 +561,9 @@ export class UIntChunkMesher {
             | (lower << 29)
             | ((textureId & 0b11111111) << 19)
             | ((dirBits & 0b111) << 16)
-            | ((h & 0b11111111) << 8)
-            | ((y & 0b1111) << 4)
-            | ((x & 0b1111));
+            | ((h & 0b11111) << 10)
+            | ((y & 0b11111) << 5)
+            | ((x & 0b11111));
 
         if (flip) {
             this.#tmpArr[0 * 2] = bits | (corner1Shadow << 27);
@@ -576,12 +629,12 @@ export class UIntChunkMesher {
     }
 
     /**
-     * @param {Vec2} position 
-     * @param {DataAdj} adj
+     * @param {IVec3} position 
+     * @param {OnDemandAdj27} adj
      * 
      * @returns {UIntMeshData}
      */
-    createMeshes(position, adj) {
+    createMeshes(position, adj) {        
         this.#bufferSolid.reset();
         this.#bufferWater.reset();
         const now = performance.now();
@@ -599,7 +652,7 @@ export class UIntChunkMesher {
         let topRow = this.#topRow;
         let currentRow = this.#currentRow;
 
-        for (let h = 0; h < CHUNK_HEIGHT; h++) {
+        for (let h = 0; h < CHUNK_SIZE; h++) {
             upLayer.fill(0);
             downLayer.fill(0);
             const topLayer = h & 1;
@@ -616,7 +669,7 @@ export class UIntChunkMesher {
                         continue;
 
                     if (blockId == 8) {
-                        this.#grasslike.put(blockId << 16 | h << 8 | y << 4 | x);
+                        this.#grasslike.put(blockId << 16 | h << 10 | y << 5 | x);
                         continue;
                     }
 
@@ -737,7 +790,7 @@ export class UIntChunkMesher {
 
             const layerLen = CHUNK_SIZE * CHUNK_SIZE;
             const layersCurrentData = layersCurrent.data;
-            const layersTopData = layersTop.data;
+            const layersTopData = layersTop.data;            
 
             for (let dir = 1; dir < 5; dir++) {
                 const layerStartIdx = layersCurrent.planeIdx(dir);
@@ -772,11 +825,11 @@ export class UIntChunkMesher {
                         continue;
                     const topH = top >> 24;
                     let cur = layersCurrentData[layerStartIdx + i];
-                    if ((top & 0x00FFFFFF) == (cur & 0x00FFFFFF) && topH < 16) {
+                    if ((top & 0x00FFFFFF) == (cur & 0x00FFFFFF) && topH < CHUNK_SIZE) {
                         layersCurrentData[layerStartIdx + i] = (cur & 0x00FFFFFF) | ((topH + 1) << 24);
                     } else {
-                        let x = i & 0xF;
-                        let y = i >> 4;
+                        let x = i & CHUNK_SIZE_MASK;
+                        let y = i >> CHUNK_SIZE_BIT_POS;
 
                         this.#addFace(top & 0xFFFF, h - topH,
                             dirXXAdd + dirXXMul * x + dirXYMul * y,
@@ -835,12 +888,12 @@ export class UIntChunkMesher {
         }
 
         const layerLen = CHUNK_SIZE * CHUNK_SIZE;
-        const layersTop = this.#sideLayers[CHUNK_HEIGHT & 1];
+        const layersTop = this.#sideLayers[CHUNK_SIZE & 1];
         const layersTopData = layersTop.data;
 
-        for (let dir = 0; dir < 4; dir++) {
+        for (let dir = 0; dir < 5; dir++) {
             const layerStartIdx = layersTop.planeIdx(dir);
-            const dirEncodeBaseIdx = dir * 6;
+            const dirEncodeBaseIdx = dir * 8;
             const dirXXMul = this.#directionEncode[dirEncodeBaseIdx];
             const dirXYMul = this.#directionEncode[dirEncodeBaseIdx + 1];
             const dirXXAdd = this.#directionEncode[dirEncodeBaseIdx + 2];
@@ -853,9 +906,9 @@ export class UIntChunkMesher {
                 if (top === 0)
                     continue;
                 const topH = top >> 24;
-                let x = i & 0xF;
-                let y = i >> 4;
-                this.#addFace(top & 0xFFFF, CHUNK_HEIGHT - topH,
+                let x = i & CHUNK_SIZE_MASK;
+                let y = i >> CHUNK_SIZE_BIT_POS;
+                this.#addFace(top & 0xFFFF, CHUNK_SIZE - topH,
                     dirXXAdd + dirXXMul * x + dirXYMul * y,
                     dirYYAdd + dirYXMul * x + dirYYMul * y,
                     dir, (top >> 16) & 0xFF, topH);
@@ -865,9 +918,9 @@ export class UIntChunkMesher {
         const meshTime = performance.now() - now;
         for (let g of this.#grasslike) {
             //blockId << 16 | h << 8 | y << 4 | x
-            const x = g & 0xF;
-            const y = (g >> 4) & 0xF;
-            const h = (g >> 8) & 0xFF;
+            const x = g & 0x1F;
+            const y = (g >> 5) & 0x1F;
+            const h = (g >> 10) & 0x1F;
             const blockId = (g >> 16) & 0xFFFF;
             this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_0, 1, 1);
             this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_0, 1, 1, true);
@@ -880,7 +933,7 @@ export class UIntChunkMesher {
         resultData.set(solids);
         resultData.set(waters, solids.length);
         // console.log(meshTime);
-        return new UIntMeshData(new Vec3(position.x * CHUNK_SIZE + 0.5, 0.5, -position.y * CHUNK_SIZE - 0.5),
+        return new UIntMeshData(new FVec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
             resultData);
     }
 }

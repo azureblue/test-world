@@ -1,6 +1,6 @@
 import { Camera, FrustumCuller } from "./camera.js";
 import { UIntMesh } from "./chunk.js";
-import { Projection, Vec3, mat4, vec3 } from "./geom.js";
+import { Projection, FVec3, mat4, fvec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { FPSCounter } from "./perf.js";
 import { TextureArray } from "./textures.js";
@@ -115,12 +115,12 @@ export async function start() {
 
     const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
 
-    world.moveTo(0, 0);
+    world.moveTo(0, 0, 1);
     world.update();
 
     const currentChunk = await world.getCurrentChunk();
     const peek = currentChunk.peek(0, 0);
-    const camera = new Camera(new Vec3(0, peek + 2, 0));
+    const camera = new Camera(new FVec3(0, peek + 2, 0));
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     const cameraSpeed = 0.5;
@@ -205,7 +205,7 @@ export async function start() {
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.pos.offset, camera.position._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-        world.moveTo(camera.position.x, camera.position.z);
+        world.moveTo(camera.position.x, camera.position.z, camera.position.y);
 
         frustumCuller.updatePlanes();
         let allChunks = 0;
@@ -231,10 +231,11 @@ export async function start() {
         const pos = camera.position;
         const dir = camera.direction;
 
-        const out = world.raycasti(pos, dir, 5);
+        // const out = world.raycasti(pos, dir, 5);
+        const out = null;
             if (out !== null) {
                 // gl.disable(gl.DEPTH_TEST);
-                world.blockAtWorldIPos(vec3(out.x, out.y, out.z));
+                world.blockAtWorldIPos(fvec3(out.x, out.y, out.z));
                 // console.log(out.value);
                 gl.useProgram(blockHighlightProgram.program);
                 gl.bindBuffer(gl.ARRAY_BUFFER, bhBuffer);
