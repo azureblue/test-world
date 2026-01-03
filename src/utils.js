@@ -41,7 +41,6 @@ export class DataBuffer {
 
     #extendSize() {
         const tmp = this.array;
-        this.array.slice;
         this.array = new this.array.constructor(tmp.length * 2);
         this.array.set(tmp);
     }
@@ -76,6 +75,15 @@ export class Float32Buffer extends DataBuffer {
      */
     constructor(initialSize) {
         super(Float32Array, initialSize);
+    }
+}
+
+export class Float64Buffer extends DataBuffer {
+    /**
+     * @param {number} [initialSize]
+     */
+    constructor(initialSize) {
+        super(Float64Array, initialSize);
     }
 }
 
@@ -127,6 +135,87 @@ export class Resources {
         return this.#ROOT + src;
     }
 }
+
+/**
+ * @template T
+ */
+export class GenericBuffer {
+    #pos
+    array
+
+    /**
+     * @param {number} initialSize 
+     */
+    constructor(ArrayClass, initialSize) {
+        this.#pos = 0;
+        if (initialSize === undefined)
+            initialSize = 4;
+        this.array = new Array(initialSize);
+    }
+
+    /**
+     * @param {ArrayLike<T>} elements 
+     */
+    add(elements) {
+        if (this.array.length - this.#pos < elements.length) {
+            this.#extendSize();
+            this.add(elements);
+        } else {
+            this.array.set(elements, this.#pos);
+            this.#pos += elements.length;
+        }
+    }
+
+    /**
+     * @param {number} elements 
+     */
+    put(element) {
+        if (this.array.length - this.#pos < 1) {
+            this.#extendSize();
+            this.put(element);
+        } else {
+            this.array[this.#pos] = element;
+            this.#pos++;
+        }
+    }
+
+    #extendSize() {
+        this.array.length = this.array.length * 2;
+    }
+
+    /**
+     * @returns {Array<T>}
+     */
+    trimmed() {
+        return this.array.slice(0, this.#pos);
+    }
+
+    reset(size = 0) {
+        this.#pos = 0;
+        if (size !== 0) {
+            this.array.length = size;
+        }
+    }
+
+    /**
+     * @generator
+     * @yields {T} - Iterates over the elements in the buffer.
+     */
+    *[Symbol.iterator]() {
+        for (let i = 0; i < this.#pos; i++)
+            yield this.array[i];
+    }
+
+    /** @returns {T} */
+    get(idx) {
+        return this.array[idx];
+    }
+
+    get length() {
+        return this.#pos;
+    }
+}
+
 
 export class ImagePixels {
 

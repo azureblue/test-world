@@ -1,19 +1,19 @@
 import { Chunk } from "./chunk.js";
-import { Frustum, FrustumPlanes, Mat4, Vec2, Vec3, vec3 } from "./geom.js";
+import { Frustum, FrustumPlanes, Mat4, FVec2, FVec3, fvec3 } from "./geom.js";
 
 class Camera {
-    #position = new Vec3(0, 0, 0);
-    #up = new Vec3(0, 0, 0);
-    #lookingAt = new Vec3(0, 0, 0);
-    #right = new Vec3(0, 0, 0);
-    #direction = new Vec3(1, 0, 0);
-    #directionXZ = new Vec2(1, 0,);
+    #position = new FVec3(0, 0, 0);
+    #up = new FVec3(0, 0, 0);
+    #lookingAt = new FVec3(0, 0, 0);
+    #right = new FVec3(0, 0, 0);
+    #direction = new FVec3(1, 0, 0);
+    #directionXZ = new FVec2(1, 0,);
     #yaw = 0; #pitch = 0;
 
-    static #DIRECTION_UP = new Vec3(0.0, 1.0, 0.0);
+    static #DIRECTION_UP = new FVec3(0.0, 1.0, 0.0);
 
     /**
-     * @param {Vec3} position 
+     * @param {FVec3} position 
      */
     constructor(position) {
         this.#position.set(...position);
@@ -47,9 +47,9 @@ class Camera {
         this.#direction.z = Math.sin(yawRads) * cosPitch;
         this.#directionXZ.x = Math.cos(yawRads);
         this.#directionXZ.y = Math.sin(yawRads);
-        Vec3.cross(this.#direction, Camera.#DIRECTION_UP, this.#right);
+        FVec3.cross(this.#direction, Camera.#DIRECTION_UP, this.#right);
         this.#right.normalizeInPlace();
-        Vec3.cross(this.#right, this.#direction, this.#up);
+        FVec3.cross(this.#right, this.#direction, this.#up);
         this.#up.normalizeInPlace();
     }
 
@@ -79,27 +79,27 @@ class Camera {
         Mat4.lookAt(this.#position, this.#lookingAt, this.#up, mat);
     }
 
-    /**@returns {Vec3} */
+    /**@returns {FVec3} */
     get position() {
         return this.#position;
     }
 
-    /**@returns {Vec3} */
+    /**@returns {FVec3} */
     get direction() {
         return this.#direction;
     }
 
-    /**@returns {Vec2} */
+    /**@returns {FVec2} */
     get directionXZ() {
         return this.#directionXZ;
     }
 
-    /**@returns {Vec3} */
+    /**@returns {FVec3} */
     get right() {
         return this.#right;
     }
 
-    /**@returns {Vec3} */
+    /**@returns {FVec3} */
     get up() {
         return this.#up;
     }
@@ -119,8 +119,8 @@ class FrustumCuller {
     #planes = new FrustumPlanes();
     #frustum;
     #camera;
-    #posToFar = vec3();
-    #tmp = vec3();
+    #posToFar = fvec3();
+    #tmp = fvec3();
 
     /**
      * @param {Frustum} frustum 
@@ -150,19 +150,19 @@ class FrustumCuller {
         this.#planes.far.direction.setTo(camDir).mulByScalarInPlace(-1.0);
 
         tmp.setTo(farMid).addMulInPlace(camRight, -farHalfH);
-        Vec3.cross(tmp, camUp, this.#planes.left.direction);
+        FVec3.cross(tmp, camUp, this.#planes.left.direction);
         this.#planes.left.direction.normalizeInPlace();
 
         tmp.setTo(farMid).addMulInPlace(camRight, farHalfH);
-        Vec3.cross(camUp, tmp, this.#planes.right.direction);
+        FVec3.cross(camUp, tmp, this.#planes.right.direction);
         this.#planes.right.direction.normalizeInPlace();
 
         tmp.setTo(farMid).addMulInPlace(camUp, farHalfV);
-        Vec3.cross(tmp, camRight, this.#planes.top.direction);
+        FVec3.cross(tmp, camRight, this.#planes.top.direction);
         this.#planes.top.direction.normalizeInPlace();
 
         tmp.setTo(farMid).addMulInPlace(camUp, -farHalfV);
-        Vec3.cross(camRight, tmp, this.#planes.bottom.direction);
+        FVec3.cross(camRight, tmp, this.#planes.bottom.direction);
         this.#planes.bottom.direction.normalizeInPlace();
     }
 

@@ -1,5 +1,6 @@
 // import { Noise } from "./src/noise_old.js";
 import { OpenSimplex2Noise } from "./src/noise/noise.js";
+import { Generator02, NoiseChunkGenerator } from "./src/gen/generator.js";
 
 export function main() {
     const w = 4000;

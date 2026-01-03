@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generic Layer Editor</title>
+  <style>
+    .noselect {
+      user-select: none;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 400px;
+      height: 400px;
+      border: 1px solid lightgray;
+      margin: 1px;
+    }
+
+  </style>
+</head>
+
+<body>
+  <canvas width="400" height="400" id="canvas0"></canvas>
+  <canvas width="400" height="400" id="canvas1"></canvas>
+  <canvas width="400" height="400" id="canvas2"></canvas>
+
+  <script type="module">
+    import { main } from "./curvetest.js";
+    main();
+  </script>
+</body>
+
+</html>

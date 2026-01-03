@@ -1,10 +1,11 @@
-import { blend, BLEND_MODE, createBlend } from "../blend.js";
+import { blend, BLEND_MODE } from "../blend.js";
 import { BLOCK_IDS } from "../blocks.js";
-import { CHUNK_HEIGHT, CHUNK_SIZE, ChunkData, posToKey } from "../chunk.js";
-import { Vec2 } from "../geom.js";
+import { CHUNK_SIZE, ChunkData } from "../chunk.js";
+import { Vec2, Vec3 } from "../geom.js";
 import { OpenSimplex2Noise } from "../noise/noise.js";
 import { ImagePixels } from "../utils.js";
-import { CurveNode, GenericNode, GenNode, LinearCurve, point } from "./node.js";
+import { LinearCurve, point } from "./curve.js";
+import { CurveNode, GenericNode, GenNode } from "./node.js";
 
 
 export class PixelDataChunkGenerator {
@@ -39,6 +40,7 @@ export class PixelDataChunkGenerator {
                 const px = startX + x * this.#ppv;
                 const py = startY + y * this.#ppv;
                 const ry = CHUNK_SIZE - y - 1;
+                
                 // if ((x + y) % 2 == 1) {
                 //     for (let a = 0; a < 10; a++) {
                 //         chunk.set(a, x, ry, BLOCK_IDS.GRASS);
@@ -109,52 +111,68 @@ export class RandomDataChunkGenerator {
         return chunk;
     }
 }
-
+const MAX_HEIGHT = 1000;
 export class NoiseChunkGenerator {
 
     #noise = new OpenSimplex2Noise({
-        frequency: 0.005,
+        frequency: 0.003,
+        gain: 0.7,
         octaves: 5
     });
-    
+
     constructor() {
     }
 
     /**
-     * @param {Vec2} chunkPos
+     * @param {Vec3} chunkPos
      */
     generateChunk(chunkPos) {
         const chunk = new ChunkData();
+        // if (chunkPos.z !== 0) {
+        //     return chunk;
+        // }
         const startX = (chunkPos.x * CHUNK_SIZE);
         const startY = ((-chunkPos.y - 1) * CHUNK_SIZE);
+        // if (startX != 0 || startY != 0) {
+        //      return chunk;
+        // }
 
         for (let y = 0; y < CHUNK_SIZE; y++)
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 const rx = x; //CHUNK_SIZE - x - 1;
                 const ry = CHUNK_SIZE - y - 1;
-                let height = Math.floor(this.#noise.octaveNoise(x + startX, y + startY) * 127);
+                let height = Math.floor(this.#noise.octaveNoise(x + startX, y + startY) * MAX_HEIGHT);
                 if (height == 0)
                     height = 1;
-                const dirtLayer = Math.max(0, 10 - Math.floor((10 / 58) * height));
 
-                for (let r = 0; r < height - dirtLayer; r++) {
-                    chunk.set(r, rx, ry, BLOCK_IDS.ROCK);
+                const chunkStartH = chunkPos.z * CHUNK_SIZE;
+                const chunkEndH = chunkStartH + CHUNK_SIZE;
+
+                const dirtLayer = Math.max(0, 20 - Math.floor((10 / 58) * height));
+
+                for (let z = Math.max(0, chunkStartH); z < Math.min(chunkEndH, height - dirtLayer); z++) {
+                    chunk.set(z - chunkStartH, rx, ry, BLOCK_IDS.ROCK);
                 }
-                for (let e = height - dirtLayer; e < height - 1; e++) {
-                    chunk.set(e, rx, ry, BLOCK_IDS.DIRT);
+
+                for (let z = Math.max(height - dirtLayer, chunkStartH); z < Math.min(chunkEndH, height); z++) {
+                    chunk.set(z - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
                 }
+
                 if (dirtLayer > 0) {
-                    chunk.set(height - 1, rx, ry, BLOCK_IDS.DIRT_GRASS);
-                    if (Math.random() < 0.02 && height < CHUNK_HEIGHT - 1) {
-                        chunk.set(height, rx, ry, BLOCK_IDS.GRASS_SHORT);
+                    if (height >= chunkStartH - 1 && height < chunkEndH) {
+                        chunk.set(height - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
+
+                        if (Math.random() < 0.02 && height < MAX_HEIGHT - 1) {
+                            chunk.set(height - chunkStartH, rx, ry, BLOCK_IDS.GRASS_SHORT);
+                        }
                     }
-                }
+                } 
                 // if (Math.random() < 0.1)
                 //     chunk.set(height, x, ry, BLOCK_IDS.ROCK);
 
-                for (let w = height; w < 30; w++) {
-                    if (chunk.get(w, rx, ry) == BLOCK_IDS.EMPTY)
-                        chunk.set(w, rx, ry, BLOCK_IDS.WATER);
+                for (let w = Math.max(height, chunkStartH); w < Math.min(30, chunkEndH); w++) {
+                    if (chunk.get(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
+                        chunk.set(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
                 }
             }
         return chunk;
@@ -264,9 +282,9 @@ export class FunctionChunkGenerator {
 //                 this.#curve3.apply(this.#noise3.octaveNoise(x, y))),
 //                 this.#curve4.apply(this.#noise4.octaveNoise(x, y)))
 //         );
-        
+
 //         let a = {
-            
+
 //         }
 
 //     }
@@ -278,58 +296,58 @@ export class Generator02 extends FunctionChunkGenerator {
     constructor() {
         super();
         const scale = 1;
-            const node0 = new GenericNode([], {
-                gen: new OpenSimplex2Noise({
-                    frequency: 0.01 * scale,
-                    octaves: 4
-                })
-            }, (values, data, x, y) => data.gen.gen(x, y));
-        
-            const node1 = new GenericNode([node0], {
-                gen: new OpenSimplex2Noise({
-                    seed: 123,
-                    frequency: 0.003 * scale,
-                    octaves: 4
-                })
-            }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_MODE.NORMAL, 0.5));
-        
-           
-               const riverNode = new GenNode(
-                   new OpenSimplex2Noise({
-                       seed: 1223357,
-                       frequency: 0.001 * scale,
-                       octaves: 2
-                   }));
-           
-               const riverWidthNode = new CurveNode(
-                   new GenNode(new OpenSimplex2Noise({
-                       seed: 123,
-                       frequency: 0.003 * scale,
-                       octaves: 2
-                   })),
-                   new LinearCurve([point(0, 0.0), point(1, 1)])
-               );
-           
-               const riverCurveNode = new GenericNode([riverNode, riverWidthNode],
-                   {
-                       wideCurve: new LinearCurve([point(0.4, 1), point(0.495, 0.01), point(0.5005, 0.01), point(0.6, 1)]),
-                       curve: new LinearCurve([point(0, 0), point(0.4, 1)])
-                   }, (srcValues, data, x, y) => {
-                       const spread = 0.01 * srcValues[1];
-                       const spread2 = 0.3 * srcValues[1];
-                       data.wideCurve.points[1].x = 0.5 - spread / 2;
-                       data.wideCurve.points[2].x = 0.5 + spread / 2;
-                       data.wideCurve.points[0].x = 0.45 - spread2 / 2;
-                       data.wideCurve.points[3].x = 0.55 + spread2 / 2;
-                       return data.curve.apply(data.wideCurve.apply(srcValues[0]));
-                   }
-               )
-        
-            const mergeNode = new GenericNode([node1, riverCurveNode], {}, (values) => {
-                return values[0] * values[1];
-            });
+        const node0 = new GenericNode([], {
+            gen: new OpenSimplex2Noise({
+                frequency: 0.01 * scale,
+                octaves: 4
+            })
+        }, (values, data, x, y) => data.gen.gen(x, y));
 
-        this.setFunc((x, y) => mergeNode.gen(x, y, posToKey(x, y))
+        const node1 = new GenericNode([node0], {
+            gen: new OpenSimplex2Noise({
+                seed: 123,
+                frequency: 0.003 * scale,
+                octaves: 4
+            })
+        }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_MODE.NORMAL, 0.5));
+
+
+        const riverNode = new GenNode(
+            new OpenSimplex2Noise({
+                seed: 1223357,
+                frequency: 0.001 * scale,
+                octaves: 2
+            }));
+
+        const riverWidthNode = new CurveNode(
+            new GenNode(new OpenSimplex2Noise({
+                seed: 123,
+                frequency: 0.003 * scale,
+                octaves: 2
+            })),
+            new LinearCurve([point(0, 0.0), point(1, 1)])
+        );
+
+        const riverCurveNode = new GenericNode([riverNode, riverWidthNode],
+            {
+                wideCurve: new LinearCurve([point(0.4, 1), point(0.495, 0.01), point(0.5005, 0.01), point(0.6, 1)]),
+                curve: new LinearCurve([point(0, 0), point(0.4, 1)])
+            }, (srcValues, data, x, y) => {
+                const spread = 0.01 * srcValues[1];
+                const spread2 = 0.3 * srcValues[1];
+                data.wideCurve.points[1].x = 0.5 - spread / 2;
+                data.wideCurve.points[2].x = 0.5 + spread / 2;
+                data.wideCurve.points[0].x = 0.45 - spread2 / 2;
+                data.wideCurve.points[3].x = 0.55 + spread2 / 2;
+                return data.curve.apply(data.wideCurve.apply(srcValues[0]));
+            }
+        )
+
+        const mergeNode = new GenericNode([node1, riverCurveNode], {}, (values) => {
+            return values[0] * values[1];
+        });
+
+        this.setFunc((x, y) => mergeNode.gen(x, y, 0)
         );
 
     }
