@@ -425,7 +425,6 @@ export class World {
     }
 
     /**
- * @param {BlockLocation} blockLocation 
  * @param {FVec3} pos 
  */
     blockAtPos(pos) {
