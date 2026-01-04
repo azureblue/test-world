@@ -111,12 +111,12 @@ export class RandomDataChunkGenerator {
         return chunk;
     }
 }
-const MAX_HEIGHT = 1000;
+const MAX_HEIGHT = 256;
 export class NoiseChunkGenerator {
 
     #noise = new OpenSimplex2Noise({
         frequency: 0.003,
-        gain: 0.7,
+        gain: 0.5,
         octaves: 5
     });
 
@@ -170,10 +170,10 @@ export class NoiseChunkGenerator {
                 // if (Math.random() < 0.1)
                 //     chunk.set(height, x, ry, BLOCK_IDS.ROCK);
 
-                for (let w = Math.max(height, chunkStartH); w < Math.min(30, chunkEndH); w++) {
-                    if (chunk.get(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
-                        chunk.set(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
-                }
+                // for (let w = height; w < 30; w++) {
+                //     if (chunk.get(w, rx, ry) == BLOCK_IDS.EMPTY)
+                //         chunk.set(w, rx, ry, BLOCK_IDS.WATER);
+                // }
             }
         return chunk;
     }
