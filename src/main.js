@@ -231,8 +231,7 @@ export async function start() {
         const pos = camera.position;
         const dir = camera.direction;
 
-        // const out = world.raycasti(pos, dir, 5);
-        const out = null;
+        const out = world.raycasti(pos, dir, 5);
             if (out !== null) {
                 // gl.disable(gl.DEPTH_TEST);
                 world.blockAtWorldIPos(fvec3(out.x, out.y, out.z));
