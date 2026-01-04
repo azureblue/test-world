@@ -178,15 +178,15 @@ export class World {
 
     processChunkData(data) {
         const chunkPos = vec3(data.chunkPos[0], data.chunkPos[1], data.chunkPos[2]);
-        const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
-        if (!this.inRange(chunkPos))
-            return false;
+        const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);        
         logger.info(`got chunk (${chunkPos.x}, ${chunkPos.y}) ${chunkPos.z})`);
         if (!this.#chunks.has(key)) {
             logger.debug("missing entry for key: " + key);
             return false;
         }
         const entry = this.#chunks.get(key);
+        if (entry.loaded)
+            logger.warn("got chunk data, but already loaded" + key);
         const now = performance.now();
         const chunkData = new ChunkData();
         chunkData.data.set(data.rawChunkData);
