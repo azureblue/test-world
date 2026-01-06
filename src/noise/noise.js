@@ -1,6 +1,9 @@
-const wasmResult = await WebAssembly.instantiateStreaming(fetch('/src/noise/openSimplex2Noise.wasm'));
-const _noiseScaledWasm = wasmResult.instance.exports.open_simplex_2_noise_scaled;
-const _noiseOctavesWasm = wasmResult.instance.exports.open_simplex_2_noise_octaves;
+import { Resources } from "../utils.js";
+
+const wasmResult = await WebAssembly.instantiateStreaming(fetch(Resources.relativeToRoot("./noise/openSimplex2Noise.wasm")));
+const open_simplex_2_noise_scaled = wasmResult.instance.exports.open_simplex_2_noise_scaled;
+const open_simplex_2_noise_octaves = wasmResult.instance.exports.open_simplex_2_noise_octaves;
+const open_simplex_2_noise = wasmResult.instance.exports.open_simplex_2_noise;
 
 export class NoiseGenerator {
     gen(x, y) {
@@ -103,13 +106,17 @@ export class OpenSimplex2Noise extends NoiseGenerator {
      * Multi-octave fractal noise
      */
     octaveNoise(x, y) {
-        return _noiseOctavesWasm(this.seed, x, y, this.frequency, this.octaves, this.lacunarity, this.gain)
+        return open_simplex_2_noise_octaves(this.seed, x, y, this.frequency, this.octaves, this.lacunarity, this.gain)
     }
 
     /**
     * Scaled noise with frequency applied
     */
-    static noise(seed, x, y, freq) {
-        return _noiseScaledWasm(seed, x, y, freq);
+    static scaledNoise(seed, x, y, freq) {
+        return open_simplex_2_noise_scaled(seed, x, y, freq);
+    }
+
+    static rawNoise(seed, x, y) {
+        return open_simplex_2_noise(seed, x, y);
     }
 }
