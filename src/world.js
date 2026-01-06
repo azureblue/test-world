@@ -1,15 +1,15 @@
-import { Chunk, CHUNK_SIZE_BIT_POS, ChunkData, UIntMesh } from "./chunk.js";
-import { ivec2, IVec3, ivec3, FVec2, fvec2, FVec3, fvec3, vec2, Vec3, IVec2, vec3 } from "./geom.js";
-import { GenericBuffer, Float64Buffer, Int32Buffer, Logger, Resources, UInt32Buffer } from "./utils.js";
+import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_POS, CHUNK_SIZE_MASK, ChunkData, UIntMesh } from "./chunk.js";
+import { FVec2, FVec3, fvec3, ivec2, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
+import { GenericBuffer, Logger, Resources } from "./utils.js";
 const logger = new Logger("World");
-const CHUNK_RENDER_DIST = 5;
+const CHUNK_RENDER_DIST = 6;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 
 
 export class BlockLocation {
     constructor() {
-        this.chunkPos = ivec2();
-        this.blockInChunkPos = ivec3();
+        this.chunkPos = vec3();
+        this.blockInChunkPos = vec3();
     }
 }
 
@@ -77,10 +77,12 @@ const tmpBlockLocation = new BlockLocation();
 
 export class World {
     #frame = 0;
-    #chunkLoader
+    #chunkLoaders;
+    #loaderIndex = 0;
     #tmpBuffer = new GenericBuffer(1000);
     #pos = fvec3();
     #chunkPos = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
+
     /**@type {Array<Vec3>} */
     #rangeDeltas;
 
@@ -99,31 +101,47 @@ export class World {
     #chunkKeysSorted = new GenericBuffer(10000);
     #workerReady = false;
 
+    /** 
+     * @returns {number}
+     */
+    get chunksInView() {
+        return this.#rangeDeltas.length;
+    }
+
     /**
      * @param {Worker} chunkLoader 
      */
-    constructor() {        
-        this.#chunkLoader = new Worker(Resources.relativeToRoot("./chunkLoader.js"), { type: "module" });
-        this.#chunkLoader.onmessage = (me) => {
-            if (me.data === "ready") {
-                this.#chunkLoader.onmessage = (me) => this.onChunk(me.data);
-                this.#workerReady = true;
-                for (let cpos of this.#initialChunkRequestQueue) {
-                    this.#chunkLoader.postMessage({ cx: cpos.x, cy: cpos.y, cz: cpos.z});
+    constructor() {
+        this.#chunkLoaders = [];
+        for (let i = 0; i < 4; i++) {
+            const id = i;
+            const worker = new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=${id}`), { type: "module" });
+            worker.ready = false;
+            worker.initialChunkRequestQueue = []
+            worker.onmessage = (me) => {
+                if (me.data.type === "ready") {
+                    worker.ready = true;
+                    console.log("chunk loader worker ready: " + me.data.data.workerId);
+                    for (let cpos of worker.initialChunkRequestQueue) {
+                        this.#sendChunkRequestToWorker(id, cpos);
+                    }
+                    worker.initialChunkRequestQueue = [];
+                } else {                    
+                    this.onChunk(me.data.data);
                 }
-                this.#initialChunkRequestQueue.reset(0);
             }
+            this.#chunkLoaders.push(worker);
         }
-        
+
         /** @type {GenericBuffer<Vec3>} */
         const tmpBuff = new GenericBuffer(512);
-        for (let dx = -CHUNK_RENDER_DIST; dx <= CHUNK_RENDER_DIST; dx++) 
-            for (let dy = -CHUNK_RENDER_DIST; dy <= CHUNK_RENDER_DIST; dy++) 
+        for (let dx = -CHUNK_RENDER_DIST; dx <= CHUNK_RENDER_DIST; dx++)
+            for (let dy = -CHUNK_RENDER_DIST; dy <= CHUNK_RENDER_DIST; dy++)
                 for (let dz = -CHUNK_RENDER_DIST; dz <= CHUNK_RENDER_DIST; dz++) {
                     if ((dx * dx + dy * dy + dz * dz) <= CHUNK_RENDER_DIST_SQ) {
                         tmpBuff.put(vec3(dx, dy, dz));
                     }
-                }   
+                }
         // tmpBuff.put(vec3(0, 0, 0));
         // for (let r = 1; r < CHUNK_RENDER_DIST; r++) {
         //     const rangeFrom = -r;
@@ -143,22 +161,30 @@ export class World {
         //         tmpBuff.put(vec2(r, vert));
         //     }
         // }
-        
+
         this.#rangeDeltas = tmpBuff.trimmed();
         this.#rangeDeltas.sort((a, b) => (a.x * a.x + a.y * a.y + a.z * a.z) - (b.x * b.x + b.y * b.y + b.z * b.z));
     }
 
+    #sendChunkRequestToWorker(workerId, chunkPos) {
+        this.#chunkLoaders[workerId].postMessage({
+            type: "chunkRequest",
+            data: { chunkPos: chunkPos }
+        });
+    }
+
     #requestChunk(cx, cy, cz) {
-        if (!this.#workerReady) {
-            this.#initialChunkRequestQueue.put(vec3(cx, cy, cz));
+        const workerId = this.#loaderIndex;        
+        if (!this.#chunkLoaders[workerId].ready) {
+            this.#chunkLoaders[workerId].initialChunkRequestQueue.push(vec3(cx, cy, cz));
         } else {
-            this.#chunkLoader.postMessage({ cx: cx, cy: cy, cz: cz});
+            this.#sendChunkRequestToWorker(workerId, vec3(cx, cy, cz));
         }
-        
+        this.#loaderIndex = (this.#loaderIndex + 1) % this.#chunkLoaders.length;
     }
 
     onChunk(data) {
-        const chunkPos = vec3(data.chunkPos[0], data.chunkPos[1], data.chunkPos[2]);
+        const chunkPos = data.chunkPos;
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
         if (this.#currentChunkPromise != null && this.#currentChunkPromise.key == key)
             this.processChunkData(data);
@@ -176,10 +202,16 @@ export class World {
         return (dx * dx + dy * dy) <= CHUNK_RENDER_DIST_SQ;
     }
 
+    /**
+     * @import {ChunkMessage} from "./chunkLoader.js"
+     * @param {ChunkMessage} data 
+     * 
+     */
     processChunkData(data) {
-        const chunkPos = vec3(data.chunkPos[0], data.chunkPos[1], data.chunkPos[2]);
-        const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);        
-        logger.info(`got chunk (${chunkPos.x}, ${chunkPos.y}) ${chunkPos.z})`);
+
+        const chunkPos = data.chunkPos;
+        logger.info(`processing chunk data (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z})`);
+        const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
         if (!this.#chunks.has(key)) {
             logger.debug("missing entry for key: " + key);
             return false;
@@ -190,8 +222,11 @@ export class World {
         const now = performance.now();
         const chunkData = new ChunkData();
         chunkData.data.set(data.rawChunkData);
-        const translation = data.meshTranslation;
-        const mesh = UIntMesh.load(data.rawMeshData, fvec3(...translation));
+        let mesh = null
+        if (data.rawMeshData.length > 0) {
+            mesh = UIntMesh.load(data.rawMeshData, data.meshTranslation);
+        }
+
         const chunk = new Chunk(chunkPos, chunkData, mesh);
         entry.chunk = chunk;
         entry.loaded = true;
@@ -208,7 +243,7 @@ export class World {
     moveTo(x, y, z) {
         this.#pos.x = x;
         this.#pos.y = y;
-        this.#pos.z = y;
+        this.#pos.z = z;
         const cx = Math.floor(x) >> CHUNK_SIZE_BIT_POS;
         const cy = (-Math.ceil(y)) >> CHUNK_SIZE_BIT_POS;
         const cz = Math.floor(z) >> CHUNK_SIZE_BIT_POS;
@@ -225,7 +260,7 @@ export class World {
     updateChunksInRange() {
         // if (this.#frame == 1) {
         this.#tmpBuffer.reset();
-        for (const key of this.#chunks.keys()) {                        
+        for (const key of this.#chunks.keys()) {
             this.#tmpBuffer.put(key);
         }
         // } else if (this.#frame == 2) {
@@ -235,12 +270,13 @@ export class World {
             const chunkEntry = this.#chunks.get(key);
             const x = chunkEntry.position.x;
             const y = chunkEntry.position.y;
-            const z = chunkEntry.position.z;
+            const z = chunkEntry.position.z;            
             const dx = x - this.#chunkPos.x;
             const dy = y - this.#chunkPos.y;
             const dz = z - this.#chunkPos.z;
             if (dx * dx + dy * dy + dz * dz > CHUNK_RENDER_DIST_SQ * 4) {
                 logger.info("removing chunk: " + x + " " + y + " " + z);
+                chunkEntry.chunk?.mesh?.dispose();
                 this.#chunks.delete(key);
             }
         }
@@ -248,7 +284,7 @@ export class World {
         // } else if (this.#frame == 0) {
         this.#chunkKeysSorted.reset();
         // const now = performance.now();
-        for (const delta of this.#rangeDeltas) {                        
+        for (const delta of this.#rangeDeltas) {
             const cx = this.#chunkPos.x + delta.x;
             const cy = this.#chunkPos.y + delta.y;
             const cz = this.#chunkPos.z + delta.z;
@@ -283,19 +319,17 @@ export class World {
     }
 
     update() {
-        if (this.#frame > 2) {
-            if (this.#chunkDataQueue.size > 0) {
-                const entriesIter = this.#chunkDataQueue.entries();
-                for (let i = 0; i < 10; i++) {
-                    const next = entriesIter.next();
-                    if (next.done)
-                        break;
-                    const entry = next.value;
-                    this.#chunkDataQueue.delete(entry[0]);
-                    if (this.processChunkData(entry[1]))
-                        break;
-                    // console.log("next");
-                }
+        if (this.#chunkDataQueue.size > 0) {
+            const entriesIter = this.#chunkDataQueue.entries();
+            for (let i = 0; i < 10; i++) {
+                const next = entriesIter.next();
+                if (next.done)
+                    break;
+                const entry = next.value;
+                this.#chunkDataQueue.delete(entry[0]);
+                this.processChunkData(entry[1])
+                    
+                // console.log("next");
             }
         }
         this.#frame++;
@@ -415,13 +449,16 @@ export class World {
     blockLocation(blockLocation, pos) {
         const cx = Math.floor(pos.x) >> CHUNK_SIZE_BIT_POS;
         const cy = (-Math.ceil(pos.z)) >> CHUNK_SIZE_BIT_POS;
-        const bx = Math.floor(pos.x) & 0xF;
-        const by = (pos.z <= 0 ? (Math.floor(-pos.z) % 16) : 15 - (Math.floor(pos.z) % 16)) | 0
+        const cz = Math.floor(pos.y) >> CHUNK_SIZE_BIT_POS;
+        const bx = Math.floor(pos.x) & CHUNK_SIZE_MASK;
+        const by = (pos.z <= 0 ? (Math.floor(-pos.z) % CHUNK_SIZE) : CHUNK_SIZE - 1 - (Math.floor(pos.z) % CHUNK_SIZE)) | 0
+        const bh = Math.floor(pos.y) & CHUNK_SIZE_MASK;
         blockLocation.chunkPos.x = cx;
         blockLocation.chunkPos.y = cy;
+        blockLocation.chunkPos.z = cz;
         blockLocation.blockInChunkPos.x = bx;
         blockLocation.blockInChunkPos.z = by;
-        blockLocation.blockInChunkPos.y = Math.floor(pos.y);
+        blockLocation.blockInChunkPos.y = bh;
     }
 
     /**

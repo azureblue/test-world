@@ -320,6 +320,14 @@ export class Array3D {
         return this.#planeSize * h;
     }
 
+    get size() {
+        return this.#size;
+    }
+
+    get height() {
+        return this.#height;
+    }
+
     /**
      * @param {number} h 
      * @param {number} x 

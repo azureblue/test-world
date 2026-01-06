@@ -1,11 +1,11 @@
 import { BLOCK_IDS, BLOCKS, isSolid, isSolidInt } from "./blocks.js";
-import { Direction, DirXY, FVec2, fvec3, FVec3, IVec2, IVec3 } from "./geom.js";
+import { Direction, DirXY, fvec3, FVec3, IVec3, Vec3, vec3 } from "./geom.js";
 import { Array2D, Array3D, UInt32Buffer } from "./utils.js";
 export const CHUNK_SIZE_BIT_POS = 5 | 0;
 export const CHUNK_SIZE = 32 | 0;
 export const CHUNK_H = 32 | 0;
 
-const CHUNK_SIZE_MASK = (CHUNK_SIZE - 1) | 0;
+export const CHUNK_SIZE_MASK = (CHUNK_SIZE - 1) | 0;
 const CHUNK_PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE | 0;
 
 export function posToKey3(cx, cy, cz) {
@@ -32,8 +32,6 @@ const BLOCK_WATER = BLOCK_IDS.WATER;
 
 export class ChunkData extends Array3D {
 
-    #maxHeight
-
     /**
      * @param {Uint32Array} [data]
      */
@@ -59,12 +57,35 @@ export class ChunkData extends Array3D {
         return 0;
     }
 
+    findBoundsNonZero() {
+        const data = this.data;
+
+        let minH = CHUNK_SIZE, maxH = -1;
+        let minY = CHUNK_SIZE, maxY = -1;
+        let minX = CHUNK_SIZE, maxX = -1;
+
+        for (let h = 0; h < this.height; h++)
+            for (let y = 0; y < this.size; y++)
+                for (let x = 0; x < this.size; x++) {
+                    const idx = this.planeIdx(h) + y * this.size + x;
+                    if (data[idx] === 0) continue;
+                    if (h < minH) minH = h;
+                    if (h + 1 > maxH) maxH = h + 1;
+                    if (y < minY) minY = y;
+                    if (y + 1 > maxY) maxY = y + 1;
+                    if (x < minX) minX = x;
+                    if (x + 1 > maxX) maxX = x + 1;
+                }
+
+
+        return { minH: minH, maxH: maxH, minY, maxY, minX, maxX };
+    }
 }
 
 export class UIntMeshData {
 
     /**
-    * @param {FVec3} mTranslation 
+    * @param {Vec3} mTranslation 
     * @param {Uint32Array} data 
     */
     constructor(mTranslation, data) {
@@ -109,6 +130,12 @@ export class UIntMesh {
 
     get len() {
         return this.#len;
+    }
+
+    dispose() {
+        const gl = UIntMesh.#gl;
+        gl.deleteBuffer(this.#vb);
+        gl.deleteVertexArray(this.#va);
     }
 
     /**
@@ -160,7 +187,7 @@ export class ChunkDataLoader {
         let chunkData = this.#cache.get(key);
         if (chunkData === undefined) {
             chunkData = this.#generator(cx, cy, cz);
-            this.#cache.set(key, chunkData);
+            // this.#cache.set(key, chunkData);
         }
         return chunkData;
     }
@@ -200,21 +227,33 @@ export class Chunk {
 
     #updateCornersData() {
         const chunkPosition = this.#chunkPosition;
+        const bounds = this.data.findBoundsNonZero();
+
         this.#worldCoordCorners = [
             /*
             0, 0
             0, 0, 0, 16, 0, 0, 16, -16, 0, 0, -16, 0
-            */
-            // bottom
-            new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
-            new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
+            // */
+            // // bottom
+            // new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
+            // new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
+            // //top
+            // new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
+            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
+            // new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE)
+
+            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
+            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
+            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY),
+            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY),
             //top
-            new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
-            new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE)
+            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
+            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
+            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY),
+            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY)
         ];
 
         this.#worldCoordCorners.forEach((corner, idx) => {
@@ -335,68 +374,68 @@ export class DataAdj {
 export class OnDemandAdj27 {
     #loader;
     #cx; #cy; #cz;
-  
+
     // 27 slotów: (oz+1)*9 + (oy+1)*3 + (ox+1)
     /** @type {(ChunkData|null)[]} */
     #ch = new Array(27).fill(null);
-  
+
     #h; #x; #y;
-  
+
     constructor(loader, cx, cy, cz) {
-      this.#loader = loader;
-      this.#cx = cx;
-      this.#cy = cy;
-      this.#cz = cz;
-  
-      // center od razu
-      this.#ch[13] = loader.getChunkSync(cx, cy, cz); // (0,0,0) => idx 13
+        this.#loader = loader;
+        this.#cx = cx;
+        this.#cy = cy;
+        this.#cz = cz;
+
+        // center od razu
+        this.#ch[13] = loader.getChunkSync(cx, cy, cz); // (0,0,0) => idx 13
     }
-  
+
     setPosition(h, x, y) {
-      this.#h = h;
-      this.#x = x;
-      this.#y = y;
+        this.#h = h;
+        this.#x = x;
+        this.#y = y;
     }
-  
+
     #idx(ox, oy, oz) {
-      return (oz + 1) * 9 + (oy + 1) * 3 + (ox + 1);
+        return (oz + 1) * 9 + (oy + 1) * 3 + (ox + 1);
     }
-  
+
     #getChunk(ox, oy, oz) {
-      const idx = this.#idx(ox, oy, oz);
-      let c = this.#ch[idx];
-      if (c !== null) return c;
-      c = this.#loader.getChunkSync(this.#cx + ox, this.#cy + oy, this.#cz + oz);
-      this.#ch[idx] = c;
-      return c;
+        const idx = this.#idx(ox, oy, oz);
+        let c = this.#ch[idx];
+        if (c !== null) return c;
+        c = this.#loader.getChunkSync(this.#cx + ox, this.#cy + oy, this.#cz + oz);
+        this.#ch[idx] = c;
+        return c;
     }
-  
+
     get(dh, dx, dy) {
-      let h = this.#h + dh;
-      let x = this.#x + dx;
-      let y = this.#y + dy;
-  
-      let oz = 0, ox = 0, oy = 0;
-  
-      // pion
-      if (h < 0) { h += CHUNK_H; oz = -1; }
-      else if (h >= CHUNK_H) { h -= CHUNK_H; oz = 1; }
-  
-      // X
-      if (x < 0) { x += CHUNK_SIZE; ox = -1; }
-      else if (x >= CHUNK_SIZE) { x -= CHUNK_SIZE; ox = 1; }
-  
-      // Y (Twoje “planarne Y”, które mapujesz na world Z)
-      if (y < 0) { y += CHUNK_SIZE; oy = -1; }
-      else if (y >= CHUNK_SIZE) { y -= CHUNK_SIZE; oy = 1; }
-  
-      return this.#getChunk(ox, oy, oz).get(h, x, y);
+        let h = this.#h + dh;
+        let x = this.#x + dx;
+        let y = this.#y + dy;
+
+        let oz = 0, ox = 0, oy = 0;
+
+        // pion
+        if (h < 0) { h += CHUNK_H; oz = -1; }
+        else if (h >= CHUNK_H) { h -= CHUNK_H; oz = 1; }
+
+        // X
+        if (x < 0) { x += CHUNK_SIZE; ox = -1; }
+        else if (x >= CHUNK_SIZE) { x -= CHUNK_SIZE; ox = 1; }
+
+        // Y (Twoje “planarne Y”, które mapujesz na world Z)
+        if (y < 0) { y += CHUNK_SIZE; oy = -1; }
+        else if (y >= CHUNK_SIZE) { y -= CHUNK_SIZE; oy = 1; }
+
+        return this.#getChunk(ox, oy, oz).get(h, x, y);
     }
 
     getChunkData() {
         return this.#ch[13];
     }
-  }
+}
 
 // export class BlockAdjsLoader {
 
@@ -634,7 +673,7 @@ export class UIntChunkMesher {
      * 
      * @returns {UIntMeshData}
      */
-    createMeshes(position, adj) {        
+    createMeshes(position, adj) {
         this.#bufferSolid.reset();
         this.#bufferWater.reset();
         const now = performance.now();
@@ -790,7 +829,7 @@ export class UIntChunkMesher {
 
             const layerLen = CHUNK_SIZE * CHUNK_SIZE;
             const layersCurrentData = layersCurrent.data;
-            const layersTopData = layersTop.data;            
+            const layersTopData = layersTop.data;
 
             for (let dir = 1; dir < 5; dir++) {
                 const layerStartIdx = layersCurrent.planeIdx(dir);
@@ -933,7 +972,7 @@ export class UIntChunkMesher {
         resultData.set(solids);
         resultData.set(waters, solids.length);
         // console.log(meshTime);
-        return new UIntMeshData(new FVec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
+        return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
             resultData);
     }
 }
