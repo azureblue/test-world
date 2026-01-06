@@ -1,6 +1,5 @@
 #version 300 es
 #define VIEW_DISTANCE_SQ 409600.0 /* @viewDistanceSq */
-#define EDGE_SHADOW_DISTANCE_SQ 800.0 /* @edgeShadowDistanceSq */
 #define b_0000_0001 1u
 #define b_0000_0011 3u
 #define b_0000_0111 7u

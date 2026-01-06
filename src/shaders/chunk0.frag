@@ -1,6 +1,6 @@
 #version 300 es
-const mediump vec4 sky_color = vec4(0.53f, 0.7f, 0.77f, 1.0);
-
+// const mediump vec4 sky_color = vec4(0.53f, 0.7f, 0.77f, 1.0);
+const mediump vec4 sky_color = vec4(0.522, 0.855, 1, 1);
 precision mediump float;
 uniform mediump sampler2DArray u_array_sampler;
 in highp vec3 v_tex_coord;
