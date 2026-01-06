@@ -17,7 +17,7 @@ class Camera {
      */
     constructor(position) {
         this.#position.set(...position);
-        this.#updateDirection();
+        this.update();
     }
 
     changeYaw(delta) {
@@ -25,8 +25,7 @@ class Camera {
         if (this.#yaw > 360)
             this.#yaw -= 360
         if (this.#yaw < 0)
-            this.#yaw += 360;
-        this.#updateDirection();
+            this.#yaw += 360;        
     }
 
     changePitch(delta) {
@@ -34,11 +33,10 @@ class Camera {
         if (this.#pitch > 89.0)
             this.#pitch = 89.0
         if (this.#pitch < -89.0)
-            this.#pitch = -89.0;
-        this.#updateDirection();
+            this.#pitch = -89.0;        
     }
 
-    #updateDirection() {
+    update() {
         const pitchRads = this.#pitch / 180.0 * Math.PI;
         const yawRads = this.#yaw / 180.0 * Math.PI;
         this.#direction.y = Math.sin(pitchRads);
@@ -170,6 +168,9 @@ class FrustumCuller {
      * @param {Chunk} chunk
      */
     shouldDraw(chunk) {
+        if (chunk.mesh === null) {
+            return false;
+        }
         const camPos = this.#camera.position._values;
         const corners = chunk.worldCornersData;
         plane_loop:
