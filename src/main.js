@@ -120,7 +120,7 @@ export async function start() {
 
     const currentChunk = await world.getCurrentChunk();
     // const peek = currentChunk.peek(0, 0);
-    const camera = new Camera(new FVec3(0, 120, 0));
+    const camera = new Camera(new FVec3(0, 400, 0));
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     const cameraSpeed = 0.5;
