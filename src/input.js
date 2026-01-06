@@ -82,6 +82,9 @@ export class KeyboardInput {
         targetElement.addEventListener("keydown", (ev) => {
             if (ev.key in this.#keys) {
                 this.#keys[ev.key].pressed = true;
+                if (this.#keys[ev.key].handler) {
+                    this.#keys[ev.key].handler(true);
+                }
                 ev.preventDefault();
             }            
         }, true);
@@ -89,6 +92,9 @@ export class KeyboardInput {
         targetElement.addEventListener("keyup", (ev) => {
             if (ev.key in this.#keys) {
                 this.#keys[ev.key].pressed = false;
+                if (this.#keys[ev.key].handler) {
+                    this.#keys[ev.key].handler(false);
+                }
                 ev.preventDefault();
             }
         }, true);
