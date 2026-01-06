@@ -40,7 +40,7 @@ export class PixelDataChunkGenerator {
                 const px = startX + x * this.#ppv;
                 const py = startY + y * this.#ppv;
                 const ry = CHUNK_SIZE - y - 1;
-                
+
                 // if ((x + y) % 2 == 1) {
                 //     for (let a = 0; a < 10; a++) {
                 //         chunk.set(a, x, ry, BLOCK_IDS.GRASS);
@@ -111,16 +111,40 @@ export class RandomDataChunkGenerator {
         return chunk;
     }
 }
-const MAX_HEIGHT = 256;
-export class NoiseChunkGenerator {
+const MAX_HEIGHT = 700;
 
+function hash32(a) {
+    a |= 0;
+    a ^= a >>> 16;
+    a = Math.imul(a, 0x7feb352d);
+    a ^= a >>> 15;
+    a = Math.imul(a, 0x846ca68b);
+    a ^= a >>> 16;
+    return a | 0;
+}
+
+function seedOffset(seed) {
+    const hx = hash32(seed ^ 0x9e3779b9);
+    const hy = hash32(seed ^ 0x85ebca6b);
+
+    // map [0..2^32) -> [-1e6..1e6]
+    const ox = (hx >>> 0) / 0xffffffff * 2e6 - 1e6;
+    const oy = (hy >>> 0) / 0xffffffff * 2e6 - 1e6;
+
+    return { ox, oy };
+}
+
+export class NoiseChunkGenerator {
+    #offests
     #noise = new OpenSimplex2Noise({
-        frequency: 0.003,
+        seed: 23456,
+        frequency: 0.001,
         gain: 0.5,
         octaves: 5
     });
 
     constructor() {
+        this.#offests = seedOffset(this.#noise.seed);
     }
 
     /**
@@ -141,14 +165,14 @@ export class NoiseChunkGenerator {
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 const rx = x; //CHUNK_SIZE - x - 1;
                 const ry = CHUNK_SIZE - y - 1;
-                let height = Math.floor(this.#noise.octaveNoise(x + startX, y + startY) * MAX_HEIGHT);
+                let height = Math.floor(this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy) * MAX_HEIGHT);
                 if (height == 0)
                     height = 1;
 
                 const chunkStartH = chunkPos.z * CHUNK_SIZE;
                 const chunkEndH = chunkStartH + CHUNK_SIZE;
 
-                const dirtLayer = Math.max(0, 20 - Math.floor((10 / 58) * height));
+                const dirtLayer = Math.max(0, 50 - Math.floor((10 / 58) * height));
 
                 for (let z = Math.max(0, chunkStartH); z < Math.min(chunkEndH, height - dirtLayer); z++) {
                     chunk.set(z - chunkStartH, rx, ry, BLOCK_IDS.ROCK);
@@ -159,21 +183,21 @@ export class NoiseChunkGenerator {
                 }
 
                 if (dirtLayer > 0) {
-                    if (height >= chunkStartH - 1 && height < chunkEndH) {
+                    if (height >= chunkStartH && height < chunkEndH) {
                         chunk.set(height - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
 
-                        if (Math.random() < 0.02 && height < MAX_HEIGHT - 1) {
-                            chunk.set(height - chunkStartH, rx, ry, BLOCK_IDS.GRASS_SHORT);
+                        if (Math.random() < 0.04 && height < MAX_HEIGHT - 1) {
+                            chunk.set(height - chunkStartH + 1, rx, ry, BLOCK_IDS.GRASS_SHORT);
                         }
                     }
-                } 
+                }
                 // if (Math.random() < 0.1)
                 //     chunk.set(height, x, ry, BLOCK_IDS.ROCK);
 
-                // for (let w = height; w < 30; w++) {
-                //     if (chunk.get(w, rx, ry) == BLOCK_IDS.EMPTY)
-                //         chunk.set(w, rx, ry, BLOCK_IDS.WATER);
-                // }
+                for (let w = Math.max(height, chunkStartH); w < Math.min(50, chunkEndH); w++) {
+                    if (chunk.get(w, rx, ry) == BLOCK_IDS.EMPTY)
+                        chunk.set(w, rx, ry, BLOCK_IDS.WATER);
+                }
             }
         return chunk;
     }
