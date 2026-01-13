@@ -31,7 +31,6 @@ export class Node {
     static #ID = 0;
     #id
     #name
-    #iter = -1;
     #value = 0;
     #srcNodes;
     #srcNodeValues;
@@ -67,17 +66,13 @@ export class Node {
 
     }
 
-    gen(x, y, iter) {
-
-        if (iter === this.#iter)
-            return this.#value;
+    gen(x, y) {
 
         for (let i = 0; i < this.#srcNodes.length; i++) {
             this.#srcNodeValues[i] = this.#srcNodes[i].gen(x, y, iter);
         }
 
         this.#value = this._gen(x, y, this.#srcNodeValues);
-        this.#iter = iter;
         return this.#value;
     }
 }
