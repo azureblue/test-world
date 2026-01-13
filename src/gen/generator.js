@@ -2,7 +2,9 @@ import { blend, BLEND_MODE } from "../blend.js";
 import { BLOCK_IDS } from "../blocks.js";
 import { CHUNK_SIZE, ChunkData } from "../chunk.js";
 import { Vec2, Vec3 } from "../geom.js";
-import { OpenSimplex2Noise } from "../noise/noise.js";
+import { hash01, hash32 } from "../noise/hash.js";
+import { Generator } from "../noise/noise.js";
+import { SimplexNoiseGenerator } from "../noise/opensimplex2.js";
 import { ImagePixels } from "../utils.js";
 import { LinearCurve, point } from "./curve.js";
 import { CurveNode, GenericNode, GenNode } from "./node.js";
@@ -111,17 +113,9 @@ export class RandomDataChunkGenerator {
         return chunk;
     }
 }
-const MAX_HEIGHT = 700;
+const MAX_HEIGHT = 100;
 
-function hash32(a) {
-    a |= 0;
-    a ^= a >>> 16;
-    a = Math.imul(a, 0x7feb352d);
-    a ^= a >>> 15;
-    a = Math.imul(a, 0x846ca68b);
-    a ^= a >>> 16;
-    return a | 0;
-}
+
 
 function seedOffset(seed) {
     const hx = hash32(seed ^ 0x9e3779b9);
@@ -134,13 +128,351 @@ function seedOffset(seed) {
     return { ox, oy };
 }
 
+// --- helpers ---
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp01(x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
+
+/**
+ * Rotate (x,y) by angle and apply anisotropic stretch to Y.
+ * Returns [xr, yr].
+ */
+function rotateAndStretch(x, y, angle, stretchY) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    const xr = x * c - y * s;
+    const yr = (x * s + y * c) * stretchY;
+    return [xr, yr];
+}
+
+/**
+ * fBm where noise(x,y) is assumed to be in [0,1].
+ * Output is normalized to [0,1] (weighted average).
+ */
+function fbm01(x, y, noise01, {
+    octaves = 5,
+    frequency = 1.0,
+    lacunarity = 2.0,
+    gain = 0.5
+} = {}) {
+    let sum = 0;
+    let amp = 1.0;
+    let freq = frequency;
+    let ampSum = 0;
+
+    for (let i = 0; i < octaves; i++) {
+        sum += amp * noise01(x * freq, y * freq); // [0,1]
+        ampSum += amp;
+        freq *= lacunarity;
+        amp *= gain;
+    }
+    return sum / ampSum; // [0,1]
+}
+
+export class RidgeNoiseNode extends GenNode {
+    /**
+     * @param {Generator} noiseSource
+     * @param {Object} options
+     * @param {number} [options.seed=0]
+     * @param {number} [options.octaves=5]
+     * @param {number} [options.frequency=1.0]
+     * @param {number} [options.lacunarity=2.0]
+     * @param {number} [options.gain=0.5]
+     * @param {number} [options.power=3.0]
+     */
+    constructor(rawNoiseSource, {
+        seed = 0,
+        octaves = 1,
+        frequency = 1.0,
+        lacunarity = 2.0,
+        gain = 0.5,
+        power = 3.0
+    } = {}) {
+        super({
+            gen: (x, y) => {
+
+                function worley(x, y) {
+
+                    let F1 = Infinity;
+                    let F2 = Infinity;
+
+                    const cx = Math.floor(x);
+                    const cy = Math.floor(y);
+
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const ix = cx + dx;
+                            const iy = cy + dy;
+
+                            // generate feature point in this cell
+                            const fx = ix + hash01(seed, ix, iy);
+                            const fy = iy + hash01(seed, ix + 17, iy + 23);
+
+                            const dxp = fx - x;
+                            const dyp = fy - y;
+                            const d2 = dxp * dxp + dyp * dyp; // squared distance                            
+                            if (d2 < F1) {
+                                F2 = F1;
+                                F1 = d2;
+                            } else if (d2 < F2) {
+                                F2 = d2;
+                            }
+                        }
+                    }
+                    return [F1, F2];
+                    // return Math.sqrt(m);
+                }
+
+
+                let sum = 0;
+                let amp = 1.0;
+                let freq = frequency;
+                let ampSum = 0;
+
+                 const bubblePow = 3.0;     // twardość bąbli (2..5)
+                const  edgeA = 0.03;        // start “krawędzi”
+                const edgeB = 0.10;        // koniec “krawędzi”
+                const edgePow = 2.0;       // kontrast szczelin (1.5..3)
+                const edgeStrength = 0.9;  // jak mocno przyciemniać krawędzie (0..1)
+
+                for (let i = 0; i < octaves; i++) {
+                    const n = rawNoiseSource(seed, x * freq, y * freq);   // [0,1]
+                    // let r = Math.sqrt(F2) - Math.sqrt(F1)   // [0,1], ridge at 0.5
+                    let [f1, f2] = worley(x * freq, y * freq);
+
+                    let b = (1 - f1) * (1 - f2);      // [~0..1]
+                // b = hash01(x * freq, y * freq, seed + 9); // add some noise
+                // b = n;
+
+                // --- edges (cell borders)
+                // const d = Math.sqrt(f2) - Math.sqrt(f1);     // małe przy granicy
+                // let e = 1 - smoothstep(edgeA, edgeB, d);     // 1 na granicy, 0 w środku
+                // e = Math.pow(clamp01(e), edgePow);
+
+                // --- combine
+                const v = b;// * (1 - edgeStrength * e);
+
+                    // let v = 1 - Math.sqrt(f1) * 1;      // blob field
+                    // v  = v * v;
+                    // v = spreadTanh(v, 2);
+
+                    // let v = 1 - Math.sqrt(f1);        // ~[0..1]
+                    // v = v  * v
+                    // v = spreadTanh(v, 2);
+                    // b = clamp01(b);
+
+                    // // jasne wnętrza (popcorn look)
+                    // const bubbles = Math.pow(b, bubblePow);
+
+                    // // czarne krawędzie: tam gdzie b małe (blisko granicy komórki)
+                    // const edges = Math.pow(1 - b, edgePow);
+
+                    // // miks: jasne bąble, czarne szczeliny
+                    // let v = bubbles * (1 - 0.9 * edges);
+
+                    // v = v * v;
+                    // v = Math.max(0, Math.min(1, v));
+                    // v = Math.pow(v, 2.0);
+                    let r = v;
+                    // r = smoothstep(0.01, 0.90, r);
+                    // r = Math.pow(r, power);                  // sharpen ridges
+                    sum += r * amp;
+                    ampSum += amp;
+
+                    freq *= lacunarity;
+                    amp *= gain;
+                }
+                return sum / ampSum; // [0,1]              
+            }
+        })
+    }
+}
+
+
+export class NoRidgeNoiseNode extends GenNode {
+    /**
+     * @param {Generator} noiseSource
+     * @param {Object} options
+     * @param {number} [options.seed=0]
+     * @param {number} [options.octaves=5]
+     * @param {number} [options.frequency=1.0]
+     * @param {number} [options.lacunarity=2.0]
+     * @param {number} [options.gain=0.5]
+     * @param {number} [options.power=3.0]
+     */
+    constructor(rawNoiseSource, {
+        seed = 0,
+        octaves = 5,
+        frequency = 1.0,
+        lacunarity = 2.0,
+        gain = 0.5,
+        power = 3.0
+    } = {}) {
+        super({
+            gen: (x, y) => {
+                let sum = 0;
+                let amp = 1.0;
+                let freq = frequency;
+                let ampSum = 0;
+
+                for (let i = 0; i < octaves; i++) {
+                    const n = rawNoiseSource(seed, x * freq, y * freq);   // [0,1]
+                    let r = 1.0 - Math.abs(2.0 * n - 1.0);   // [0,1], ridge at 0.5
+                    r = Math.pow(r, power);                  // sharpen ridges
+                    sum += r * amp;
+                    ampSum += amp;
+
+                    freq *= lacunarity;
+                    amp *= gain;
+                }
+                return sum / ampSum; // [0,1]              
+            }
+        })
+    }
+}
+
+
+export class DomainWarpNode extends GenNode {
+    constructor(srcNode, noiseGen, {
+        warpFreq = 1.0,
+        warpAmp = 1.0
+    } = {}) {
+        super({
+            gen: (x, y) => {
+                const wx = noiseGen.gen(x * warpFreq, y * warpFreq); // [-1,1]
+                const wy = noiseGen.gen((x + 17.3) * warpFreq, (y + 9.2) * warpFreq);
+                return srcNode.gen(x + wx * warpAmp, y + wy * warpAmp * 0, x * 2024 + y);
+            }
+        });
+    }
+}
+
+// class RotateAndStretchNode extends Node {
+//     constructor(angle, stretchY) {
+//         super()
+//         this.angle = angle;
+//         this.stretchY = stretchY;
+//     }
+// }
+
+/**
+ * Ridge fBm built from noise01 in [0,1].
+ * Ridge transform: r = 1 - |2n - 1|  (peaks around n=0.5)
+ * Output is normalized to [0,1].
+ */
+function ridgeFbm01(x, y, noise01, {
+    octaves = 5,
+    frequency = 1.0,
+    lacunarity = 2.0,
+    gain = 0.5,
+    power = 3.0
+} = {}) {
+    let sum = 0;
+    let amp = 1.0;
+    let freq = frequency;
+    let ampSum = 0;
+
+    for (let i = 0; i < octaves; i++) {
+        const n = noise01(x * freq, y * freq);   // [0,1]
+        let r = 1.0 - Math.abs(2.0 * n - 1.0);   // [0,1], ridge at 0.5
+        r = Math.pow(r, power);                  // sharpen ridges
+        sum += r * amp;
+        ampSum += amp;
+
+        freq *= lacunarity;
+        amp *= gain;
+    }
+    return sum / ampSum; // [0,1]
+}
+
+function spreadTanh(v, k = 2.5) {
+    const x = v * 2 - 1;
+    return (Math.tanh(x * k) + 1) * 0.5;
+}
+
+/**
+ * Directional domain warp using noise01 in [0,1].
+ * We convert noise to signed offset in [-1,1] via (2n-1).
+ */
+function domainWarp01(x, y, noise01, {
+    warpFreq = 1.0,
+    warpAmp = 1.0
+} = {}) {
+    const wx = 2.0 * noise01(x * warpFreq, y * warpFreq) - 1.0; // [-1,1]
+    const wy = 2.0 * noise01((x + 17.3) * warpFreq, (y + 9.2) * warpFreq) - 1.0;
+    return [x + wx * warpAmp, y + wy * warpAmp];
+}
+
+
+/**
+ * Final height in [0,1].
+ * noise01 must be a function (x,y)->[0,1] (your OpenSimplex wrapper).
+ */
+function height01(x, y, noise01, {
+    // base terrain
+    baseOctaves = 5,
+    baseFrequency = 0.002,
+    baseLacunarity = 2.0,
+    baseGain = 0.5,
+
+    // mountains layer (linear features)
+    angle = 0.7,
+    stretchY = 0.25,
+
+    warpFreq = 0.001,
+    warpAmp = 120.0,
+
+    mountOctaves = 4,
+    mountFrequency = 0.004,
+    mountLacunarity = 2.0,
+    mountGain = 0.4,
+    mountPower = 3.0,
+
+    // blend
+    mountainsMix = 0.6
+} = {}) {
+    // --- base ---
+    const base = fbm01(x, y, noise01, {
+        octaves: baseOctaves,
+        frequency: baseFrequency,
+        lacunarity: baseLacunarity,
+        gain: baseGain
+    }); // [0,1]
+
+    // --- mountains coords: rotate + anisotropic stretch ---
+    let [mx, my] = rotateAndStretch(x, y, angle, stretchY);
+
+    // --- directional warp (creates long corridors/passes) ---
+    [mx, my] = domainWarp01(mx, my, noise01, { warpFreq, warpAmp });
+
+    // --- ridge mountains ---
+    const mount = ridgeFbm01(mx, my, noise01, {
+        octaves: mountOctaves,
+        frequency: mountFrequency,
+        lacunarity: mountLacunarity,
+        gain: mountGain,
+        power: mountPower
+    }); // [0,1]
+
+    // --- blend, guaranteed [0,1] ---
+    const h = lerp(base, mount, mountainsMix);
+    return clamp01(h);
+}
+
 export class NoiseChunkGenerator {
     #offests
-    #noise = new OpenSimplex2Noise({
+    #noise = new SimplexNoiseGenerator({
         seed: 23456,
-        frequency: 0.001,
+        frequency: 0.01,
         gain: 0.5,
         octaves: 5
+    });
+
+    #iter = 0;
+
+    #rigedNoise = new RidgeNoiseNode(SimplexNoiseGenerator.rawNoise, {
+        seed: 23456,
+        frequency: 0.01,
+        octaves: 2
     });
 
     constructor() {
@@ -165,7 +497,11 @@ export class NoiseChunkGenerator {
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 const rx = x; //CHUNK_SIZE - x - 1;
                 const ry = CHUNK_SIZE - y - 1;
-                let height = Math.floor(this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy) * MAX_HEIGHT);
+                const noiseOutput = this.#rigedNoise.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy, this.#iter++);
+                //ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
+                //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
+                const noiseImproved = noiseOutput; //spreadTanh(noiseOutput, 2);
+                let height = Math.floor(noiseImproved * MAX_HEIGHT);
                 if (height == 0)
                     height = 1;
 
@@ -321,7 +657,7 @@ export class Generator02 extends FunctionChunkGenerator {
         super();
         const scale = 1;
         const node0 = new GenericNode([], {
-            gen: new OpenSimplex2Noise({
+            gen: new SimplexNoiseGenerator({
                 frequency: 0.01 * scale,
                 octaves: 4
             })
@@ -337,14 +673,14 @@ export class Generator02 extends FunctionChunkGenerator {
 
 
         const riverNode = new GenNode(
-            new OpenSimplex2Noise({
+            new SimplexNoiseGenerator({
                 seed: 1223357,
                 frequency: 0.001 * scale,
                 octaves: 2
             }));
 
         const riverWidthNode = new CurveNode(
-            new GenNode(new OpenSimplex2Noise({
+            new GenNode(new SimplexNoiseGenerator({
                 seed: 123,
                 frequency: 0.003 * scale,
                 octaves: 2
