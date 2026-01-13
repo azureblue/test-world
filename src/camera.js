@@ -1,5 +1,5 @@
 import { Chunk } from "./chunk.js";
-import { Frustum, FrustumPlanes, Mat4, FVec2, FVec3, fvec3 } from "./geom.js";
+import { Frustum, FrustumPlanes, Mat4, FVec2, FVec3, fvec3, PLANES_N } from "./geom.js";
 
 class Camera {
     #position = new FVec3(0, 0, 0);
@@ -173,8 +173,10 @@ class FrustumCuller {
         }
         const camPos = this.#camera.position._values;
         const corners = chunk.worldCornersData;
+        const planes = this.#planes.planes;
         plane_loop:
-        for (let plane of this.#planes.planes) {
+        for (let planeIdx = 0; planeIdx < PLANES_N; planeIdx++) {
+            const plane = planes[planeIdx];
             const planeRelativePos = plane.position._values;
             const planeDir = plane.direction._values;
             const planex = camPos[0] + planeRelativePos[0];

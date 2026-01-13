@@ -22,14 +22,17 @@ class Normal {
     }
 }
 
+export const PLANES_N = 6;
 class FrustumPlanes {
-    /**@type {Normal} */ top = new Normal();
-    /**@type {Normal} */ bottom = new Normal();
-    /**@type {Normal} */ left = new Normal();
-    /**@type {Normal} */ right = new Normal();
-    /**@type {Normal} */ near = new Normal();
-    /**@type {Normal} */ far = new Normal();
-    planes = [this.near, this.left, this.right, this.far, this.top, this.bottom];
+    constructor() {
+        this.top = new Normal();
+        this.bottom = new Normal();
+        this.left = new Normal();
+        this.right = new Normal();
+        this.near = new Normal();
+        this.far = new Normal();
+        this.planes = [this.near, this.left, this.right, this.far, this.top, this.bottom];
+    }
 }
 
 class Frustum {
@@ -311,7 +314,7 @@ export class Vec3 {
         this.x = x;
         this.y = y;
         this.z = z;
-    }    
+    }
 }
 
 export function vec3(x, y, z) {
@@ -322,7 +325,7 @@ export class Vec2 {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-    }    
+    }
 }
 
 export function vec2(x, y) {
