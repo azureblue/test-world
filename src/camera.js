@@ -1,5 +1,6 @@
 import { Chunk } from "./chunk.js";
-import { Frustum, FrustumPlanes, Mat4, FVec2, FVec3, fvec3, PLANES_N } from "./geom.js";
+import { Frustum, FrustumPlanes, FVec2, FVec3, fvec3, mat4, Mat4, PLANES_N, Vec3 } from "./geom.js";
+import { Float32Vector3 } from "./matrixgl/float32vector.js";
 
 class Camera {
     #position = new FVec3(0, 0, 0);
@@ -25,7 +26,7 @@ class Camera {
         if (this.#yaw > 360)
             this.#yaw -= 360
         if (this.#yaw < 0)
-            this.#yaw += 360;        
+            this.#yaw += 360;
     }
 
     changePitch(delta) {
@@ -33,7 +34,36 @@ class Camera {
         if (this.#pitch > 89.0)
             this.#pitch = 89.0
         if (this.#pitch < -89.0)
-            this.#pitch = -89.0;        
+            this.#pitch = -89.0;
+    }
+
+    setPosition(vec) {
+        this.#position.setTo(vec);
+    }
+
+    /**
+     * @param {FVec3} vec 
+     */
+    setDirection(vec) {
+        // normalize (avoid NaNs)
+        const x = vec.x, y = vec.y, z = vec.z;
+        const len = Math.hypot(x, y, z);
+        if (len < 1e-8) return; // ignore zero vector
+        const nx = x / len, ny = y / len, nz = z / len;
+
+        // pitch = asin(y)
+        let pitch = Math.asin(Math.max(-1, Math.min(1, ny))) * 180.0 / Math.PI;
+
+        // yaw = atan2(z, x)
+        let yaw = Math.atan2(nz, nx) * 180.0 / Math.PI;
+        if (yaw < 0) yaw += 360.0;
+
+        // clamp pitch like your changePitch does
+        if (pitch > 89.0) pitch = 89.0;
+        if (pitch < -89.0) pitch = -89.0;
+
+        this.#pitch = pitch;
+        this.#yaw = yaw;
     }
 
     update() {
@@ -41,10 +71,12 @@ class Camera {
         const yawRads = this.#yaw / 180.0 * Math.PI;
         this.#direction.y = Math.sin(pitchRads);
         const cosPitch = Math.cos(pitchRads);
-        this.#direction.x = Math.cos(yawRads) * cosPitch;
-        this.#direction.z = Math.sin(yawRads) * cosPitch;
-        this.#directionXZ.x = Math.cos(yawRads);
-        this.#directionXZ.y = Math.sin(yawRads);
+        const cosYaw = Math.cos(yawRads);
+        const sinYaw = Math.sin(yawRads);
+        this.#direction.x = cosYaw * cosPitch;
+        this.#direction.z = sinYaw * cosPitch;
+        this.#directionXZ.x = cosYaw;
+        this.#directionXZ.y = sinYaw;
         FVec3.cross(this.#direction, Camera.#DIRECTION_UP, this.#right);
         this.#right.normalizeInPlace();
         FVec3.cross(this.#right, this.#direction, this.#up);
@@ -72,9 +104,9 @@ class Camera {
     /**
      * @param {Mat4} mat 
      */
-    setLookAtMatrix(mat) {
+    calculateLookAtMatrix(mat) {
         this.#lookingAt.set(this.#position.x + this.#direction.x, this.#position.y + this.#direction.y, this.#position.z + this.#direction.z);
-        Mat4.lookAt(this.#position, this.#lookingAt, this.#up, mat);
+        Camera.calculateLookAtMatrix(this.#position, this.#lookingAt, this.#up, mat);
     }
 
     /**@returns {FVec3} */
@@ -109,11 +141,47 @@ class Camera {
     get yaw() {
         return this.#yaw;
     }
+
+    static #calculateLookAtMatrix_xAxis = fvec3();
+    static #calculateLookAtMatrix_yAxis = fvec3();
+    static #calculateLookAtMatrix_zAxis = fvec3();
+    /**
+     * Returns "look at" matrix.
+     * @param {FVec3} cameraPosition
+     * @param {Float32Vector3} lookAtPosition
+     * @param {Float32Vector3} cameraUp
+     * @param {Matrix4x4} result
+     */
+    static calculateLookAtMatrix(cameraPosition, lookAtPosition, cameraUp, result) {        
+        cameraPosition.subOut(lookAtPosition, Camera.#calculateLookAtMatrix_zAxis).normalizeInPlace();
+        cameraUp.crossOut(Camera.#calculateLookAtMatrix_zAxis, Camera.#calculateLookAtMatrix_xAxis).normalizeInPlace();
+        Camera.#calculateLookAtMatrix_zAxis.crossOut(Camera.#calculateLookAtMatrix_xAxis, Camera.#calculateLookAtMatrix_yAxis).normalizeInPlace();
+
+        result.setValues(
+            Camera.#calculateLookAtMatrix_xAxis.x,
+            Camera.#calculateLookAtMatrix_yAxis.x,
+            Camera.#calculateLookAtMatrix_zAxis.x,
+            0.0,
+            Camera.#calculateLookAtMatrix_xAxis.y,
+            Camera.#calculateLookAtMatrix_yAxis.y,
+            Camera.#calculateLookAtMatrix_zAxis.y,
+            0.0,
+            Camera.#calculateLookAtMatrix_xAxis.z,
+            Camera.#calculateLookAtMatrix_yAxis.z,
+            Camera.#calculateLookAtMatrix_zAxis.z,
+            0.0,
+            -cameraPosition.dot(Camera.#calculateLookAtMatrix_xAxis),
+            -cameraPosition.dot(Camera.#calculateLookAtMatrix_yAxis),
+            -cameraPosition.dot(Camera.#calculateLookAtMatrix_zAxis),
+            1.0
+        );
+    }
+
 }
 
 class FrustumCuller {
     static #DELTA = 0.1;
-    
+
     #planes = new FrustumPlanes();
     #frustum;
     #camera;
