@@ -185,7 +185,19 @@ export class Float32Vector3 extends Vector3Base {
         this._values[2] -= other._values[2];
     }
 
-
+    /**
+     * Subtract `other` from the vector and writes result to `result`.
+     *
+     * This method does not mutate the vector.
+     * @param {Float32Vector3} other
+     * @param {Float32Vector3} result
+     */
+    subOut(other, result) {
+        result._values[0] = this._values[0] - other._values[0];
+        result._values[1] = this._values[1] - other._values[1];
+        result._values[2] = this._values[2] - other._values[2];
+        return result;
+    }
 
     /**
      *
@@ -245,6 +257,19 @@ export class Float32Vector3 extends Vector3Base {
         const cy = this.z * other.x - this.x * other.z;
         const cz = this.x * other.y - this.y * other.x;
         return new Float32Vector3(cx, cy, cz);
+    }
+
+    /**
+     * Calculate cross product and writes result to `result`.
+     * @param {Float32Vector3} other
+     * @param {Float32Vector3} result
+     */
+    crossOut(other, result) {
+        const cx = this.y * other.z - this.z * other.y;
+        const cy = this.z * other.x - this.x * other.z;
+        const cz = this.x * other.y - this.y * other.x;
+        result.set(cx, cy, cz);
+        return result;
     }
 
     /**
