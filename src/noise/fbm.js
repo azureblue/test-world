@@ -25,7 +25,6 @@ export class FBM extends Reducer {
         this.#extractor = extractor;
     }
 
-  
     apply(gen, x, y) {
         let sum = 0;
         let amp = 1.0;
@@ -33,16 +32,17 @@ export class FBM extends Reducer {
         let ampSum = 0;
 
         for (let i = 0; i < this.#octaves; i++) {
-            const n = this.#extractor.apply(gen, x * freq, y * freq);
+            let octave_offset = i * 50;
+            const n = this.#extractor.apply(gen, (x + octave_offset) * freq, (y + octave_offset) * freq);
             sum += n * amp;
             ampSum += amp;
             freq *= this.#lacunarity;
             amp *= this.#gain;
         }
-        return sum / ampSum; // [0,1]        
+        return sum / ampSum;       
     }
 
-    static reducer({octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5 } = {}, extractor = Reducer.default) {
+    static reducer({octaves = 4, frequency = 1.0, lacunarity = 2.0, gain = 0.5 } = {}, extractor = Reducer.default) {
         return new FBM({ octaves, frequency, lacunarity, gain }, extractor);
     }
 
@@ -54,5 +54,4 @@ export class FBM extends Reducer {
             }
         }();
     }
-
 }

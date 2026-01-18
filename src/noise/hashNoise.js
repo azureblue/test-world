@@ -1,6 +1,7 @@
-import { wang_hash2d } from "./hash";
+import { hash01, wang_hash2d } from "./hash.js";
+import { Generator } from "./noise.js";
 
-export class Hash01Noise extends NoiseGenerator {
+export class Hash01Noise extends Generator {
 
     #seed;
 
@@ -9,12 +10,12 @@ export class Hash01Noise extends NoiseGenerator {
         this.#seed = seed;
     }
 
-    get(x, y) {
+    gen(x, y) {
         return hash01(Math.floor(x), Math.floor(y), this.#seed);
     }
 }
 
-export class Hasn2DNoise extends NoiseGenerator {
+export class Hasn2DNoise extends Generator {
 
     #seed;
 

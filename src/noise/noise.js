@@ -4,25 +4,6 @@
  */
 
 
-export class NoiseSource {
-    #rawNoise;
-
-    /**
-     * @param {RawNoise} rawNoise 
-     */
-    constructor(rawNoise) {
-        this.#rawNoise = rawNoise;
-    }
-
-    rawNoise(seed, x, y) {
-        return this.#rawNoise(seed, x, y);
-    }
-
-    seed(seed) {
-        return new SeededGenerator(this.#rawNoise, seed);
-    }
-}
-
 export class Generator {
     gen(x, y) {
         return 0;
@@ -38,7 +19,7 @@ export class Generator {
 
 export class Postprocessor {
 
-    postprocess(value) {
+    apply(value) {
         return value;
     }
 
@@ -48,7 +29,7 @@ export class Postprocessor {
      */
     static of(func) {
         return new class extends Postprocessor {
-            postprocess(value) {
+            apply(value) {
                 return func(value);
             }
         }
@@ -96,6 +77,63 @@ export class Reducer {
     }
 
     static default = new Reducer();
+
+    static of(func) {
+        return new class extends Reducer {
+            apply(gen, x, y) {
+                return func(gen, x, y);
+            }
+        }
+    }
+
+    /**
+     * @param {(value: number) => number} func 
+     */
+    static func(func) {
+        return new class extends Reducer {
+            apply(gen, x, y) {
+                return func(gen.gen(x, y));
+            }
+        }
+    }
+}
+
+
+export class NoiseSource extends Generator {
+    #rawNoise;
+    #seed = 0;
+    #freq = 1.0;
+
+    /**
+     * @param {RawNoise} rawNoise 
+     */
+    constructor(rawNoise) {
+        super()
+        this.#rawNoise = rawNoise;
+    }
+
+    seed(seed) {
+        this.#seed = seed;
+        return this;
+    }
+
+    freq(freq) {
+        this.#freq = freq;
+        return this;
+    }
+
+    scale(factor) {
+        this.#freq = 1.0 / factor;
+        return this;
+    }
+
+    gen(x, y) {
+        return this.#rawNoise(this.#seed, x * this.#freq, y * this.#freq);
+    }
+
+    rawNoise(seed, x, y) {
+        return this.#rawNoise(seed, x, y);
+    }
 }
 
 
@@ -119,10 +157,20 @@ export class DomainWrap extends Preprocessor {
     }
 
     preprocess(x, y, out) {
-        const wx = 2.0 * this.#noiseGenerator.gen(x * this.#warpFreq, y * this.#warpFreq) - 1.0;
-        const wy = 2.0 * this.#noiseGenerator.gen((x + 17.3) * this.#warpFreq, (y + 9.2) * this.#warpFreq) - 1.0;
+        const wx = this.#noiseGenerator.gen(x * this.#warpFreq, y * this.#warpFreq);
+        const wy = this.#noiseGenerator.gen((x + 17.3) * this.#warpFreq, (y + 9.2) * this.#warpFreq);
         out[0] = x + wx * this.#warpAmp;
         out[1] = y + wy * this.#warpAmp;
+    }
+
+    /** 
+     * @param {Object} options
+     * @param {Generator} options.noiseGenerator
+     * @param {number} [options.warpFreq=1.0]
+     * @param {number} [options.warpAmp=1.0]
+     */
+    static basic({ noiseGenerator, warpFreq = 1.0, warpAmp = 1.0 } = {}) {
+        return new DomainWrap({ noiseGenerator, warpFreq, warpAmp });
     }
 }
 
@@ -149,7 +197,7 @@ export class Noise extends Generator {
         this.#postprocessors = postprocessors;
     }
 
-    gen(x, y) {        
+    gen(x, y) {
         for (const pre of this.#preprocessors) {
             pre.preprocess(x, y, this.#tmp);
             x = this.#tmp[0];
@@ -159,7 +207,7 @@ export class Noise extends Generator {
         let value = this.#reducer.apply(this.#gen, x, y);
 
         for (const post of this.#postprocessors) {
-            value = post.postprocess(value);
+            value = post.apply(value);
         }
 
         return value;

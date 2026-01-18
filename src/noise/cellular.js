@@ -1,8 +1,15 @@
+import { unnormalize } from "../functions.js";
 import { hash01 } from "./hash.js";
-import { Noise, Generator as Generator, Reducer } from "./noise.js";
+import { Generator, Reducer } from "./noise.js";
+
+export const MAX_F1_SQ = 2.0;
+export const MAX_F2_SQ = 2.5;
+export const MAX_F1 = Math.sqrt(2.0);
+export const MAX_F2 = Math.sqrt(2.5);
+
 
 export class CellularNoise {
-    static worleyReducer(seed, operator = (f1, f2) => f1) {
+    static worleyReducer(seed, operator = WorleyOperators.defaultF1DistOperator) {
         return new class extends Reducer {
             apply(gen, x, y) {
                 return worley(seed, x, y, operator);
@@ -10,7 +17,7 @@ export class CellularNoise {
         }();
     }
 
-    static worleyGenerator(seed, operator = (f1, f2) => f1) {
+    static worleyGenerator(seed, operator = WorleyOperators.defaultF1DistOperator) {
         return new CellularGenerator(seed, operator);
     }
 }
@@ -18,7 +25,7 @@ export class CellularNoise {
 class CellularGenerator extends Generator {
     #seed;
     #operator;
-    constructor(seed, operator = (f1, f2) => f1) {
+    constructor(seed, operator = WorleyOperators.defaultF1DistOperator) {
         super();
         this.#seed = seed;
         this.#operator = operator;
@@ -29,7 +36,7 @@ class CellularGenerator extends Generator {
     }
 }
 
-export function worley(seed, x, y, operator = (f1, f2) => f1) {
+export function worley(seed, x, y, operator = WorleyOperators.defaultF1DistOperator) {
 
     let F1 = Infinity;
     let F2 = Infinity;
@@ -57,5 +64,14 @@ export function worley(seed, x, y, operator = (f1, f2) => f1) {
             }
         }
     }
-    return operator(F1, F2)
+    return operator(F1, F2);
+}
+
+export class WorleyOperators{
+
+    static defaultF1DistOperator = (f1, f2) => unnormalize(Math.sqrt(f1) / MAX_F1);
+
+    static default() {
+        return this.defaultF1DistOperator;
+    }
 }
