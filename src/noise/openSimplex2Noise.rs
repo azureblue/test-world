@@ -9,7 +9,7 @@ const UNSKEW_2D: f64 = -0.21132486540518713;
 const RSQUARED_2D: f64 = 2.0 / 3.0;
 
 #[no_mangle]
-pub extern "C" fn open_simplex_2_noise_octaves(
+pub extern "C" fn open_simplex_2_noise_fbm(
     seed: i32,
     x: f64,
     y: f64,
@@ -18,23 +18,19 @@ pub extern "C" fn open_simplex_2_noise_octaves(
     lacunarity: f64,
     gain: f64
 ) -> f64 {
-    let mut sum = 0.0;
-    let mut amplitude = 1.0;
-    let mut total_amplitude = 0.0;
+    let mut sum = 0.0f64;
+    let mut amplitude = 1.0f64;
+    let mut total_amplitude = 0.0f64;
 
     for i in 0..octaves {
-        let scaled = open_simplex_2_noise_scaled(seed + i as i32, x, y, frequency);
+        let octave_seed = seed ^ (i as i32).wrapping_mul(0x27D4EB2Du32 as i32);
+        let scaled = open_simplex_2_noise(octave_seed, x * frequency, y * frequency);
         sum += scaled * amplitude;
         total_amplitude += amplitude;
         frequency *= lacunarity;
         amplitude *= gain;
     }
     sum / total_amplitude
-}
-
-#[no_mangle]
-pub extern "C" fn open_simplex_2_noise_scaled(seed: i32, x: f64, y: f64, frequency: f64) -> f64 {
-    open_simplex_2_noise(seed, x * frequency, y * frequency)
 }
 
 /**
@@ -47,7 +43,7 @@ pub extern "C" fn open_simplex_2_noise(seed: i32, x: f64, y: f64) -> f64 {
     let xs = x + s;
     let ys = y + s;
 
-    normalize(open_simplex_2_noise_unskewed_base(seed.into(), xs, ys))
+    open_simplex_2_noise_unskewed_base(seed.into(), xs, ys)
 }
 
 #[inline]
