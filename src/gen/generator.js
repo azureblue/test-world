@@ -7,6 +7,7 @@ import { Generator } from "../noise/noise.js";
 import { SimplexNoiseGenerator } from "../noise/opensimplex2.js";
 import { ImagePixels } from "../utils.js";
 import { LinearCurve, point } from "./curve.js";
+import { testgen } from "./generators.js";
 import { CurveNode, GenericNode, GenNode } from "./node.js";
 
 
@@ -228,8 +229,8 @@ export class RidgeNoiseNode extends GenNode {
                 let freq = frequency;
                 let ampSum = 0;
 
-                 const bubblePow = 3.0;     // twardość bąbli (2..5)
-                const  edgeA = 0.03;        // start “krawędzi”
+                const bubblePow = 3.0;     // twardość bąbli (2..5)
+                const edgeA = 0.03;        // start “krawędzi”
                 const edgeB = 0.10;        // koniec “krawędzi”
                 const edgePow = 2.0;       // kontrast szczelin (1.5..3)
                 const edgeStrength = 0.9;  // jak mocno przyciemniać krawędzie (0..1)
@@ -240,16 +241,16 @@ export class RidgeNoiseNode extends GenNode {
                     let [f1, f2] = worley(x * freq, y * freq);
 
                     let b = (1 - f1) * (1 - f2);      // [~0..1]
-                // b = hash01(x * freq, y * freq, seed + 9); // add some noise
-                // b = n;
+                    // b = hash01(x * freq, y * freq, seed + 9); // add some noise
+                    // b = n;
 
-                // --- edges (cell borders)
-                // const d = Math.sqrt(f2) - Math.sqrt(f1);     // małe przy granicy
-                // let e = 1 - smoothstep(edgeA, edgeB, d);     // 1 na granicy, 0 w środku
-                // e = Math.pow(clamp01(e), edgePow);
+                    // --- edges (cell borders)
+                    // const d = Math.sqrt(f2) - Math.sqrt(f1);     // małe przy granicy
+                    // let e = 1 - smoothstep(edgeA, edgeB, d);     // 1 na granicy, 0 w środku
+                    // e = Math.pow(clamp01(e), edgePow);
 
-                // --- combine
-                const v = b;// * (1 - edgeStrength * e);
+                    // --- combine
+                    const v = b;// * (1 - edgeStrength * e);
 
                     // let v = 1 - Math.sqrt(f1) * 1;      // blob field
                     // v  = v * v;
@@ -469,6 +470,59 @@ export class NoiseChunkGenerator {
 
     #iter = 0;
 
+    // goodNoise0 = new Noise(
+    //     SimplexNoise.seed(1192),
+    //     {
+    //         preprocessors: [
+    //             DomainWrap.basic({
+    //                 noiseGenerator: new Noise(
+    //                     SimplexNoise.seed(1234), { reducer: FBM.reducer({ octaves: 10, frequency: 0.005 }) }
+    //                 ),
+    //                 warpFreq: 1,
+    //                 warpAmp: 200
+    //             })
+    //         ],
+    //         reducer: FBM.reducer({
+    //             octaves: 1,
+    //             frequency: 0.002,
+    //             lacunarity: 2,
+    //             gain: 0.8
+    //         }
+    //             , CellularNoise.worleyReducer(123111, (f1, f2) => {
+    //                 const a = unnormalize(1 - Math.sqrt(f1)) / 2;
+    //                 return spreadSin11(a );
+    //             })
+    //         )
+    //     });
+    goodNoise0 = testgen()
+
+    // goodNoise0 = new Noise(
+    //         SimplexNoise.seed(1),
+    //         {
+    //             preprocessors: [
+    //                 DomainWrap.basic({
+    //                     noiseGenerator: new Noise(
+    //                         SimplexNoise.seed(1234), { reducer: FBM.reducer({ octaves: 10, frequency: 0.005 })}
+    //                     ),
+    //                     warpFreq: 1,
+    //                     warpAmp: 200
+    //                 })
+    //             ],
+    //             reducer: FBM.reducer({
+    //                 octaves: 1,
+    //                 frequency: 0.002,
+    //                 lacunarity: 2,
+    //                 gain: 0.4
+    //             }, CellularNoise.worleyReducer(11, (f1, f2) => {
+    //                 const a = unnormalize(1 - Math.sqrt(f1));
+    //                 return spreadSin11(a / 2 - 0.5) + 0.5;
+
+    //             })
+    //                 // , (v) => Math.abs(2.0 * v - 1)
+    //             )
+    //         });
+
+
     #rigedNoise = new RidgeNoiseNode(SimplexNoiseGenerator.rawNoise, {
         seed: 23456,
         frequency: 0.01,
@@ -477,6 +531,8 @@ export class NoiseChunkGenerator {
 
     constructor() {
         this.#offests = seedOffset(this.#noise.seed);
+        this.#offests.ox = 0;
+        this.#offests.oy = 0;
     }
 
     /**
@@ -488,7 +544,7 @@ export class NoiseChunkGenerator {
         //     return chunk;
         // }
         const startX = (chunkPos.x * CHUNK_SIZE);
-        const startY = ((-chunkPos.y - 1) * CHUNK_SIZE);
+        const startY = (chunkPos.y * CHUNK_SIZE);
         // if (startX != 0 || startY != 0) {
         //      return chunk;
         // }
@@ -496,43 +552,27 @@ export class NoiseChunkGenerator {
         for (let y = 0; y < CHUNK_SIZE; y++)
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 const rx = x; //CHUNK_SIZE - x - 1;
-                const ry = CHUNK_SIZE - y - 1;
-                const noiseOutput = this.#rigedNoise.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy, this.#iter++);
+                const ry = y;//CHUNK_SIZE - y - 1;
+                const noiseOutput = this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
                 //ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
                 //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
                 const noiseImproved = noiseOutput; //spreadTanh(noiseOutput, 2);
                 let height = Math.floor(noiseImproved * MAX_HEIGHT);
-                if (height == 0)
-                    height = 1;
 
                 const chunkStartH = chunkPos.z * CHUNK_SIZE;
                 const chunkEndH = chunkStartH + CHUNK_SIZE;
-
-                const dirtLayer = Math.max(0, 50 - Math.floor((10 / 58) * height));
-
-                for (let z = Math.max(0, chunkStartH); z < Math.min(chunkEndH, height - dirtLayer); z++) {
-                    chunk.set(z - chunkStartH, rx, ry, BLOCK_IDS.ROCK);
+                let r = chunkStartH;
+                for (; r < Math.min(height - 1, chunkEndH); r++) {
+                    chunk.set(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
                 }
 
-                for (let z = Math.max(height - dirtLayer, chunkStartH); z < Math.min(chunkEndH, height); z++) {
-                    chunk.set(z - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
+                if (r < chunkEndH && r < height) {
+                    chunk.set(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
                 }
 
-                if (dirtLayer > 0) {
-                    if (height >= chunkStartH && height < chunkEndH) {
-                        chunk.set(height - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
-
-                        if (Math.random() < 0.04 && height < MAX_HEIGHT - 1) {
-                            chunk.set(height - chunkStartH + 1, rx, ry, BLOCK_IDS.GRASS_SHORT);
-                        }
-                    }
-                }
-                // if (Math.random() < 0.1)
-                //     chunk.set(height, x, ry, BLOCK_IDS.ROCK);
-
-                for (let w = Math.max(height, chunkStartH); w < Math.min(50, chunkEndH); w++) {
-                    if (chunk.get(w, rx, ry) == BLOCK_IDS.EMPTY)
-                        chunk.set(w, rx, ry, BLOCK_IDS.WATER);
+                for (let w = r; w < Math.min(-55, chunkEndH); w++) {
+                    if (chunk.get(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
+                        chunk.set(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
                 }
             }
         return chunk;
