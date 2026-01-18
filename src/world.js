@@ -2,7 +2,7 @@ import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_POS, CHUNK_SIZE_MASK, ChunkData, UInt
 import { FVec2, FVec3, fvec3, ivec2, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
 import { GenericBuffer, Logger, Resources } from "./utils.js";
 const logger = new Logger("World");
-const CHUNK_RENDER_DIST = 6;
+const CHUNK_RENDER_DIST = 9;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 
 
@@ -10,6 +10,18 @@ export class BlockLocation {
     constructor() {
         this.chunkPos = vec3();
         this.blockInChunkPos = vec3();
+    }
+
+    realX() {
+        return this.chunkPos.x * CHUNK_SIZE + this.blockInChunkPos.x;
+    }
+
+    realY() {
+        return this.chunkPos.y * CHUNK_SIZE + this.blockInChunkPos.z;
+    }
+
+    realZ() {
+        return this.chunkPos.z * CHUNK_SIZE + this.blockInChunkPos.y;
     }
 }
 
@@ -457,8 +469,8 @@ export class World {
         blockLocation.chunkPos.y = cy;
         blockLocation.chunkPos.z = cz;
         blockLocation.blockInChunkPos.x = bx;
-        blockLocation.blockInChunkPos.z = by;
-        blockLocation.blockInChunkPos.y = bh;
+        blockLocation.blockInChunkPos.y = by;
+        blockLocation.blockInChunkPos.z = bh;
     }
 
     /**

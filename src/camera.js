@@ -78,9 +78,9 @@ class Camera {
         this.#directionXZ.x = cosYaw;
         this.#directionXZ.y = sinYaw;
         FVec3.cross(this.#direction, Camera.#DIRECTION_UP, this.#right);
-        this.#right.normalizeInPlace();
+        this.#right.normalizeIn();
         FVec3.cross(this.#right, this.#direction, this.#up);
-        this.#up.normalizeInPlace();
+        this.#up.normalizeIn();
     }
 
     /**
@@ -153,9 +153,9 @@ class Camera {
      * @param {Matrix4x4} result
      */
     static calculateLookAtMatrix(cameraPosition, lookAtPosition, cameraUp, result) {        
-        cameraPosition.subOut(lookAtPosition, Camera.#calculateLookAtMatrix_zAxis).normalizeInPlace();
-        cameraUp.crossOut(Camera.#calculateLookAtMatrix_zAxis, Camera.#calculateLookAtMatrix_xAxis).normalizeInPlace();
-        Camera.#calculateLookAtMatrix_zAxis.crossOut(Camera.#calculateLookAtMatrix_xAxis, Camera.#calculateLookAtMatrix_yAxis).normalizeInPlace();
+        cameraPosition.subOut(lookAtPosition, Camera.#calculateLookAtMatrix_zAxis).normalizeIn();
+        cameraUp.crossOut(Camera.#calculateLookAtMatrix_zAxis, Camera.#calculateLookAtMatrix_xAxis).normalizeIn();
+        Camera.#calculateLookAtMatrix_zAxis.crossOut(Camera.#calculateLookAtMatrix_xAxis, Camera.#calculateLookAtMatrix_yAxis).normalizeIn();
 
         result.setValues(
             Camera.#calculateLookAtMatrix_xAxis.x,
@@ -217,19 +217,19 @@ class FrustumCuller {
 
         tmp.setTo(farMid).addMulInPlace(camRight, -farHalfH);
         FVec3.cross(tmp, camUp, this.#planes.left.direction);
-        this.#planes.left.direction.normalizeInPlace();
+        this.#planes.left.direction.normalizeIn();
 
         tmp.setTo(farMid).addMulInPlace(camRight, farHalfH);
         FVec3.cross(camUp, tmp, this.#planes.right.direction);
-        this.#planes.right.direction.normalizeInPlace();
+        this.#planes.right.direction.normalizeIn();
 
         tmp.setTo(farMid).addMulInPlace(camUp, farHalfV);
         FVec3.cross(tmp, camRight, this.#planes.top.direction);
-        this.#planes.top.direction.normalizeInPlace();
+        this.#planes.top.direction.normalizeIn();
 
         tmp.setTo(farMid).addMulInPlace(camUp, -farHalfV);
         FVec3.cross(camRight, tmp, this.#planes.bottom.direction);
-        this.#planes.bottom.direction.normalizeInPlace();
+        this.#planes.bottom.direction.normalizeIn();
     }
 
     /**

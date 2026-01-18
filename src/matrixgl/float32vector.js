@@ -302,7 +302,7 @@ export class Float32Vector3 extends Vector3Base {
     /**
      * Normalize the vector in place.
      */
-    normalizeInPlace() {
+    normalizeIn() {
         const mag = this.magnitude;
         if (mag === 0) {
             return this;
@@ -310,6 +310,7 @@ export class Float32Vector3 extends Vector3Base {
         this.x /= mag;
         this.y /= mag;
         this.z /= mag;
+        return this;
     }
     /**
      * Returns xy values of the vector as `Float32Vector2`.
