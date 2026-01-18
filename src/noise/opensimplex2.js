@@ -2,8 +2,7 @@ import { Resources } from "../utils.js";
 import { Generator, NoiseSource } from "./noise.js";
 
 const wasmResult = await WebAssembly.instantiateStreaming(fetch(Resources.relativeToRoot("./noise/openSimplex2Noise.wasm")));
-const open_simplex_2_noise_scaled = wasmResult.instance.exports.open_simplex_2_noise_scaled;
-const open_simplex_2_noise_octaves = wasmResult.instance.exports.open_simplex_2_noise_octaves;
+const open_simplex_2_noise_fbm = wasmResult.instance.exports.open_simplex_2_noise_fbm;
 const open_simplex_2_noise = wasmResult.instance.exports.open_simplex_2_noise;
 
 
@@ -72,11 +71,7 @@ export class SimplexNoiseGenerator extends Generator {
     }
 
     octaveNoise(x, y) {
-        return open_simplex_2_noise_octaves(this.seed, x, y, this.frequency, this.octaves, this.lacunarity, this.gain)
-    }
-
-    static scaledNoise(seed, x, y, freq) {
-        return open_simplex_2_noise_scaled(seed, x, y, freq);
+        return open_simplex_2_noise_fbm(this.seed, x, y, this.frequency, this.octaves, this.lacunarity, this.gain)
     }
 
     static rawNoise(seed, x, y) {
