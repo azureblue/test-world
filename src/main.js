@@ -8,7 +8,7 @@ import { TextureArray } from "./textures.js";
 import { Replacer, Resources, writeVoxelWireframe } from "./utils.js";
 import { BlockLocation, World } from "./world.js";
 
-const VIEW_DISTANCE_SQ = (4 * 32) ** 2;
+const VIEW_DISTANCE_SQ = (8 * 32) ** 2;
 // const VIEW_DISTANCE_SQ = 409600.0;
 
 export async function start() {
@@ -22,9 +22,12 @@ export async function start() {
     document.body.appendChild(canvas);
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    // canvas.style.width = window.innerWidth + "px";
+    // canvas.style.height = window.innerHeight + "px";
 
     const gl = canvas.getContext("webgl2", {
-        powerPreference: "high-performance"
+        powerPreference: "high-performance",
+        desynchronized: false
     });
 
 
@@ -115,12 +118,12 @@ export async function start() {
 
     const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
 
-    world.moveTo(0, 0, 1);
+    world.moveTo(0, 100, -0);
     world.update();
 
     const currentChunk = await world.getCurrentChunk();
     // const peek = currentChunk.peek(0, 0);
-    const camera = new Camera(new FVec3(0, 400, 0));
+    const camera = new Camera(new FVec3(0, 100, 0));
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     const cameraSpeed = 0.5;
@@ -158,7 +161,7 @@ export async function start() {
         camera.changePitch(-mouseDelta.y * 0.2);
         camera.update();
 
-        camera.setLookAtMatrix(mView);
+        camera.calculateLookAtMatrix(mView);
 
         chunk0Program.use()
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -219,6 +222,7 @@ export async function start() {
                 `chunks ${chunksDrawn}/${allChunks}/${world.chunksInView} ` +
                 `chunk x:${blockLocation.chunkPos.x} y:${blockLocation.chunkPos.y} z:${blockLocation.chunkPos.z} ` +
                 `pos x:${blockLocation.blockInChunkPos.x} y:${blockLocation.blockInChunkPos.y} z:${blockLocation.blockInChunkPos.z} ` +
+                `real pos x:${blockLocation.realX()} y:${blockLocation.realY()} z:${blockLocation.realZ()}` +
                 `block ${block} ` +
                 `${out === null ? "" : "looking at " + out.block + " at " + out.x + " " + out.y + " " + out.z}`;
         }

@@ -1,12 +1,20 @@
 import { blend, BLEND_MODE } from "../../blend.js";
-import { lerp, preciseLerp, smoothstep } from "../../functions.js";
-import { CellularNoise, worley } from "../../noise/cellular.js";
+import { normalize, spreadSin11, unnormalize } from "../../functions.js";
+import { CellularNoise } from "../../noise/cellular.js";
 import { FBM } from "../../noise/fbm.js";
-import { DomainWrap, Noise, Preprocessor } from "../../noise/noise.js";
+import { DomainWrap, Noise, Postprocessor, Reducer } from "../../noise/noise.js";
 import { SimplexNoise, SimplexNoiseGenerator } from "../../noise/opensimplex2.js";
 import { CurveRenderer, LinearCurve, point } from "../curve.js";
-import { DomainWarpNode, RidgeNoiseNode } from "../generator.js";
+import { DomainWarpNode } from "../generator.js";
 import { BlendNode, CurveNode, GenericNode, GenNode, Node } from "../node.js";
+import { renderTerrain } from "./terrainRenderer.js";
+
+function updateCanvases() {
+    document.querySelectorAll("canvas").forEach(canvas => {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+    })
+}
 
 /**
  * @param {string} id 
@@ -16,27 +24,38 @@ function getCanvas(id) {
     return document.getElementById(id);
 }
 
-const w = 400;
-const h = 400;
-
-const tmpImageData = new ImageData(w, h);
-
 /**
  * 
  * @param {Node} node 
  * @param {HTMLCanvasElement} canvas 
  */
-function renderNode(node, canvas) {
+function renderGen(node, canvas, drawMiddleLines = false) {
+    const w = canvas.width;
+    const wHalf = w >> 1;
+    const h = canvas.height;
+    const hHalf = h >> 1;
+    const c2d = canvas.getContext("2d");
+    const tmpImageData = c2d.createImageData(w, h);
     for (let x = 0; x < w; x++)
         for (let y = 0; y < w; y++) {
             const baseIdx = (y * w + x) * 4;
-            const r = node.gen(x, y, y * 256 + x);
+            const r = normalize(node.gen(x - wHalf, h - y - hHalf));
             tmpImageData.data[baseIdx] = Math.floor(r * 256);
             tmpImageData.data[baseIdx + 1] = Math.floor(r * 256);
             tmpImageData.data[baseIdx + 2] = Math.floor(r * 256);
             tmpImageData.data[baseIdx + 3] = 255;
         }
-    canvas.getContext("2d").putImageData(tmpImageData, 0, 0);
+    c2d.putImageData(tmpImageData, 0, 0);
+    if (drawMiddleLines) {
+        c2d.lineWidth = 2;
+        c2d.strokeStyle = "rgba(173,216,230,0.5)";
+        c2d.beginPath();
+        c2d.moveTo(0, h / 2);
+        c2d.lineTo(w, h / 2);
+        c2d.moveTo(w / 2, 0);
+        c2d.lineTo(w / 2, h);
+        c2d.stroke();
+    }
 }
 
 /**
@@ -44,18 +63,20 @@ function renderNode(node, canvas) {
  * @param {Node} node 
  * @param {HTMLCanvasElement} canvas 
  */
-function renderNodeSlice(node, canvas, scale = 1.0, offset = {x: 0, y: 0}) {
+function renderGenSlice(node, canvas, width, offset = { x: 0, y: 0 }) {
     const w = canvas.width;
-    const h = canvas.height;    
+    const wHalf = w << 1;
+    const h = canvas.height;
+    const hHalf = h << 1;
     const points = [];
-    const genW = w * scale; 
 
     for (let x = 0; x < w; x++) {
-            points.push({x: x / w, y: node.gen(offset.x + x * scale, 1)})
-        }
+        const x01 = x / w;
+        points.push({ x: x01, y: normalize(node.gen(offset.x + width * x01 - wHalf, offset.y - hHalf)) });
+    }
     const curve = new LinearCurve(points);
     const renderer = new CurveRenderer();
-    renderer.render(curve, canvas);    
+    renderer.render(curve, canvas);
 }
 
 
@@ -95,13 +116,12 @@ function fillArr(ctx, fun) {
 // }
 
 export function main() {
+    updateCanvases();
     const scale = 1;
     const node0 = new GenNode(new SimplexNoiseGenerator({
         frequency: 0.01 * scale,
         octaves: 1
     }));
-
-    renderNode(node0, getCanvas("canvas0"));
 
     const node1 = new GenericNode([node0], {
         gen: new SimplexNoiseGenerator({
@@ -145,7 +165,7 @@ export function main() {
     const mergeNode = new BlendNode([node1, riverCurveNode], BLEND_MODE.MULTIPLY, 1);
 
     // renderNode(node1, getCanvas("canvas0"));
-    renderNode(riverNode, getCanvas("canvas1"));
+    // renderGen(riverNode, getCanvas("canvas1"));
     // renderNode(riverCurveNode, getCanvas("canvas2"));
     // renderNode(mergeNode, getCanvas("canvas3"));
     // renderNode(riverWidthNode, getCanvas("canvas4"));
@@ -167,58 +187,82 @@ export function main() {
         gain: 0.5
     }));
 
-    const cellular0 = new GenNode(new Noise(
-        SimplexNoise.seed(1234),
-        {
-            preprocessors: [
-                // new DomainWrap({
-                //     noiseGenerator: NoiseSource.openSimplex2().seed(1234),
-                //     warpFreq: 0.01 * scale,
-                //     warpAmp: 20
-                // })
-            ],
-            reducer: FBM.reducer({
-                octaves: 1,
-                frequency: 0.005,
-                lacunarity: 2,
-                gain: 0.5
-            }, CellularNoise.worleyReducer(1234, (f1, f2) => 1 - Math.sqrt(f1))
-                // , (v) => Math.abs(2.0 * v - 1)
-            )
-        }));
-
     const cellular1 = new GenNode(new Noise(
         SimplexNoise.seed(1234),
         {
             preprocessors: [
-                new class extends Preprocessor {
-                    preprocess(x, y, out) {
-                        // zakładamy worleyF1F2_2D
-                        const warpFreq = 0.001;
-                        const warpAmp = 20;
-                        const seed = 1234;
-                        const wA = worley(seed + 11, x * warpFreq, y * warpFreq);
-                        const wB = worley(seed + 23, x * warpFreq, y * warpFreq);
 
-                        const wx = (1 - Math.sqrt(wA)) * 2 - 1;
-                        const wy = (1 - Math.sqrt(wB)) * 2 - 1;
-
-                        out[0] = x + wx * warpAmp;
-                        out[1] = y + wy * warpAmp;
-
-                    }
-                }
-                // new DomainWrap({
-                //     noiseGenerator: SimplexNoise.seed(12341),
-                //     warpFreq: 0.01,
-                //     warpAmp: 40
-                // })
             ],
             reducer: FBM.reducer({
                 frequency: 0.005
             })
         }));
 
+
+    const cellular11 = new GenNode(new Noise(
+        SimplexNoise.seed(1234),
+        {
+            reducer: FBM.reducer({ octaves: 4, frequency: 0.005 })
+        }
+    ));
+
+    const cellular0 = new Noise(
+        SimplexNoise.seed(128334),
+        // SimplexNoise.seed(1192),
+        {
+            preprocessors: [
+                DomainWrap.basic({
+                    noiseGenerator: new Noise(
+                        SimplexNoise.seed(123634), { reducer: FBM.reducer({ octaves: 6, frequency: 1 }) }
+                    ),
+                    // noiseGenerator: CellularNoise.worleyGenerator(123111, (f1, f2) => {
+                    //     const a = unnormalize(1 - Math.sqrt(f1)) / 2;
+                    //     return a// spreadTanh11(a);
+                    // }),
+
+                    warpFreq: 0.005,
+                    warpAmp: 100
+                })
+            ],
+            reducer: FBM.reducer({
+                octaves: 5,
+                frequency: 0.002,
+                lacunarity: 2,
+                gain: 0.5
+            }
+
+                // , CellularNoise.worleyReducer(123111, (f1, f2) => {
+                //     const a = unnormalize(1 - f1);
+                //     return clamp(logistic(a, 1), -1, 1);// spreadTanh11(a);
+                // })
+            ),
+            postprocessors: [
+                Postprocessor.of(v => spreadSin11(v, 0.4))
+            ]
+        });
+
+    const cellular00 = new Noise(
+        SimplexNoise.seed(10),
+        {
+            preprocessors: [
+                DomainWrap.basic({
+                    noiseGenerator: new Noise(
+                        SimplexNoise.seed(1234), { reducer: FBM.reducer({ octaves: 10, frequency: 0.005 }) }
+                    ),
+                    warpFreq: 1,
+                    warpAmp: 100
+                })
+            ],
+            reducer: FBM.reducer({
+                octaves: 2,
+                frequency: 0.01,
+                lacunarity: 2,
+                gain: 0.4
+            }, CellularNoise.worleyReducer(191, (f1, f2) => {
+                const a = unnormalize(1 - Math.sqrt(f1));
+                return a;//1 - spreadTanh(a);
+            }))
+        });
 
     const wrapNode = new DomainWarpNode(cellular0, simplexNoise0, {
         warpFreq: 0.02 * scale,
@@ -230,17 +274,45 @@ export function main() {
         warpAmp: 100
     });
 
-    const ridgeNode2 = new RidgeNoiseNode(SimplexNoiseGenerator.rawNoise, {
-            seed: 23456,
-            frequency: 0.02,
-            octaves: 2
+    const ridgeNode2 = new Noise(
+        SimplexNoise.seed(1234),
+        {
+            reducer: FBM.reducer({
+                octaves: 4,
+                frequency: 0.01,
+                lacunarity: 2,
+                gain: 0.5
+            }, Reducer.func(v => unnormalize(1 - Math.abs(v)))
+            )
+        }
+    );
 
-        });
+    renderGenSlice(cellular00, getCanvas("slice0"), 400, { x: 0, y: 200 });
+    renderGenSlice(cellular0, getCanvas("slice1"), 400, { x: 0, y: 200 });
+    // renderGen(cellular00, getCanvas("canvas0"), true);
+    renderGen(cellular0, getCanvas("canvas1"), false);
+    renderGen(cellular1, getCanvas("canvas2"), true);
+    renderGen(ridgeNode2, getCanvas("canvas3"), true);
 
-    renderNodeSlice(cellular1, getCanvas("canvas4"), 1, {x: 10, y: 2});
-    renderNode(noridge, getCanvas("canvas0"));
-    renderNode(cellular0, getCanvas("canvas1"));
-    renderNode(cellular1, getCanvas("canvas2"));
-    renderNode(ridgeNode2, getCanvas("canvas3"));
+    const canvas1 = getCanvas("canvas1");
+    // renderIsoPerPixel(getCanvas("canvas0"), 800, 800, (x, y) => cellular0.gen(x - 400, 800 - 1 - y - 400), {
+    //     step: 4,          // 800/4 => ~200x200 komórek (szybko i wygląda dobrze)
+    //     tileX: 1,
+    //     tileY: 0.4,
+    //     heightAmp: 70,    // “pion”
+    //     ambient: 0.30,
+    //     fog: 0,
+    //     // light: { x: -0.35, y: -0.55, z: 0.75 },
+    //     light: { x: 1, y: 1, z: 1 },
+    // });
 
+    const image1 = canvas1.getContext("2d").getImageData(0, 0, canvas1.width, canvas1.height);
+    renderTerrain(getCanvas("canvas0"), -400, -400, 800, 800,
+    // (x, y) => image1.data[((y * canvas1.width) + x) * 4] / 255.0 * 2.0 - 1.0);
+    (x, y) => cellular0.gen(x, -y),
+    {
+        heightMapResolution: 2,
+        gridN: 500
+    }
+);
 }
