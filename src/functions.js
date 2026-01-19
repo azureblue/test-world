@@ -52,7 +52,6 @@ export function cosWarp11(x, periods = 1) {
     return Math.cos(x * Math.PI * periods);
 }
 
-
 export function symSqrt(x) {
     return Math.sign(x) * Math.sqrt(Math.abs(x));
 }
