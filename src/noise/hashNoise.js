@@ -1,4 +1,5 @@
-import { hash01, wang_hash2d } from "./hash.js";
+import { unnormalize } from "../functions.js";
+import { hash01 } from "./hash.js";
 import { Generator } from "./noise.js";
 
 export class Hash01Noise extends Generator {
@@ -11,21 +12,21 @@ export class Hash01Noise extends Generator {
     }
 
     gen(x, y) {
-        return hash01(Math.floor(x), Math.floor(y), this.#seed);
+        return unnormalize(hash01(this.#seed, Math.floor(x), Math.floor(y)));
     }
 }
 
-export class Hasn2DNoise extends Generator {
+// export class Hasn2DNoise extends Generator {
 
-    #seed;
+//     #seed;
 
-    constructor(seed) {
-        this.#seed = seed;
-    }
+//     constructor(seed) {
+//         super();
+//         this.#seed = seed;
+//     }
 
-    get(x, y) {
-        wang_hash2d(this.#seed, x, y);
+//     gen(x, y) {
+//         return unnormalize(wang_hash2d(this.#seed, Math.floor(x), Math.floor(y)));
+//     }
 
-    }
-
-}
+// }

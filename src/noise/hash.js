@@ -28,15 +28,14 @@ export function mix32(x) {
     return x;
 }
 
-
 /**
  * Hash integer cell coords + seed into float [0,1).
+ * @param {number} seed unsigned-ish
  * @param {number} ix integer
  * @param {number} iy integer
- * @param {number} seed unsigned-ish
  * @returns {number} in [0,1)
  */
-export function hash01(ix, iy, seed = 0) {
+export function hash01(seed = 0, ix, iy) {
     // Convert to unsigned 32-bit
     let h = u32(seed);
     h ^= u32(ix);
@@ -47,22 +46,3 @@ export function hash01(ix, iy, seed = 0) {
     const r = mix32(h);
     return r * U32_INV; // [0,1)
 }
-
-export function wang_hash2d(seed, x, y) {
-    let h = x;
-    h = (h ^ 61) ^ (h >>> 16);
-    h = h + (h << 3);
-    h = h ^ (h >>> 4);
-    h = h * 0x27d4eb2d;
-    h = h ^ (h >>> 15);
-
-    h += y + seed;
-    h = (h ^ 61) ^ (h >>> 16);
-    h = h + (h << 3);
-    h = h ^ (h >>> 4);
-    h = h * 0x27d4eb2d;
-    h = h ^ (h >>> 15);
-
-    return (h >>> 0) / 0x100000000; // [0, 1)
-}
-

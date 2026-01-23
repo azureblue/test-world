@@ -2,6 +2,7 @@ import { blend, BLEND_MODE } from "../../blend.js";
 import { normalize, spreadSin11, unnormalize } from "../../functions.js";
 import { CellularNoise } from "../../noise/cellular.js";
 import { FBM } from "../../noise/fbm.js";
+import { Hash01Noise } from "../../noise/hashNoise.js";
 import { DomainWrap, Noise, Postprocessor, Reducer } from "../../noise/noise.js";
 import { SimplexNoise, SimplexNoiseGenerator } from "../../noise/opensimplex2.js";
 import { CurveRenderer, LinearCurve, point } from "../curve.js";
@@ -39,7 +40,7 @@ function renderGen(node, canvas, drawMiddleLines = false) {
     for (let x = 0; x < w; x++)
         for (let y = 0; y < w; y++) {
             const baseIdx = (y * w + x) * 4;
-            const r = normalize(node.gen(x - wHalf, h - y - hHalf));
+            const r = normalize(node.gen(x - wHalf, h - y - hHalf - 1));
             tmpImageData.data[baseIdx] = Math.floor(r * 256);
             tmpImageData.data[baseIdx + 1] = Math.floor(r * 256);
             tmpImageData.data[baseIdx + 2] = Math.floor(r * 256);
@@ -207,26 +208,27 @@ export function main() {
     ));
 
     const cellular0 = new Noise(
-        SimplexNoise.seed(128334),
+        // new Hasn2DNoise((Date.now() * 0.001) | 0),
+         new Hash01Noise((Date.now() * 0.1) | 0),
         // SimplexNoise.seed(1192),
         {
             preprocessors: [
-                DomainWrap.basic({
-                    noiseGenerator: new Noise(
-                        SimplexNoise.seed(123634), { reducer: FBM.reducer({ octaves: 6, frequency: 1 }) }
-                    ),
-                    // noiseGenerator: CellularNoise.worleyGenerator(123111, (f1, f2) => {
-                    //     const a = unnormalize(1 - Math.sqrt(f1)) / 2;
-                    //     return a// spreadTanh11(a);
-                    // }),
+                // DomainWrap.basic({
+                //     noiseGenerator: new Noise(
+                //         SimplexNoise.seed(123634), { reducer: FBM.reducer({ octaves: 6, frequency: 1 }) }
+                //     ),
+                //     // noiseGenerator: CellularNoise.worleyGenerator(123111, (f1, f2) => {
+                //     //     const a = unnormalize(1 - Math.sqrt(f1)) / 2;
+                //     //     return a// spreadTanh11(a);
+                //     // }),
 
-                    warpFreq: 0.005,
-                    warpAmp: 100
-                })
+                //     warpFreq: 0.005,
+                //     warpAmp: 100
+                // })
             ],
             reducer: FBM.reducer({
-                octaves: 5,
-                frequency: 0.002,
+                octaves: 1,
+                frequency: 0.5,
                 lacunarity: 2,
                 gain: 0.5
             }
@@ -237,7 +239,7 @@ export function main() {
                 // })
             ),
             postprocessors: [
-                Postprocessor.of(v => spreadSin11(v, 0.4))
+                //  Postprocessor.of(v => v < 0.5 ? -1 : 1)
             ]
         });
 
@@ -288,7 +290,7 @@ export function main() {
     );
 
     renderGenSlice(cellular00, getCanvas("slice0"), 400, { x: 0, y: 200 });
-    renderGenSlice(cellular0, getCanvas("slice1"), 400, { x: 0, y: 200 });
+    // renderGenSlice(cellular0, getCanvas("slice1"), 400, { x: 0, y: 200 });
     // renderGen(cellular00, getCanvas("canvas0"), true);
     renderGen(cellular0, getCanvas("canvas1"), false);
     renderGen(cellular1, getCanvas("canvas2"), true);
