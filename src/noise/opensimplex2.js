@@ -1,9 +1,23 @@
 import { Resources } from "../utils.js";
 import { Generator, NoiseSource } from "./noise.js";
 
-const wasmResult = await WebAssembly.instantiateStreaming(fetch(Resources.relativeToRoot("./noise/openSimplex2Noise.wasm")));
-const open_simplex_2_noise_fbm = wasmResult.instance.exports.open_simplex_2_noise_fbm;
-const open_simplex_2_noise = wasmResult.instance.exports.open_simplex_2_noise;
+const mem = new WebAssembly.Memory({
+    initial: 256,
+    maximum: 256
+})
+const wasmResult = await WebAssembly.instantiateStreaming(
+    fetch(Resources.relativeToRoot("./noise/openSimplex2Noise.wasm")),
+    {
+        env: {
+            memory: mem
+        }
+    }
+);
+const instance = wasmResult.instance;
+const _heap_base = instance.exports.__heap_base;
+const open_simplex_2_noise_fbm = instance.exports.open_simplex_2_noise_fbm;
+const open_simplex_2_noise = instance.exports.open_simplex_2_noise;
+const open_simplex_2_noise_fill = instance.exports.open_simplex_2_noise_fill;
 
 
 export const OPEN_SIMPLEX_NOISE_2D_SOURCE = open_simplex_2_noise;
@@ -82,5 +96,27 @@ export class SimplexNoiseGenerator extends Generator {
 export class SimplexNoise {
     static seed(seed) {
         return new NoiseSource(OPEN_SIMPLEX_NOISE_2D_SOURCE).seed(seed);
-    }    
+    }
+
+    /**
+     * 
+     * @param {*} seed 
+     * @param {*} x 
+     * @param {*} y 
+     * @param {*} xs 
+     * @param {*} ys 
+     * @param {*} step 
+     * @param {Float64Array} out 
+     */
+    static fill(seed, x, y, xs, ys, step, out) {
+        console.log("fill");
+        const len = xs * ys;
+        open_simplex_2_noise_fill(_heap_base, len, seed, x, y, xs, ys, step);
+        const wrapped = new Float64Array(mem.buffer, _heap_base, len);
+        out.set(wrapped);
+    }
+
+    static get(seed, x, y) {
+        return open_simplex_2_noise(seed, x, y);
+    }
 }
