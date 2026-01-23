@@ -1,6 +1,4 @@
-// import { Noise } from "./src/noise_old.js";
-import { OpenSimplex2Noise } from "./src/noise/noise.js";
-import { Generator02, NoiseChunkGenerator } from "./src/gen/generator.js";
+import { SimplexNoise } from "./src/noise/opensimplex2.js";
 
 export function main() {
     const w = 4000;
@@ -15,40 +13,36 @@ export function main() {
     const ctx = canvas.getContext('2d');
     const image = ctx.createImageData(canvas.width, canvas.height);
     const seed = 1234;
-    const noise = new OpenSimplex2Noise({
-        
-        frequency: 0.002,
-        octaves: 1,
-        lacunarity: 2,
-        gain: 0.5
-        
-        
-    });
 
 
+    const buf = new Float64Array(1000 * 1000);
     const now = performance.now();
     let sum = 0;
     let count = 0;
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            let n = noise.octaveNoise(x, y);
+    for (let y = 0; y < h; y += 1000) {
+        for (let x = 0; x < w; x += 1000) {
+            SimplexNoise.fill(seed, x, y, 1000, 1000, 1, buf);
+            const tileW = 1000;
+            const tileH = 1000;
+            const data = image.data;
 
-            let c = n * 256
-            // n = noise2.fractalNoise2(x, y);
-            // c = Math.floor((c + (n + 1) * 127.5) / 2);
-            // c = Math.min(255, c)
-            // c = Math.max(0, c)
-            sum += c;
-            count++;
-            const i = (y * w + x) * 4;
-            image.data[i + 0] = c;
-            image.data[i + 1] = c;
-            image.data[i + 2] = c;
-            image.data[i + 3] = 255;
+            let n = 0;
+            for (let dy = 0; dy < tileH; dy++) {
+                // start indeksu w ImageData dla (x, y+dy)
+                let i = ((y + dy) * w + x) * 4;
+
+                for (let dx = 0; dx < tileW; dx++, n++, i += 4) {
+                    const c = (buf[n] * 256) | 0; // szybkie int (opcjonalnie clamp)
+                    data[i] = c;
+                    data[i + 1] = c;
+                    data[i + 2] = c;
+                    data[i + 3] = 255;
+                }
+            }
         }
     }
-    
-    console.log(sum / count);
+
+    // console.log(sum / count);
     console.log((performance.now() - now).toFixed(2));
     ctx.putImageData(image, 0, 0);
 }

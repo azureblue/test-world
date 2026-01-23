@@ -1,5 +1,21 @@
 #![crate_type = "cdylib"]
 #![no_std]
+use core::slice;
+
+#[no_mangle]
+pub fn open_simplex_2_noise_fill(
+    out_ptr: *mut f64,
+    out_len: usize,
+    seed: i32, x: f64, y: f64, xs: u32, ys: u32, step: f64) {
+    let out = unsafe { slice::from_raw_parts_mut(out_ptr, out_len) };
+    for iy in 0..ys {
+        for ix in 0..xs {
+            let idx = (iy * xs + ix) as usize;
+            out[idx] = open_simplex_2_noise(seed, x + step * (ix as f64), y + step * (iy as f64));
+        }
+    }
+}
+
 
 const PRIME_X: i64 = 0x5205402B9270C86F;
 const PRIME_Y: i64 = 0x598CD327003817B5;
@@ -75,10 +91,16 @@ fn open_simplex_2_noise_unskewed_base(seed: i64, xs: f64, ys: f64) -> f64 {
     let mut value = (a0 * a0) * (a0 * a0) * grad2(seed, xsbp, ysbp, dx0, dy0);
 
     // Second vertex.
-    let a1 = (2.0 * (1.0 + 2.0 * UNSKEW_2D) * (1.0 / UNSKEW_2D + 2.0)) * t
-        + ((-2.0 * (1.0 + 2.0 * UNSKEW_2D) * (1.0 + 2.0 * UNSKEW_2D)) + a0);
-    let dx1 = dx0 - (1.0 + 2.0 * UNSKEW_2D);
-    let dy1 = dy0 - (1.0 + 2.0 * UNSKEW_2D);
+
+
+    const K1: f64 = 2.0 * (1.0 + 2.0 * UNSKEW_2D) * (1.0 / UNSKEW_2D + 2.0);
+const K2: f64 = -2.0 * (1.0 + 2.0 * UNSKEW_2D) * (1.0 + 2.0 * UNSKEW_2D);
+const DX1DY1: f64 = 1.0 + 2.0 * UNSKEW_2D;
+let a1 = K1 * t + (K2 + a0);
+let dx1 = dx0 - DX1DY1;
+let dy1 = dy0 - DX1DY1;
+
+
     value += (a1 * a1) * (a1 * a1) * grad2(seed, xsbp.wrapping_add(PRIME_X), ysbp.wrapping_add(PRIME_Y), dx1, dy1);
 
     // Third and fourth vertices.
