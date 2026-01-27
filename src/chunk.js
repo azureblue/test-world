@@ -1,9 +1,10 @@
 import { BLOCK_IDS, BLOCKS, isSolid, isSolidInt } from "./blocks.js";
 import { Direction, DirXY, fvec3, FVec3, IVec3, Vec3, vec3 } from "./geom.js";
 import { Array2D, Array3D, UInt32Buffer } from "./utils.js";
-export const CHUNK_SIZE_BIT_POS = 5 | 0;
+export const CHUNK_SIZE_BIT_LEN = 5 | 0;
 export const CHUNK_SIZE = 32 | 0;
 export const CHUNK_H = 32 | 0;
+export const TEX_ID_BIT_LEN = 9 | 0;
 
 export const CHUNK_SIZE_MASK = (CHUNK_SIZE - 1) | 0;
 const CHUNK_PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE | 0;
@@ -566,10 +567,37 @@ export class UIntChunkMesher {
         0, -1, CHUNK_SIZE - 1, 1, 0, 0, 0, 0
     ]);
 
-    /*
-       fshttttTTTTnnn_zzzzzxxxxxyyyyy
-     01234567890123456789012345678901
-    */
+    vOffsets = [
+        vec3(0, 0, 1),
+        vec3(0, 0, 0),
+        vec3(0, 1, 0),
+        vec3(1, 1, 0),
+        vec3(1, 0, 0),
+        vec3(0, 1, 0),
+    ];
+
+    wMergeVectors = [
+        vec3(1, 0, 0),
+        vec3(1, 0, 0),
+        vec3(0, -1, 0),
+        vec3(-1, 0, 0),
+        vec3(0, 1, 0),
+        vec3(1, 0, 0),
+    ];
+
+    hMergeVectors = [
+        vec3(0, 1, 0),
+        vec3(0, 0, 1),
+        vec3(0, 0, 1),
+        vec3(0, 0, 1),
+        vec3(0, 0, 1),
+        vec3(0, -1, 0),
+    ];
+
+
+    wMergeMasks = [0, 1, 1, 0];
+    hMergeMasks = [0, 0, 1, 1];
+
 
     /**
      * @param {number} data 8 bits (2nd lsb) texture + 8 bits (1st lsb) shadows
@@ -587,8 +615,9 @@ export class UIntChunkMesher {
         const corner2Shadow = (shadows >> 4) & 0b11;
         const corner3Shadow = (shadows >> 6) & 0b11;
         const mergeBitsWidth = width;
-        const mergeBitsHeight = height << 6;
-        const flip = corner0Shadow + corner2Shadow > corner1Shadow + corner3Shadow;
+        const mergeBitsHeight = height << 7;
+        let flip = corner0Shadow + corner2Shadow > corner1Shadow + corner3Shadow;
+        const cornerShadows = [corner0Shadow, corner1Shadow, corner2Shadow, corner3Shadow];
         let lower = 0;
         if (textureId == BLOCK_WATER && direction == Direction.UP)
             lower = 2;
@@ -599,68 +628,59 @@ export class UIntChunkMesher {
         let bits = 0
             | (lower << 29)
             | ((textureId & 0b11111111) << 19)
-            | ((dirBits & 0b111) << 16)
-            | ((h & 0b11111) << 10)
-            | ((y & 0b11111) << 5)
-            | ((x & 0b11111));
+            | ((dirBits & 0b111) << 16);
 
-        if (flip) {
-            this.#tmpArr[0 * 2] = bits | (corner1Shadow << 27);
-            this.#tmpArr[0 * 2 + 1] = mergeBitsWidth;
-
-            this.#tmpArr[1 * 2] = bits | (corner2Shadow << 27);
-            this.#tmpArr[1 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-            this.#tmpArr[2 * 2] = bits | (corner3Shadow << 27);
-            this.#tmpArr[2 * 2 + 1] = mergeBitsHeight;
-
-            this.#tmpArr[3 * 2] = bits | (corner1Shadow << 27);
-            this.#tmpArr[3 * 2 + 1] = mergeBitsWidth;
-
-            this.#tmpArr[4 * 2] = bits | (corner3Shadow << 27);
-            this.#tmpArr[4 * 2 + 1] = mergeBitsHeight;
-
-            this.#tmpArr[5 * 2] = bits | (corner0Shadow << 27);
-            this.#tmpArr[5 * 2 + 1] = 0;
-        } else {
-            if (!reverseWinding) {
-                this.#tmpArr[0 * 2] = bits | (corner0Shadow << 27);
-                this.#tmpArr[0 * 2 + 1] = 0;
-
-                this.#tmpArr[1 * 2] = bits | (corner1Shadow << 27);
-                this.#tmpArr[1 * 2 + 1] = mergeBitsWidth;
-
-                this.#tmpArr[2 * 2] = bits | (corner2Shadow << 27);
-                this.#tmpArr[2 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-                this.#tmpArr[3 * 2] = bits | (corner0Shadow << 27);
-                this.#tmpArr[3 * 2 + 1] = 0;
-
-                this.#tmpArr[4 * 2] = bits | (corner2Shadow << 27);
-                this.#tmpArr[4 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-                this.#tmpArr[5 * 2] = bits | (corner3Shadow << 27);
-                this.#tmpArr[5 * 2 + 1] = mergeBitsHeight;
-            } else {
-                this.#tmpArr[5 * 2] = bits | (corner0Shadow << 27);
-                this.#tmpArr[5 * 2 + 1] = 0;
-
-                this.#tmpArr[4 * 2] = bits | (corner1Shadow << 27);
-                this.#tmpArr[4 * 2 + 1] = mergeBitsWidth;
-
-                this.#tmpArr[3 * 2] = bits | (corner2Shadow << 27);
-                this.#tmpArr[3 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-                this.#tmpArr[2 * 2] = bits | (corner0Shadow << 27);
-                this.#tmpArr[2 * 2 + 1] = 0;
-
-                this.#tmpArr[1 * 2] = bits | (corner2Shadow << 27);
-                this.#tmpArr[1 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-                this.#tmpArr[0 * 2] = bits | (corner3Shadow << 27);
-                this.#tmpArr[0 * 2 + 1] = mergeBitsHeight;
+        
+            const vns = flip ? [1, 2, 3, 1, 3, 0] : [0, 1, 2, 0, 2, 3];
+            for (let i = 0; i < 6; i++) {
+                const vn = vns[i];
+                const xb = x + this.vOffsets[direction].x + this.wMergeVectors[direction].x * width * this.wMergeMasks[vn] + this.hMergeVectors[direction].x * height * this.hMergeMasks[vn];
+                const yb = y + this.vOffsets[direction].y + this.wMergeVectors[direction].y * width * this.wMergeMasks[vn] + this.hMergeVectors[direction].y * height * this.hMergeMasks[vn];
+                const zb = h + this.vOffsets[direction].z + this.wMergeVectors[direction].z * width * this.wMergeMasks[vn] + this.hMergeVectors[direction].z * height * this.hMergeMasks[vn];
+                const posBits = zb << 14 | yb << 7 | xb;
+                this.#tmpArr[i * 2] = posBits;
+                this.#tmpArr[i * 2 + 1] = bits | (mergeBitsWidth * this.wMergeMasks[vn]) | (mergeBitsHeight * this.hMergeMasks[vn]) | (cornerShadows[vn] << 27);
             }
-        }
+
+        //  else {
+        //     if (!reverseWinding) {
+        //         this.#tmpArr[0 * 2] = bits | (corner0Shadow << 27);
+        //         this.#tmpArr[0 * 2 + 1] = 0;
+
+        //         this.#tmpArr[1 * 2] = bits | (corner1Shadow << 27);
+        //         this.#tmpArr[1 * 2 + 1] = mergeBitsWidth;
+
+        //         this.#tmpArr[2 * 2] = bits | (corner2Shadow << 27);
+        //         this.#tmpArr[2 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
+
+        //         this.#tmpArr[3 * 2] = bits | (corner0Shadow << 27);
+        //         this.#tmpArr[3 * 2 + 1] = 0;
+
+        //         this.#tmpArr[4 * 2] = bits | (corner2Shadow << 27);
+        //         this.#tmpArr[4 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
+
+        //         this.#tmpArr[5 * 2] = bits | (corner3Shadow << 27);
+        //         this.#tmpArr[5 * 2 + 1] = mergeBitsHeight;
+        //     } else {
+        //         this.#tmpArr[5 * 2] = bits | (corner0Shadow << 27);
+        //         this.#tmpArr[5 * 2 + 1] = 0;
+
+        //         this.#tmpArr[4 * 2] = bits | (corner1Shadow << 27);
+        //         this.#tmpArr[4 * 2 + 1] = mergeBitsWidth;
+
+        //         this.#tmpArr[3 * 2] = bits | (corner2Shadow << 27);
+        //         this.#tmpArr[3 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
+
+        //         this.#tmpArr[2 * 2] = bits | (corner0Shadow << 27);
+        //         this.#tmpArr[2 * 2 + 1] = 0;
+
+        //         this.#tmpArr[1 * 2] = bits | (corner2Shadow << 27);
+        //         this.#tmpArr[1 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
+
+        //         this.#tmpArr[0 * 2] = bits | (corner3Shadow << 27);
+        //         this.#tmpArr[0 * 2 + 1] = mergeBitsHeight;
+        //     }
+        // }
         if (textureId == BLOCK_WATER)
             this.#bufferWater.add(this.#tmpArr);
         else
@@ -708,7 +728,7 @@ export class UIntChunkMesher {
                         continue;
 
                     if (blockId == 8) {
-                        this.#grasslike.put(blockId << 16 | h << 10 | y << 5 | x);
+                        this.#grasslike.put(blockId << 15 | h << 10 | y << 5 | x);
                         continue;
                     }
 
@@ -717,7 +737,7 @@ export class UIntChunkMesher {
                     const isWater = blockId == BLOCK_WATER;
                     const above = adj.get(1, 0, 0);
                     if (!isSolid(above)) {
-                        if (isWater && above != BLOCK_EMPTY)
+                        if (isWater && above == BLOCK_WATER)
                             continue;
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
@@ -853,7 +873,7 @@ export class UIntChunkMesher {
                         }
                         if (layersCurrentData[i] == 0)
                             continue;
-                        layersCurrentData[i] |= (1 << 24) | ((j - i) << 16);
+                        layersCurrentData[i] |= (1 << 25) | ((j - i) << 17);
                         i = j - 1;
                     }
                 }
@@ -862,18 +882,18 @@ export class UIntChunkMesher {
                     const top = layersTopData[layerStartIdx + i];
                     if (top === 0)
                         continue;
-                    const topH = top >> 24;
+                    const topH = top >> 25;
                     let cur = layersCurrentData[layerStartIdx + i];
-                    if ((top & 0x00FFFFFF) == (cur & 0x00FFFFFF) && topH < CHUNK_SIZE) {
-                        layersCurrentData[layerStartIdx + i] = (cur & 0x00FFFFFF) | ((topH + 1) << 24);
+                    if ((top & 0x01FFFFFF) == (cur & 0x01FFFFFF) && topH < CHUNK_SIZE) {
+                        layersCurrentData[layerStartIdx + i] = (cur & 0x01FFFFFF) | ((topH + 1) << 25);
                     } else {
                         let x = i & CHUNK_SIZE_MASK;
-                        let y = i >> CHUNK_SIZE_BIT_POS;
+                        let y = i >> CHUNK_SIZE_BIT_LEN;
 
-                        this.#addFace(top & 0xFFFF, h - topH,
+                        this.#addFace(top & 0x1FFFF, h - topH,
                             dirXXAdd + dirXXMul * x + dirXYMul * y,
                             dirYYAdd + dirYXMul * x + dirYYMul * y,
-                            dir, (top >> 16) & 0xFF, topH);
+                            dir, (top >> 17) & 0xFF, topH);
                     }
                 }
             }
@@ -892,21 +912,21 @@ export class UIntChunkMesher {
                                 break;
                             currentRow[j] = 0;
                         }
-                        currentRow[i] |= (j - i) << 16 | 1 << 24;
+                        currentRow[i] |= (j - i) << 17 | 1 << 25;
                         i = j - 1;
                     }
                     for (let i = 0; i < CHUNK_SIZE; i++) {
                         const top = topRow[i];
                         if (top === 0)
                             continue;
-                        const topH = top >> 24;
+                        const topH = top >> 25;
                         let cur = currentRow[i];
-                        if ((top & 0x00_FF_FF_FF) == (cur & 0x00_FF_FF_FF)) {
-                            currentRow[i] = cur & 0x00_FF_FF_FF | (topH + 1) << 24;
+                        if ((top & 0x01_FF_FF_FF) == (cur & 0x01_FF_FF_FF)) {
+                            currentRow[i] = cur & 0x01_FF_FF_FF | (topH + 1) << 25;
                         } else {
-                            const topW = top >> 16 & 0xFF;
+                            const topW = top >> 17 & 0xFF;
                             const yy = (y - topH) * (0b1 - (upDown << 1)) + (CHUNK_SIZE - 1) * (upDown);
-                            this.#addFace(top & 0xFFFF, h, i, yy, Direction.UP + upDown * 5, topW, topH);
+                            this.#addFace(top & 0x1FFFF, h, i, yy, Direction.UP + upDown * 5, topW, topH);
                         }
                     }
                     const tmp = currentRow;
@@ -918,10 +938,10 @@ export class UIntChunkMesher {
                     const top = topRow[i];
                     if (top === 0)
                         continue;
-                    const topH = top >> 24;
-                    const topW = top >> 16 & 0xFF;
+                    const topH = top >> 25;
+                    const topW = top >> 17 & 0xFF;
                     const y = (CHUNK_SIZE - topH) * (0b1 - (upDown << 1)) + (CHUNK_SIZE - 1) * (upDown);
-                    this.#addFace(top & 0xFFFF, h, i, y, Direction.UP + upDown * 5, topW, topH);
+                    this.#addFace(top & 0x1FFFF, h, i, y, Direction.UP + upDown * 5, topW, topH);
                 }
             }
         }
@@ -944,13 +964,13 @@ export class UIntChunkMesher {
                 const top = layersTopData[layerStartIdx + i];
                 if (top === 0)
                     continue;
-                const topH = top >> 24;
+                const topH = top >> 25;
                 let x = i & CHUNK_SIZE_MASK;
-                let y = i >> CHUNK_SIZE_BIT_POS;
-                this.#addFace(top & 0xFFFF, CHUNK_SIZE - topH,
+                let y = i >> CHUNK_SIZE_BIT_LEN;
+                this.#addFace(top & 0x1FFFF, CHUNK_SIZE - topH,
                     dirXXAdd + dirXXMul * x + dirXYMul * y,
                     dirYYAdd + dirYXMul * x + dirYYMul * y,
-                    dir, (top >> 16) & 0xFF, topH);
+                    dir, (top >> 17) & 0xFF, topH);
             }
         }
 
