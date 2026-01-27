@@ -153,7 +153,7 @@ export class Matrix4x4 {
         const q = Quaternion.rotationAround(normalizedAxis, radian);
         return q.toRotationMatrix4();
     }
-    
+
     /**
      * Multiply by `other` matrix and stores the product in `out`.
      *
@@ -162,61 +162,48 @@ export class Matrix4x4 {
      * @param {Matrix4x4} out
      */
     mulOut(other, out) {
-        const m11 = this._values[0];
-        const m12 = this._values[4];
-        const m13 = this._values[8];
-        const m14 = this._values[12];
-        const m21 = this._values[1];
-        const m22 = this._values[5];
-        const m23 = this._values[9];
-        const m24 = this._values[13];
-        const m31 = this._values[2];
-        const m32 = this._values[6];
-        const m33 = this._values[10];
-        const m34 = this._values[14];
-        const m41 = this._values[3];
-        const m42 = this._values[7];
-        const m43 = this._values[11];
-        const m44 = this._values[15];
-        const o11 = other.values[0];
-        const o12 = other.values[4];
-        const o13 = other.values[8];
-        const o14 = other.values[12];
-        const o21 = other.values[1];
-        const o22 = other.values[5];
-        const o23 = other.values[9];
-        const o24 = other.values[13];
-        const o31 = other.values[2];
-        const o32 = other.values[6];
-        const o33 = other.values[10];
-        const o34 = other.values[14];
-        const o41 = other.values[3];
-        const o42 = other.values[7];
-        const o43 = other.values[11];
-        const o44 = other.values[15];
-        const p11 = (m11 * o11) + (m12 * o21) + (m13 * o31) + (m14 * o41);
-        const p12 = (m11 * o12) + (m12 * o22) + (m13 * o32) + (m14 * o42);
-        const p13 = (m11 * o13) + (m12 * o23) + (m13 * o33) + (m14 * o43);
-        const p14 = (m11 * o14) + (m12 * o24) + (m13 * o34) + (m14 * o44);
-        const p21 = (m21 * o11) + (m22 * o21) + (m23 * o31) + (m24 * o41);
-        const p22 = (m21 * o12) + (m22 * o22) + (m23 * o32) + (m24 * o42);
-        const p23 = (m21 * o13) + (m22 * o23) + (m23 * o33) + (m24 * o43);
-        const p24 = (m21 * o14) + (m22 * o24) + (m23 * o34) + (m24 * o44);
-        const p31 = (m31 * o11) + (m32 * o21) + (m33 * o31) + (m34 * o41);
-        const p32 = (m31 * o12) + (m32 * o22) + (m33 * o32) + (m34 * o42);
-        const p33 = (m31 * o13) + (m32 * o23) + (m33 * o33) + (m34 * o43);
-        const p34 = (m31 * o14) + (m32 * o24) + (m33 * o34) + (m34 * o44);
-        const p41 = (m41 * o11) + (m42 * o21) + (m43 * o31) + (m44 * o41);
-        const p42 = (m41 * o12) + (m42 * o22) + (m43 * o32) + (m44 * o42);
-        const p43 = (m41 * o13) + (m42 * o23) + (m43 * o33) + (m44 * o43);
-        const p44 = (m41 * o14) + (m42 * o24) + (m43 * o34) + (m44 * o44);
-        out.setValues(p11, p21, p31, p41, p12, p22, p32, p42, p13, p23, p33, p43, p14, p24, p34, p44)
+        const a = this._values;        // Float32Array(16)
+        const b = other._values;       // Float32Array(16)
+        const o = out._values;         // Float32Array(16)
+
+        const a00 = a[0], a01 = a[4], a02 = a[8], a03 = a[12];
+        const a10 = a[1], a11 = a[5], a12 = a[9], a13 = a[13];
+        const a20 = a[2], a21 = a[6], a22 = a[10], a23 = a[14];
+        const a30 = a[3], a31 = a[7], a32 = a[11], a33 = a[15];
+
+        const b00 = b[0], b01 = b[4], b02 = b[8], b03 = b[12];
+        const b10 = b[1], b11 = b[5], b12 = b[9], b13 = b[13];
+        const b20 = b[2], b21 = b[6], b22 = b[10], b23 = b[14];
+        const b30 = b[3], b31 = b[7], b32 = b[11], b33 = b[15];
+
+        // column-major out (tak jak u Ciebie)
+        o[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
+        o[1] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
+        o[2] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
+        o[3] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
+
+        o[4] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
+        o[5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
+        o[6] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
+        o[7] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
+
+        o[8] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
+        o[9] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
+        o[10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
+        o[11] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
+
+        o[12] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
+        o[13] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
+        o[14] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
+        o[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
+
+        return out;
     }
 
     mulInPlace(other) {
         this.mulOut(other, this);
-    }   
-  
+    }
+
     /**
      * Multiply by `other` matrix and returns a product.
      *
