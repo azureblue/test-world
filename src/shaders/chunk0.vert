@@ -6,7 +6,9 @@
 #define b_0000_1111 15u
 #define b_0001_1111 31u
 #define b_0011_1111 63u
+#define b_0111_1111 127u
 #define b_1111_1111 255u
+#define b_1_1111_1111 511u
 #define b_11_1111_1111 1023u
 #define b_1111_1111_1111 4095u
 
@@ -22,9 +24,6 @@ layout (std140) uniform Camera {
 };
 const float pixh = 1.0f / 16.0f;
 
-const uint[] merge_vector_bits_ar = uint[](320082369u, 354238748u);
-const uint vertex_offset_bits = 1069606u;
-
 const float[4] shadow_values = float[4](0.0f, 0.3f, 0.4f, 0.5f);
 
 uniform vec3 m_translation;
@@ -38,24 +37,19 @@ void main() {
     uint a_in_bits = a_in.x;
     uint a_in_aux_bits = a_in.y;
 
-    uint x = (a_in_bits >> 0) & b_0001_1111;
-    uint z = (a_in_bits >> 5) & b_0001_1111;
-    uint y = (a_in_bits >> 10) & b_0001_1111;
-    uint normal_idx = (a_in_bits >> 16) & b_0000_0111;
-    uint tex_idx = (a_in_bits >> 19) & b_1111_1111;
-    uint shadow = (a_in_bits >> 27) & b_0000_0011;
-    uint lowered = (a_in_bits >> 29) & b_0000_0011;
+    uint x = (a_in_bits >> 0) & b_0111_1111;
+    uint y = (a_in_bits >> 7) & b_0111_1111;
+    uint z = (a_in_bits >> 14) & b_0111_1111;
+    uint normal_idx = (a_in_aux_bits >> 16) & b_0000_0111;
+    uint tex_idx = (a_in_aux_bits >> 19) & b_1111_1111;
+    uint shadow = (a_in_aux_bits >> 27) & b_0000_0011;
+    uint lowered = (a_in_aux_bits >> 29) & b_0000_0011;
 
     uint merge_bits = a_in_aux_bits & b_1111_1111_1111;
     float m_x = float(merge_bits & b_0011_1111);
-    float m_y = float(merge_bits >> 6);
-
-    uint merge_vector_bits = merge_vector_bits_ar[normal_idx >> 2u] >> ((normal_idx & b_0000_0011) * 8u) & 0xFFu;
-    vec3 merge_vector_w = vec3(float(merge_vector_bits & 1u) -float(merge_vector_bits & 2u), 0.0f, float(merge_vector_bits >> 2 & 1u) -float(merge_vector_bits >> 2 & 2u));
-    vec3 merge_vector_h = vec3(0.0f, float(merge_vector_bits >> 4 & 1u) -float(merge_vector_bits >> 4 & 2u), float(merge_vector_bits >> 6 & 1u) -float(merge_vector_bits >> 6 & 2u));
-    uint vertex_offset_bits_shifted = vertex_offset_bits >> (normal_idx * 3u);
-    vec3 vertex_offset = vec3(-0.5 + float(vertex_offset_bits_shifted & 1u), -0.5 + float(vertex_offset_bits_shifted >> 1 & 1u), -0.5 + float(vertex_offset_bits_shifted >> 2 & 1u));
-    vec3 pos = vec3(float(x), float(y) - float(lowered) * pixh, -float(z)) + m_translation + vertex_offset + merge_vector_w * m_x + merge_vector_h * m_y;
+    float m_y = float(merge_bits >> 7);
+    
+    vec3 pos = vec3(float(x), float(z) - float(lowered) * pixh, -float(y)) + m_translation;
 
     gl_Position = cam_proj * cam_view * vec4(pos, 1.0f);
     vec3 pos_to_cam_diff = cam_pos - pos;

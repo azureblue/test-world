@@ -1,5 +1,21 @@
-import { Vec3 } from "./geom.js";
+import { ivec3, vec3, Vec3 } from "./geom.js";
 import { Float32Buffer, UInt16Buffer } from "./utils.js";
+export class Cube01 {
+    static FACES = [
+                // up
+        [ivec3(1, 1, 0), ivec3(1, 1, 1), ivec3(0, 1, 1), ivec3(0, 1, 0)],
+        // front
+        [ivec3(1, 0, 0), ivec3(1, 1, 0), ivec3(0, 1, 0), ivec3(0, 0, 0)],
+        // left
+        [ivec3(0, 0, 0), ivec3(0, 1, 0), ivec3(0, 1, 1), ivec3(0, 0, 1)],
+        // back
+        [ivec3(0, 0, 1), ivec3(0, 1, 1), ivec3(1, 1, 1), ivec3(1, 0, 1)],
+        // right        
+        [ivec3(1, 0, 1), ivec3(1, 1, 1), ivec3(1, 1, 0), ivec3(1, 0, 0)],
+        // down
+        [ivec3(1, 0, 1), ivec3(1, 0, 0), ivec3(0, 0, 0), ivec3(0, 0, 1)]
+    ]
+}
 
 class Face {
 
