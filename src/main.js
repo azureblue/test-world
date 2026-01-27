@@ -83,21 +83,17 @@ export async function start() {
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
     gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, uCameraBuffer);
 
-    const uCameraIndices = gl.getUniformIndices(chunk0Program.program, ["cam_proj", "cam_view", "cam_pos"]);
+    const uCameraIndices = gl.getUniformIndices(chunk0Program.program, ["cam_projection_view", "cam_pos"]);
     const uCameraOffsets = gl.getActiveUniforms(chunk0Program.program, uCameraIndices, gl.UNIFORM_OFFSET);
 
     const uCameraVariableInfo = {
-        proj: {
+        projection_view: {
             index: uCameraIndices[0],
             offset: uCameraOffsets[0]
         },
-        view: {
+        pos: {
             index: uCameraIndices[1],
             offset: uCameraOffsets[1]
-        },
-        pos: {
-            index: uCameraIndices[2],
-            offset: uCameraOffsets[2]
         }
     };
 
@@ -105,16 +101,17 @@ export async function start() {
     gl.uniformBlockBinding(blockHighlightProgram.program, gl.getUniformBlockIndex(blockHighlightProgram.program, "Camera"), 0);
 
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-    const fieldOfView = (68 * Math.PI) / 180;
+    const fieldOfView = (60 * Math.PI) / 180;
     const projection = new Projection(fieldOfView, aspect, 0.1, 640.0);
 
     const mProjection = mat4();
     const mView = mat4();
-
+    
     projection.apply(mProjection);
+    const mProjectionView = mat4();
 
+    
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
-    gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.proj.offset, mProjection._values, 0);
 
     const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
 
@@ -162,11 +159,13 @@ export async function start() {
         camera.update();
 
         camera.calculateLookAtMatrix(mView);
+        mProjection.mulOut(mView, mProjectionView);
+       
 
         chunk0Program.use()
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
-        gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.view.offset, mView._values, 0);
+        gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.projection_view.offset, mProjectionView._values, 0);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.pos.offset, camera.position._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
         world.moveTo(camera.position.x, camera.position.z, camera.position.y);
