@@ -1,4 +1,4 @@
-import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_POS, CHUNK_SIZE_MASK, ChunkData, UIntMesh } from "./chunk.js";
+import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, UIntMesh } from "./chunk.js";
 import { FVec2, FVec3, fvec3, ivec2, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
 import { GenericBuffer, Logger, Resources } from "./utils.js";
 const logger = new Logger("World");
@@ -256,9 +256,9 @@ export class World {
         this.#pos.x = x;
         this.#pos.y = y;
         this.#pos.z = z;
-        const cx = Math.floor(x) >> CHUNK_SIZE_BIT_POS;
-        const cy = (-Math.ceil(y)) >> CHUNK_SIZE_BIT_POS;
-        const cz = Math.floor(z) >> CHUNK_SIZE_BIT_POS;
+        const cx = Math.floor(x) >> CHUNK_SIZE_BIT_LEN;
+        const cy = (-Math.ceil(y)) >> CHUNK_SIZE_BIT_LEN;
+        const cz = Math.floor(z) >> CHUNK_SIZE_BIT_LEN;
         const changed = (this.#chunkPos.x != cx || this.#chunkPos.y != cy || this.#chunkPos.z != cz);
 
         this.#chunkPos.x = cx;
@@ -440,9 +440,9 @@ export class World {
      */
     blockAtWorldIPos(worldIPos) {
         const pos = this.switchBlockPos(worldIPos);
-        const cx = pos.x >> CHUNK_SIZE_BIT_POS;
-        const cy = pos.z >> CHUNK_SIZE_BIT_POS;
-        const cz = pos.y >> CHUNK_SIZE_BIT_POS;
+        const cx = pos.x >> CHUNK_SIZE_BIT_LEN;
+        const cy = pos.z >> CHUNK_SIZE_BIT_LEN;
+        const cz = pos.y >> CHUNK_SIZE_BIT_LEN;
         const bx = pos.x & 0x1F;
         const by = pos.z & 0x1F;
         const bh = pos.y & 0x1F;
@@ -459,9 +459,9 @@ export class World {
      * @param {FVec3} pos 
      */
     blockLocation(blockLocation, pos) {
-        const cx = Math.floor(pos.x) >> CHUNK_SIZE_BIT_POS;
-        const cy = (-Math.ceil(pos.z)) >> CHUNK_SIZE_BIT_POS;
-        const cz = Math.floor(pos.y) >> CHUNK_SIZE_BIT_POS;
+        const cx = Math.floor(pos.x) >> CHUNK_SIZE_BIT_LEN;
+        const cy = (-Math.ceil(pos.z)) >> CHUNK_SIZE_BIT_LEN;
+        const cz = Math.floor(pos.y) >> CHUNK_SIZE_BIT_LEN;
         const bx = Math.floor(pos.x) & CHUNK_SIZE_MASK;
         const by = (pos.z <= 0 ? (Math.floor(-pos.z) % CHUNK_SIZE) : CHUNK_SIZE - 1 - (Math.floor(pos.z) % CHUNK_SIZE)) | 0
         const bh = Math.floor(pos.y) & CHUNK_SIZE_MASK;
