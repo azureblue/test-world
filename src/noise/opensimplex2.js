@@ -95,7 +95,7 @@ export class SimplexNoiseGenerator extends Generator {
 
 export class SimplexNoise {
     static seed(seed) {
-        return new NoiseSource(OPEN_SIMPLEX_NOISE_2D_SOURCE).seed(seed);
+        return new NoiseSource(OPEN_SIMPLEX_NOISE_2D_SOURCE, seed);
     }
 
     /**

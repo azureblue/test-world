@@ -3,19 +3,82 @@
  * @typedef {(seed: number, x: number, y: number) => number} RawNoise
  */
 
+export class SeedStream {
+    #state;
+    constructor(seed) { this.#state = seed | 0; }
+
+    next() {
+        let x = (this.#state = (this.#state + 0x9E3779B9) | 0);
+        x ^= x >>> 16; x = Math.imul(x, 0x85EBCA6B) | 0;
+        x ^= x >>> 13; x = Math.imul(x, 0xC2B2AE35) | 0;
+        x ^= x >>> 16;
+        return x | 0;
+    }
+
+    static nextSeed(seed) {
+        let x = (seed + 0x9E3779B9) | 0;
+        x ^= x >>> 16; x = Math.imul(x, 0x85EBCA6B) | 0;
+        x ^= x >>> 13; x = Math.imul(x, 0xC2B2AE35) | 0;
+        x ^= x >>> 16;
+        return x | 0;
+    }
+
+}
 
 export class Generator {
+
     gen(x, y) {
-        return 0;
+        throw "not implemented";
     }
 
     static ZERO = new class extends Generator {
         gen(x, y) {
             return 0;
         }
+
+        seedGet() {
+            return 0;
+        }
+
+        seedSet(seed) {
+            // do nothing
+        }
     };
+
+    seedSet(seed) {
+        throw "not implemented";
+    }
+
+    seedGet() {
+        throw "not implemented";
+    }
 }
 
+export class SeededGenerator extends Generator {
+
+    #seed;
+
+    constructor(seed) {
+        super();
+        this.#seed = seed
+    }
+
+    seedGet() {
+        return this.#seed;
+    }
+
+    seedSet(seed) {
+        this.#seed = seed;
+    }
+
+    /**     
+     * @param {SeededGenerator} gen 
+     * @returns {SeededGenerator}
+     */
+    static wrap(gen) {
+
+    }
+}
 
 export class Postprocessor {
 
@@ -36,11 +99,9 @@ export class Postprocessor {
     }
 }
 
-export class Preprocessor extends Generator {
+export class Preprocessor {
 
-    #out = new Float64Array(2);
     constructor(preprocessor) {
-        super();
     }
 
     /**
@@ -99,22 +160,16 @@ export class Reducer {
 }
 
 
-export class NoiseSource extends Generator {
+export class NoiseSource extends SeededGenerator {
     #rawNoise;
-    #seed = 0;
     #freq = 1.0;
 
     /**
      * @param {RawNoise} rawNoise 
      */
-    constructor(rawNoise) {
-        super()
+    constructor(rawNoise, seed = 0) {
+        super(seed)
         this.#rawNoise = rawNoise;
-    }
-
-    seed(seed) {
-        this.#seed = seed;
-        return this;
     }
 
     freq(freq) {
@@ -128,7 +183,7 @@ export class NoiseSource extends Generator {
     }
 
     gen(x, y) {
-        return this.#rawNoise(this.#seed, x * this.#freq, y * this.#freq);
+        return this.#rawNoise(this.seedGet(), x * this.#freq, y * this.#freq);
     }
 
     rawNoise(seed, x, y) {
@@ -174,7 +229,6 @@ export class DomainWrap extends Preprocessor {
     }
 }
 
-
 export class Noise extends Generator {
     #gen;
     #preprocessors;
@@ -183,7 +237,7 @@ export class Noise extends Generator {
     #tmp = new Float64Array(2);
 
     /**
-     * @param {Generator} gen 
+     * @param {SeededGenerator} gen 
      * @param {Object} options
      * @param {Preprocessor[]} options.preprocessors
      * @param {Reducer} options.reducer
@@ -197,6 +251,14 @@ export class Noise extends Generator {
         this.#postprocessors = postprocessors;
     }
 
+    seedGet() {
+        return this.#gen.seedGet();
+    }
+
+    seedSet(seed) {
+        this.#gen.seedSet(seed);
+    }
+    
     gen(x, y) {
         for (const pre of this.#preprocessors) {
             pre.preprocess(x, y, this.#tmp);
@@ -213,49 +275,6 @@ export class Noise extends Generator {
         return value;
     }
 }
-
-
-
-
-
-// export class CustomKernelNoise extends NoiseGenerator {
-//     #gen;
-//     #kernel;
-
-//     /**
-//      * @param {NoiseGenerator} gen
-//      * @param {(n: number) => number} kernel
-//      */
-//     constructor(gen, kernel) {
-//         super();
-//         this.#gen = gen;
-//         this.#kernel = kernel;
-//     }
-
-//     gen(x, y) {
-//         return this.#kernel(this.#gen.gen(x, y));
-//     }
-// }
-
-export class SeededGenerator extends Generator {
-    rawNoise;
-    #seed;
-
-    /**
-     * @param {RawNoise} rawNoise 
-     * @param {number} seed 
-     */
-    constructor(rawNoise, seed) {
-        super();
-        this.rawNoise = rawNoise;
-        this.#seed = seed;
-    }
-
-    gen(x, y) {
-        return this.rawNoise(this.#seed, x, y);
-    }
-}
-
 
 /**
  * @param {NoiseSource} noiseSource
@@ -300,27 +319,27 @@ export class RidgeNoise2D extends Generator {
 
     gen(x, y) {
         const n = OPEN_SIMPLEX_NOISE_2D_SOURCE(this.#seed, x, y);
-        let r = 1.0 - Math.abs(2.0 * n - 1.0);   // [0,1], ridge at 0.5
-        r = Math.pow(r, power);                  // sharpen ridges
+        let r = 1.0 - Math.abs(2.0 * n - 1.0);   // [0,1], ridge at 0.5        
+        r = Math.pow(r, this.#power);                  // sharpen ridges
         return r;
     }
 }
 
 
-export function fbm(noiseSource, x, y, octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5) {
-    let sum = 0;
-    let amp = 1.0;
-    let freq = frequency;
-    let ampSum = 0;
+// export function fbm(noiseSource, x, y, octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5) {
+//     let sum = 0;
+//     let amp = 1.0;
+//     let freq = frequency;
+//     let ampSum = 0;
 
-    for (let i = 0; i < octaves; i++) {
-        const n = noiseSource(seed, x * freq, y * freq);
-        sum += r * amp;
-        ampSum += amp;
+//     for (let i = 0; i < octaves; i++) {
+//         const n = noiseSource(seed, x * freq, y * freq);
+//         sum += r * amp;
+//         ampSum += amp;
 
-        freq *= lacunarity;
-        amp *= gain;
-    }
-    return sum / ampSum; // [0,1]
-}
+//         freq *= lacunarity;
+//         amp *= gain;
+//     }
+//     return sum / ampSum; // [0,1]
+// }
 

@@ -1,18 +1,15 @@
 import { unnormalize } from "../functions.js";
 import { hash01 } from "./hash.js";
-import { Generator } from "./noise.js";
+import { Generator, SeededGenerator } from "./noise.js";
 
-export class Hash01Noise extends Generator {
-
-    #seed;
+export class Hash01Noise extends SeededGenerator {
 
     constructor(seed) {
-        super();
-        this.#seed = seed;
+        super(seed);
     }
 
     gen(x, y) {
-        return unnormalize(hash01(this.#seed, Math.floor(x), Math.floor(y)));
+        return unnormalize(hash01(this.seedGet(), Math.floor(x), Math.floor(y)));
     }
 }
 
