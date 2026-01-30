@@ -4,6 +4,7 @@ import { GenericBuffer, Logger, Resources } from "./utils.js";
 const logger = new Logger("World");
 const CHUNK_RENDER_DIST = 9;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
+const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * 4;
 
 
 export class BlockLocation {
@@ -50,7 +51,7 @@ class ChunkEntry {
 //  */
 
 function pos3ToKey(x, y, z = 0) {
-    return x + "," + y + "," + z;
+    return x + ":" + y + ":" + z;
 }
 
 // function pos2ToKey(x, y) {
@@ -94,6 +95,7 @@ export class World {
     #tmpBuffer = new GenericBuffer(1000);
     #pos = fvec3();
     #chunkPos = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
+    #chunkPosChanged = false;
 
     /**@type {Array<Vec3>} */
     #rangeDeltas;
@@ -118,6 +120,10 @@ export class World {
      */
     get chunksInView() {
         return this.#rangeDeltas.length;
+    }
+
+    get frame() {
+        return this.#frame;
     }
 
     /**
@@ -154,27 +160,9 @@ export class World {
                         tmpBuff.put(vec3(dx, dy, dz));
                     }
                 }
-        // tmpBuff.put(vec3(0, 0, 0));
-        // for (let r = 1; r < CHUNK_RENDER_DIST; r++) {
-        //     const rangeFrom = -r;
-        //     const rangeTo = r;
-        //     const rSq = r * r;
-        //     for (let horizontal = rangeFrom; horizontal <= r; horizontal++) {
-        //         if ((horizontal * horizontal + rSq) > CHUNK_RENDER_DIST_SQ)
-        //             continue;
-        //         tmpBuff.put(vec2(horizontal, -r));
-        //         tmpBuff.put(vec2(horizontal, r));
-        //     }
-
-        //     for (let vert = rangeFrom + 1; vert <= rangeTo - 1; vert++) {
-        //         if ((vert * vert + rSq) > CHUNK_RENDER_DIST_SQ)
-        //             continue;
-        //         tmpBuff.put(vec2(-r, vert));
-        //         tmpBuff.put(vec2(r, vert));
-        //     }
-        // }
 
         this.#rangeDeltas = tmpBuff.trimmed();
+
         this.#rangeDeltas.sort((a, b) => (a.x * a.x + a.y * a.y + a.z * a.z) - (b.x * b.x + b.y * b.y + b.z * b.z));
     }
 
@@ -217,20 +205,19 @@ export class World {
     /**
      * @import {ChunkMessage} from "./chunkLoader.js"
      * @param {ChunkMessage} data 
-     * 
      */
     processChunkData(data) {
-
         const chunkPos = data.chunkPos;
-        logger.info(`processing chunk data (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z})`);
+        // logger.info(`processing chunk data (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z})`);
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
         if (!this.#chunks.has(key)) {
-            logger.debug("missing entry for key: " + key);
+            // logger.debug("missing entry for key: " + key);
             return false;
         }
         const entry = this.#chunks.get(key);
-        if (entry.loaded)
-            logger.warn("got chunk data, but already loaded" + key);
+        if (entry.loaded) {
+            // logger.warn("got chunk data, but already loaded" + key);
+        }
         const now = performance.now();
         const chunkData = new ChunkData();
         chunkData.data.set(data.rawChunkData);
@@ -259,17 +246,15 @@ export class World {
         const cx = Math.floor(x) >> CHUNK_SIZE_BIT_LEN;
         const cy = (-Math.ceil(y)) >> CHUNK_SIZE_BIT_LEN;
         const cz = Math.floor(z) >> CHUNK_SIZE_BIT_LEN;
-        const changed = (this.#chunkPos.x != cx || this.#chunkPos.y != cy || this.#chunkPos.z != cz);
+        this.#chunkPosChanged = (this.#chunkPos.x !== cx || this.#chunkPos.y !== cy || this.#chunkPos.z !== cz);
 
         this.#chunkPos.x = cx;
         this.#chunkPos.y = cy;
         this.#chunkPos.z = cz;
-        if (changed) {
-            this.updateChunksInRange();
-        }
+        
     }
 
-    updateChunksInRange() {
+    #updateChunksInRange() {
         // if (this.#frame == 1) {
         this.#tmpBuffer.reset();
         for (const key of this.#chunks.keys()) {
@@ -286,8 +271,8 @@ export class World {
             const dx = x - this.#chunkPos.x;
             const dy = y - this.#chunkPos.y;
             const dz = z - this.#chunkPos.z;
-            if (dx * dx + dy * dy + dz * dz > CHUNK_RENDER_DIST_SQ * 4) {
-                logger.info("removing chunk: " + x + " " + y + " " + z);
+            if (dx * dx + dy * dy + dz * dz > CHUNK_RETAIN_DIST_SQ) {
+                // logger.info("removing chunk: " + x + " " + y + " " + z);
                 chunkEntry.chunk?.mesh?.dispose();
                 this.#chunks.delete(key);
             }
@@ -304,7 +289,7 @@ export class World {
             this.#chunkKeysSorted.put(key);
             if (!this.#chunks.has(key)) {
                 const entry = new ChunkEntry(vec3(cx, cy, cz));
-                logger.info(`requesting chunk  (${cx}, ${cy}, ${cz})`);
+                // logger.info(`requesting chunk  (${cx}, ${cy}, ${cz})`);
                 this.#chunks.set(key, entry);
                 this.#requestChunk(cx, cy, cz);
             }
@@ -318,7 +303,7 @@ export class World {
         const key = pos3ToKey(this.#chunkPos.x, this.#chunkPos.y, this.#chunkPos.z);
         const entry = this.#chunks.get(key);
         if (entry === undefined) {
-            logger.error("missing entry for current chunk");
+            // logger.error("missing entry for current chunk");
             return null;
         }
 
@@ -331,6 +316,12 @@ export class World {
     }
 
     update() {
+        if (this.#chunkPosChanged) {
+            this.#updateChunksInRange();
+            this.#chunkPosChanged = false;
+            return;
+        }
+
         if (this.#chunkDataQueue.size > 0) {
             const entriesIter = this.#chunkDataQueue.entries();
             for (let i = 0; i < 10; i++) {
@@ -342,7 +333,7 @@ export class World {
                 this.processChunkData(entry[1])
                     
                 // console.log("next");
-            }
+            }            
         }
         this.#frame++;
         if (this.#frame == 10) {
@@ -350,20 +341,19 @@ export class World {
         }
     }
 
-    render(renderChunk) {
-        for (let i = this.#chunkKeysSorted.length; i >= 0; i--) {
-            const key = this.#chunkKeysSorted.array[i];
+    /**
+     * @param {(chunk: Chunk) => void} chunkProcessor
+     */
+    forEachChunkInRange(chunkProcessor) {
+        const arr = this.#chunkKeysSorted.array
+        const len = this.#chunkKeysSorted.length;
+        for (let i = len; i >= 0; i--) {
+            const key = arr[i];
             const value = this.#chunks.get(key);
             if (value !== undefined && value.loaded) {
-                renderChunk(value.chunk);
+                chunkProcessor(value.chunk, this.#frame);
             }
         }
-        // for (const entry of this.#chunks.entries()) {
-        //     const value = entry[1];
-        //     if (!value.loaded)
-        //         continue;
-        //     renderChunk(value.chunk);
-        // }
     }
 
 

@@ -165,6 +165,13 @@ export class Float32Vector3 extends Vector3Base {
         return new Float32Vector3(this.x + other.x, this.y + other.y, this.z + other.z);
     }
 
+    addOut(other, result) {
+        result._values[0] = this._values[0] + other._values[0];
+        result._values[1] = this._values[1] + other._values[1];
+        result._values[2] = this._values[2] + other._values[2];
+        return result;
+    }
+
     /**
      * Add `other` to the vector.
      *
@@ -245,7 +252,9 @@ export class Float32Vector3 extends Vector3Base {
      * @returns {number}
      */
     dot(other) {
-        return this.x * other.x + this.y * other.y + this.z * other.z;
+        const tValues = this._values;
+        const oValues = other._values;
+        return tValues[0] * oValues[0] + tValues[1] * oValues[1] + tValues[2] * oValues[2];
     }
     /**
      * Calculate cross product.

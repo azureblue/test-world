@@ -69,6 +69,14 @@ export class DataBuffer {
     }
 }
 
+export function checkParseInt(str) {
+    const val = parseInt(str);
+    if (isNaN(val)) {
+        throw new Error(`Cannot parse integer from string: ${str}`);
+    }
+    return val;
+}
+
 export class Float32Buffer extends DataBuffer {
     /**
      * @param {number} [initialSize]
@@ -216,6 +224,9 @@ export class GenericBuffer {
     }
 }
 
+export function i32a(...elements) {    
+    return new Int32Array(elements);
+}
 
 export class ImagePixels {
 
@@ -224,7 +235,6 @@ export class ImagePixels {
     #stride = 4;
 
     /**
-     * 
      * @param {ImageData} data 
      */
     constructor(data) {

@@ -1,6 +1,9 @@
 import { Chunk } from "./chunk.js";
-import { Frustum, FrustumPlanes, FVec2, FVec3, fvec3, mat4, Mat4, PLANES_N, Vec3 } from "./geom.js";
+import { Frustum, FrustumPlanes, FVec2, FVec3, fvec3, Mat4 } from "./geom.js";
 import { Float32Vector3 } from "./matrixgl/float32vector.js";
+
+const RAD_TO_DEG = 180.0 / Math.PI;
+const DEG_TO_RAD = Math.PI / 180.0;
 
 class Camera {
     #position = new FVec3(0, 0, 0);
@@ -52,13 +55,12 @@ class Camera {
         const nx = x / len, ny = y / len, nz = z / len;
 
         // pitch = asin(y)
-        let pitch = Math.asin(Math.max(-1, Math.min(1, ny))) * 180.0 / Math.PI;
+        let pitch = Math.asin(Math.max(-1, Math.min(1, ny))) * RAD_TO_DEG;
 
         // yaw = atan2(z, x)
-        let yaw = Math.atan2(nz, nx) * 180.0 / Math.PI;
+        let yaw = Math.atan2(nz, nx) * RAD_TO_DEG;
         if (yaw < 0) yaw += 360.0;
 
-        // clamp pitch like your changePitch does
         if (pitch > 89.0) pitch = 89.0;
         if (pitch < -89.0) pitch = -89.0;
 
@@ -67,8 +69,8 @@ class Camera {
     }
 
     update() {
-        const pitchRads = this.#pitch / 180.0 * Math.PI;
-        const yawRads = this.#yaw / 180.0 * Math.PI;
+        const pitchRads = this.#pitch * DEG_TO_RAD;
+        const yawRads = this.#yaw * DEG_TO_RAD;
         this.#direction.y = Math.sin(pitchRads);
         const cosPitch = Math.cos(pitchRads);
         const cosYaw = Math.cos(yawRads);
@@ -102,11 +104,26 @@ class Camera {
     }
 
     /**
-     * @param {Mat4} mat 
+     * @param {Mat4} out 
      */
-    calculateLookAtMatrix(mat) {
-        this.#lookingAt.set(this.#position.x + this.#direction.x, this.#position.y + this.#direction.y, this.#position.z + this.#direction.z);
-        Camera.calculateLookAtMatrix(this.#position, this.#lookingAt, this.#up, mat);
+    calculateViewMatrix(out) {
+        const x = this.#right;
+        const y = this.#up;
+        const f = this.#direction;
+
+        const zx = -f.x, zy = -f.y, zz = -f.z;
+
+        const px = this.#position.x, py = this.#position.y, pz = this.#position.z;
+
+        out.setValues(
+            x.x, y.x, zx, 0.0,
+            x.y, y.y, zy, 0.0,
+            x.z, y.z, zz, 0.0,
+            -(px * x.x + py * x.y + pz * x.z),
+            -(px * y.x + py * y.y + pz * y.z),
+            -(px * zx + py * zy + pz * zz),
+            1.0
+        );
     }
 
     /**@returns {FVec3} */
@@ -152,7 +169,7 @@ class Camera {
      * @param {Float32Vector3} cameraUp
      * @param {Matrix4x4} result
      */
-    static calculateLookAtMatrix(cameraPosition, lookAtPosition, cameraUp, result) {        
+    static calculateLookAtMatrix(cameraPosition, lookAtPosition, cameraUp, result) {
         cameraPosition.subOut(lookAtPosition, Camera.#calculateLookAtMatrix_zAxis).normalizeIn();
         cameraUp.crossOut(Camera.#calculateLookAtMatrix_zAxis, Camera.#calculateLookAtMatrix_xAxis).normalizeIn();
         Camera.#calculateLookAtMatrix_zAxis.crossOut(Camera.#calculateLookAtMatrix_xAxis, Camera.#calculateLookAtMatrix_yAxis).normalizeIn();
@@ -187,6 +204,8 @@ class FrustumCuller {
     #camera;
     #posToFar = fvec3();
     #tmp = fvec3();
+
+    #planes4 = new Float32Array(6 * 4);
 
     /**
      * @param {Frustum} frustum 
@@ -230,41 +249,49 @@ class FrustumCuller {
         tmp.setTo(farMid).addMulInPlace(camUp, -farHalfV);
         FVec3.cross(camRight, tmp, this.#planes.bottom.direction);
         this.#planes.bottom.direction.normalizeIn();
+        const planes = this.#planes.planes;
+        const planes4 = this.#planes4;
+
+        for (let i = 0; i < 6; i++) {
+            const plane = planes[i];
+            const planeNormalIn = plane.direction;
+            this.#camera.position.addOut(plane.position, tmp);
+
+            const planeIdx = i << 2;
+            planes4[planeIdx] = planeNormalIn.x;
+            planes4[planeIdx + 1] = planeNormalIn.y;
+            planes4[planeIdx + 2] = planeNormalIn.z;
+            planes4[planeIdx + 3] = -planeNormalIn.dot(tmp);
+        }
     }
 
     /**
      * @param {Chunk} chunk
      */
     shouldDraw(chunk) {
-        if (chunk.mesh === null) {
-            return false;
-        }
-        const camPos = this.#camera.position._values;
-        const corners = chunk.worldCornersData;
-        const planes = this.#planes.planes;
-        plane_loop:
-        for (let planeIdx = 0; planeIdx < PLANES_N; planeIdx++) {
-            const plane = planes[planeIdx];
-            const planeRelativePos = plane.position._values;
-            const planeDir = plane.direction._values;
-            const planex = camPos[0] + planeRelativePos[0];
-            const planey = camPos[1] + planeRelativePos[1];
-            const planez = camPos[2] + planeRelativePos[2];
-            const planedx = planeDir[0];
-            const planedy = planeDir[1];
-            const planedz = planeDir[2];
+        if (chunk.mesh === null) return false;
 
-            for (let i = 0; i < 8; i++) {
-                const offset = i << 2;
-                const ctcx = corners[offset] - planex;
-                const ctcy = corners[offset + 1] - planey;
-                const ctcz = corners[offset + 2] - planez;
-                const dot = ctcx * planedx + ctcy * planedy + ctcz * planedz;
-                if (dot >= -FrustumCuller.#DELTA) {
-                    continue plane_loop;
-                }
-            }
-            return false;
+        const arr = chunk.worldAABBMinMax;
+        const minX = arr[0], minY = arr[1], minZ = arr[2];
+        const maxX = arr[3], maxY = arr[4], maxZ = arr[5];
+
+        const planes4 = this.#planes4;
+        const minusDelta = -FrustumCuller.#DELTA;
+
+        for (let i = 0; i < 6; i++) {
+            const planeIdx = i << 2;
+            const nx = planes4[planeIdx];
+            const ny = planes4[planeIdx + 1];
+            const nz = planes4[planeIdx + 2];
+            const nd = planes4[planeIdx + 3];
+
+            const vx = nx >= 0 ? maxX : minX;
+            const vy = ny >= 0 ? maxY : minY;
+            const vz = nz >= 0 ? maxZ : minZ;
+
+            const dotDiff = nx * vx + ny * vy + nz * vz + nd;
+
+            if (dotDiff < minusDelta) return false;
         }
         return true;
     }
