@@ -1,6 +1,6 @@
 import { BLOCK_IDS, BLOCKS, isSolid, isSolidInt } from "./blocks.js";
 import { Direction, DirXY, fvec3, FVec3, IVec3, Vec3, vec3 } from "./geom.js";
-import { Array2D, Array3D, UInt32Buffer } from "./utils.js";
+import { Array2D, Array3D, i32a, UInt32Buffer } from "./utils.js";
 export const CHUNK_SIZE_BIT_LEN = 5 | 0;
 export const CHUNK_SIZE = 32 | 0;
 export const CHUNK_H = 32 | 0;
@@ -79,6 +79,8 @@ export class ChunkData extends Array3D {
                 }
 
 
+        if (maxH < 0) 
+            return null;
         return { minH: minH, maxH: maxH, minY, maxY, minX, maxX };
     }
 }
@@ -205,12 +207,9 @@ export class Chunk {
 
     /**@type {FVec3} */
     #worldCenterPosition
+    #worldAABBData = new Float32Array(6);
 
-    /**@type {Array<FVec3>} */
-    #worldCoordCorners
-
-    /** @type {Float32Array} */
-    worldCornersData = new Float32Array(8 * 4);
+    extra = {}
 
     /**
      * @param {IVec3} chunkPosition 
@@ -219,7 +218,6 @@ export class Chunk {
      */
     constructor(chunkPosition, data, mesh) {
         this.#data = data;
-        // this.#data.updateMaxHeight();
         this.#chunkPosition = chunkPosition
         this.#mesh = mesh;
         this.#worldCenterPosition = fvec3(chunkPosition.x * CHUNK_SIZE + CHUNK_SIZE / 2, chunkPosition.z * CHUNK_SIZE + CHUNK_SIZE / 2, -chunkPosition.y * CHUNK_SIZE - CHUNK_SIZE / 2);
@@ -227,42 +225,24 @@ export class Chunk {
     }
 
     #updateCornersData() {
-        const chunkPosition = this.#chunkPosition;
         const bounds = this.data.findBoundsNonZero();
+        if (!bounds) {
+            return;
+        }
 
-        this.#worldCoordCorners = [
-            /*
-            0, 0
-            0, 0, 0, 16, 0, 0, 16, -16, 0, 0, -16, 0
-            // */
-            // // bottom
-            // new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
-            // new FVec3(chunkPosition.x * CHUNK_SIZE, chunkPosition.z * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
-            // //top
-            // new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -chunkPosition.y * CHUNK_SIZE),
-            // new FVec3((chunkPosition.x + 1) * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE),
-            // new FVec3(chunkPosition.x * CHUNK_SIZE, (chunkPosition.z + 1) * CHUNK_SIZE, -(chunkPosition.y + 1) * CHUNK_SIZE)
+        const cp = this.#chunkPosition;
+        const minX = cp.x * CHUNK_SIZE + bounds.minX;
+        const maxX = cp.x * CHUNK_SIZE + bounds.maxX;
 
-            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
-            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
-            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY),
-            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, chunkPosition.z * CHUNK_SIZE + bounds.minH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY),
-            //top
-            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
-            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -chunkPosition.y * CHUNK_SIZE - bounds.minY),
-            new FVec3((chunkPosition.x) * CHUNK_SIZE + bounds.maxX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY),
-            new FVec3(chunkPosition.x * CHUNK_SIZE + bounds.minX, (chunkPosition.z) * CHUNK_SIZE + bounds.maxH, -(chunkPosition.y) * CHUNK_SIZE - bounds.maxY)
-        ];
+        const minY = cp.z * CHUNK_SIZE + bounds.minH;
+        const maxY = cp.z * CHUNK_SIZE + bounds.maxH;
 
-        this.#worldCoordCorners.forEach((corner, idx) => {
-            const offset = idx << 2;
-            this.worldCornersData[offset] = corner.x;
-            this.worldCornersData[offset + 1] = corner.y;
-            this.worldCornersData[offset + 2] = corner.z;
-        });
+        const maxZ = -cp.y * CHUNK_SIZE - bounds.minY;
+        const minZ = -cp.y * CHUNK_SIZE - bounds.maxY;
+
+        const arr = this.#worldAABBData;
+        arr[0] = minX; arr[1] = minY; arr[2] = minZ;
+        arr[3] = maxX; arr[4] = maxY; arr[5] = maxZ;
     }
 
     peek(x, y) {
@@ -271,6 +251,10 @@ export class Chunk {
 
     get worldCenterPosition() {
         return this.#worldCenterPosition;
+    }
+
+    get worldAABBMinMax() {
+        return this.#worldAABBData;
     }
 
     get mesh() {
@@ -291,10 +275,6 @@ export class Chunk {
 
     get position() {
         return this.#chunkPosition;
-    }
-
-    get worldCoordCorners() {
-        return this.#worldCoordCorners;
     }
 }
 
@@ -567,38 +547,13 @@ export class UIntChunkMesher {
         0, -1, CHUNK_SIZE - 1, 1, 0, 0, 0, 0
     ]);
 
-    vOffsets = [
-        vec3(0, 0, 1),
-        vec3(0, 0, 0),
-        vec3(0, 1, 0),
-        vec3(1, 1, 0),
-        vec3(1, 0, 0),
-        vec3(0, 1, 0),
-    ];
+    vOffsets = [vec3(0, 0, 1), vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 1, 0), vec3(1, 0, 0), vec3(0, 1, 0), vec3(0, 0, 0), vec3(0, 1, 0)];
+    wMV = [vec3(1, 0, 0), vec3(1, 0, 0), vec3(0, -1, 0), vec3(-1, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), vec3(1, 1, 0), vec3(1, -1, 0)];
+    hMV = [vec3(0, 1, 0), vec3(0, 0, 1), vec3(0, 0, 1), vec3(0, 0, 1), vec3(0, 0, 1), vec3(0, -1, 0), vec3(0, 0, 1), vec3(0, 0, 1)];
+    winding = [i32a(0, 1, 2, 0, 2, 3), i32a(3, 2, 0, 2, 1, 0), i32a(1, 2, 3, 1, 3, 0), i32a(0, 3, 1, 3, 2, 1)];
 
-    wMergeVectors = [
-        vec3(1, 0, 0),
-        vec3(1, 0, 0),
-        vec3(0, -1, 0),
-        vec3(-1, 0, 0),
-        vec3(0, 1, 0),
-        vec3(1, 0, 0),
-    ];
-
-    hMergeVectors = [
-        vec3(0, 1, 0),
-        vec3(0, 0, 1),
-        vec3(0, 0, 1),
-        vec3(0, 0, 1),
-        vec3(0, 0, 1),
-        vec3(0, -1, 0),
-    ];
-
-
-    wMergeMasks = [0, 1, 1, 0];
-    hMergeMasks = [0, 0, 1, 1];
-
-
+    wMergeMasks = i32a(0, 1, 1, 0);
+    hMergeMasks = i32a(0, 0, 1, 1);
     /**
      * @param {number} data 8 bits (2nd lsb) texture + 8 bits (1st lsb) shadows
      * @param {number} h 
@@ -616,7 +571,8 @@ export class UIntChunkMesher {
         const corner3Shadow = (shadows >> 6) & 0b11;
         const mergeBitsWidth = width;
         const mergeBitsHeight = height << 7;
-        let flip = corner0Shadow + corner2Shadow > corner1Shadow + corner3Shadow;
+        const flip = (corner0Shadow + corner2Shadow > corner1Shadow + corner3Shadow) ? 1 : 0;
+        const reversed = reverseWinding ? 1 : 0;
         const cornerShadows = [corner0Shadow, corner1Shadow, corner2Shadow, corner3Shadow];
         let lower = 0;
         if (textureId == BLOCK_WATER && direction == Direction.UP)
@@ -627,60 +583,21 @@ export class UIntChunkMesher {
 
         let bits = 0
             | (lower << 29)
-            | ((textureId & 0b11111111) << 19)
+            | ((textureId & 0b0_1111_1111) << 19)
             | ((dirBits & 0b111) << 16);
 
-        
-            const vns = flip ? [1, 2, 3, 1, 3, 0] : [0, 1, 2, 0, 2, 3];
-            for (let i = 0; i < 6; i++) {
-                const vn = vns[i];
-                const xb = x + this.vOffsets[direction].x + this.wMergeVectors[direction].x * width * this.wMergeMasks[vn] + this.hMergeVectors[direction].x * height * this.hMergeMasks[vn];
-                const yb = y + this.vOffsets[direction].y + this.wMergeVectors[direction].y * width * this.wMergeMasks[vn] + this.hMergeVectors[direction].y * height * this.hMergeMasks[vn];
-                const zb = h + this.vOffsets[direction].z + this.wMergeVectors[direction].z * width * this.wMergeMasks[vn] + this.hMergeVectors[direction].z * height * this.hMergeMasks[vn];
-                const posBits = zb << 14 | yb << 7 | xb;
-                this.#tmpArr[i * 2] = posBits;
-                this.#tmpArr[i * 2 + 1] = bits | (mergeBitsWidth * this.wMergeMasks[vn]) | (mergeBitsHeight * this.hMergeMasks[vn]) | (cornerShadows[vn] << 27);
-            }
+        const vns = this.winding[flip * 2 + reversed];
 
-        //  else {
-        //     if (!reverseWinding) {
-        //         this.#tmpArr[0 * 2] = bits | (corner0Shadow << 27);
-        //         this.#tmpArr[0 * 2 + 1] = 0;
+        for (let i = 0; i < 6; i++) {
+            const vn = vns[i];
+            const xb = x + this.vOffsets[direction].x + this.wMV[direction].x * width * this.wMergeMasks[vn] + this.hMV[direction].x * height * this.hMergeMasks[vn];
+            const yb = y + this.vOffsets[direction].y + this.wMV[direction].y * width * this.wMergeMasks[vn] + this.hMV[direction].y * height * this.hMergeMasks[vn];
+            const zb = h + this.vOffsets[direction].z + this.wMV[direction].z * width * this.wMergeMasks[vn] + this.hMV[direction].z * height * this.hMergeMasks[vn];
+            const posBits = zb << 14 | yb << 7 | xb;
+            this.#tmpArr[i * 2] = posBits;
+            this.#tmpArr[i * 2 + 1] = bits | (mergeBitsWidth * this.wMergeMasks[vn]) | (mergeBitsHeight * this.hMergeMasks[vn]) | (cornerShadows[vn] << 27);
+        }
 
-        //         this.#tmpArr[1 * 2] = bits | (corner1Shadow << 27);
-        //         this.#tmpArr[1 * 2 + 1] = mergeBitsWidth;
-
-        //         this.#tmpArr[2 * 2] = bits | (corner2Shadow << 27);
-        //         this.#tmpArr[2 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-        //         this.#tmpArr[3 * 2] = bits | (corner0Shadow << 27);
-        //         this.#tmpArr[3 * 2 + 1] = 0;
-
-        //         this.#tmpArr[4 * 2] = bits | (corner2Shadow << 27);
-        //         this.#tmpArr[4 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-        //         this.#tmpArr[5 * 2] = bits | (corner3Shadow << 27);
-        //         this.#tmpArr[5 * 2 + 1] = mergeBitsHeight;
-        //     } else {
-        //         this.#tmpArr[5 * 2] = bits | (corner0Shadow << 27);
-        //         this.#tmpArr[5 * 2 + 1] = 0;
-
-        //         this.#tmpArr[4 * 2] = bits | (corner1Shadow << 27);
-        //         this.#tmpArr[4 * 2 + 1] = mergeBitsWidth;
-
-        //         this.#tmpArr[3 * 2] = bits | (corner2Shadow << 27);
-        //         this.#tmpArr[3 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-        //         this.#tmpArr[2 * 2] = bits | (corner0Shadow << 27);
-        //         this.#tmpArr[2 * 2 + 1] = 0;
-
-        //         this.#tmpArr[1 * 2] = bits | (corner2Shadow << 27);
-        //         this.#tmpArr[1 * 2 + 1] = mergeBitsWidth | mergeBitsHeight;
-
-        //         this.#tmpArr[0 * 2] = bits | (corner3Shadow << 27);
-        //         this.#tmpArr[0 * 2 + 1] = mergeBitsHeight;
-        //     }
-        // }
         if (textureId == BLOCK_WATER)
             this.#bufferWater.add(this.#tmpArr);
         else

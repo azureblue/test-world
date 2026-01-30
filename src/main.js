@@ -133,11 +133,11 @@ export async function start() {
             " ": (pressed) => pressed && (pause = !pause)
             
         }
-    );
-        
+    );        
 
     const fpsCounter = new FPSCounter();
     const blockLocation = new BlockLocation();
+    const chunkVisibleExtra = Symbol('chunkVisibleExtra');
     function draw() {
         if (pause) {
             requestAnimationFrame(draw);
@@ -158,7 +158,7 @@ export async function start() {
         camera.changePitch(-mouseDelta.y * 0.2);
         camera.update();
 
-        camera.calculateLookAtMatrix(mView);
+        camera.calculateViewMatrix(mView);
         mProjection.mulOut(mView, mProjectionView);
        
 
@@ -176,7 +176,7 @@ export async function start() {
         texArray.bind(gl);
         world.update();
 
-        world.render(chunk => {
+        world.forEachChunkInRange(chunk => {
             allChunks++;
             if (!frustumCuller.shouldDraw(chunk)) {
                 return;
