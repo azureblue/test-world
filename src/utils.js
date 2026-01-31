@@ -154,7 +154,7 @@ export class GenericBuffer {
     /**
      * @param {number} initialSize 
      */
-    constructor(ArrayClass, initialSize) {
+    constructor(initialSize) {
         this.#pos = 0;
         if (initialSize === undefined)
             initialSize = 4;

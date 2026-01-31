@@ -347,7 +347,7 @@ export class World {
     forEachChunkInRange(chunkProcessor) {
         const arr = this.#chunkKeysSorted.array
         const len = this.#chunkKeysSorted.length;
-        for (let i = len; i >= 0; i--) {
+        for (let i = 0; i < len; i++) {
             const key = arr[i];
             const value = this.#chunks.get(key);
             if (value !== undefined && value.loaded) {
