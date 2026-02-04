@@ -198,39 +198,6 @@ export function ivec3(x = 0, y = 0, z = 0) {
 }
 
 
-export class Direction {
-    static UP = 0;
-    static FRONT = 1;
-    static LEFT = 2;
-    static BACK = 3;
-    static RIGHT = 4;
-    static DOWN = 5;
-    static DIAGONAL_0 = 6;
-    static DIAGONAL_1 = 7;
-
-    /** @type {Array<Direction>} */
-    static directions = [
-        new Direction(Direction.UP, new FVec3(0, 1, 0), 0b000),
-        new Direction(Direction.FRONT, new FVec3(0, 0, 1), 0b001),
-        new Direction(Direction.LEFT, new FVec3(-1, 0, 0), 0b010),
-        new Direction(Direction.BACK, new FVec3(0, 0, -1), 0b011),
-        new Direction(Direction.RIGHT, new FVec3(1, 0, 0), 0b100),
-        new Direction(Direction.DOWN, new FVec3(0, -1, 0), 0b101),
-        new Direction(Direction.DIAGONAL_0, new FVec3(1, 0, 1).normalize(), 0b110),
-        new Direction(Direction.DIAGONAL_1, new FVec3(1, 0, -1).normalize(), 0b111)
-    ];
-
-    /**
-     * @param {FVec3} direction 
-     * @param {number} bits 
-     */
-    constructor(id, direction, bits) {
-        this.id = id;
-        this.v = direction;
-        this.bits = bits;
-    }
-}
-
 export class IVec2 {
     data = new Int32Array(2);
 
@@ -289,6 +256,91 @@ export class IVec3 {
         this.data[2] = value;
     }
 }
+
+export class Direction {
+    static UP = 0;
+    static FRONT = 1;
+    static LEFT = 2;
+    static BACK = 3;
+    static RIGHT = 4;
+    static DOWN = 5;
+    static DIAGONAL_0 = 6;
+    static DIAGONAL_1 = 7;
+
+    /** @type {Array<Direction>} */
+    static directions = [
+        new Direction(Direction.UP, ivec3(0, 1, 0), ivec3(0, 0, 1), 0b000),
+        new Direction(Direction.FRONT, ivec3(0, 0, 1), ivec3(0, -1, 0), 0b001),
+        new Direction(Direction.LEFT, ivec3(-1, 0, 0), ivec3(-1, 0, 0), 0b010),
+        new Direction(Direction.BACK, ivec3(0, 0, -1), ivec3(0, 1, 0), 0b011),
+        new Direction(Direction.RIGHT, ivec3(1, 0, 0), ivec3(1, 0, 0), 0b100),
+        new Direction(Direction.DOWN, ivec3(0, -1, 0), ivec3(0, 0, -1), 0b101),
+        new Direction(Direction.DIAGONAL_0, ivec3(1, 0, 1), ivec3(1, 1, 0), 0b110),
+        new Direction(Direction.DIAGONAL_1, ivec3(1, 0, -1), ivec3(1, -1, 0), 0b111)
+        // new Direction(Direction.DIAGONAL_0, ivec3(1, 0, 1).normalize(), 0b110),
+        // new Direction(Direction.DIAGONAL_1, ivec3(1, 0, -1).normalize(), 0b111)
+    ];
+
+    static offsets = new Int32Array(Direction.directions.length * 3);
+    static {
+        for (let i = 0; i < Direction.directions.length; i++) {
+            const dir = Direction.directions[i];
+            Direction.offsets[i * 3 + 0] = dir.logicDir.x;
+            Direction.offsets[i * 3 + 1] = dir.logicDir.y;
+            Direction.offsets[i * 3 + 2] = dir.logicDir.z;
+        }
+    }
+
+    /**
+     * @param {FVec3} worldDir 
+     * @param {number} bits 
+     */
+    constructor(id, worldDir, logicDir,bits) {
+        this.id = id;
+        this.worldDir = worldDir;
+        this.logicDir = logicDir;
+        this.bits = bits;
+    }
+}
+
+// export class DIR8 {
+//     static #dirs = new Int32Array([
+//         -1, 0,
+//         -1, -1,
+//         0, -1,
+//         1, -1,
+//         1, 0,
+//         1, 1,
+//         0, 1,
+//         -1, 1        
+//     ]);
+
+//     #dir = 0;
+
+//     constructor(rotationIdxCW = 0) {
+//         this.#dir = (-rotationIdxCW + 8) & 7;
+//     }
+
+//     x(dirDeltaCCW = 0) {
+//         return DIR8.#dirs[((this.#dir + dirDeltaCCW + 8) & 7) >> 1];
+//     }
+
+//     y(dirDeltaCCW = 0) {
+//         return DIR8.#dirs[(((this.#dir + dirDeltaCCW + 8) & 7) >> 1) + 1];
+//     }
+
+//     rotateCW() {
+//         this.#dir = (this.#dir + 7) & 7;
+//     }
+
+//     rotateCCW() {
+//         this.#dir = (this.#dir + 1) & 7;
+//     }
+
+//     set(rotationIdxCW) {
+//         this.#dir = (-rotationIdxCW + 8) & 7;
+//     }
+// }
 
 export class DirXY {
     x = 0;

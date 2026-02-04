@@ -1,8 +1,9 @@
-import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, UIntMesh } from "./chunk.js";
-import { FVec2, FVec3, fvec3, ivec2, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
+import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData } from "./chunk.js";
+import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
+import { UIntMesh } from "./mesher.js";
 import { GenericBuffer, Logger, Resources } from "./utils.js";
 const logger = new Logger("World");
-const CHUNK_RENDER_DIST = 9;
+const CHUNK_RENDER_DIST = 6;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * 4;
 
@@ -131,7 +132,7 @@ export class World {
      */
     constructor() {
         this.#chunkLoaders = [];
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < 1; i++) {
             const id = i;
             const worker = new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=${id}`), { type: "module" });
             worker.ready = false;
@@ -144,7 +145,7 @@ export class World {
                         this.#sendChunkRequestToWorker(id, cpos);
                     }
                     worker.initialChunkRequestQueue = [];
-                } else {                    
+                } else {
                     this.onChunk(me.data.data);
                 }
             }
@@ -174,7 +175,7 @@ export class World {
     }
 
     #requestChunk(cx, cy, cz) {
-        const workerId = this.#loaderIndex;        
+        const workerId = this.#loaderIndex;
         if (!this.#chunkLoaders[workerId].ready) {
             this.#chunkLoaders[workerId].initialChunkRequestQueue.push(vec3(cx, cy, cz));
         } else {
@@ -251,7 +252,7 @@ export class World {
         this.#chunkPos.x = cx;
         this.#chunkPos.y = cy;
         this.#chunkPos.z = cz;
-        
+
     }
 
     #updateChunksInRange() {
@@ -267,7 +268,7 @@ export class World {
             const chunkEntry = this.#chunks.get(key);
             const x = chunkEntry.position.x;
             const y = chunkEntry.position.y;
-            const z = chunkEntry.position.z;            
+            const z = chunkEntry.position.z;
             const dx = x - this.#chunkPos.x;
             const dy = y - this.#chunkPos.y;
             const dz = z - this.#chunkPos.z;
@@ -331,9 +332,9 @@ export class World {
                 const entry = next.value;
                 this.#chunkDataQueue.delete(entry[0]);
                 this.processChunkData(entry[1])
-                    
+
                 // console.log("next");
-            }            
+            }
         }
         this.#frame++;
         if (this.#frame == 10) {

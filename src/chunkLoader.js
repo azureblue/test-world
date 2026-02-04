@@ -1,6 +1,7 @@
-import { ChunkDataLoader, ChunkManager, UIntChunkMesher } from "./chunk.js";
+import { ChunkDataLoader, ChunkManager } from "./chunk.js";
 import { NoiseChunkGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
+import { DefaultMesher } from "./mesher.js";
 import { Logger } from "./utils.js";
 
 console.log("WORKER BOOTED", self.location?.href);
@@ -32,7 +33,7 @@ console.log("WORKER BOOTED", self.location?.href);
 
 const generator = new NoiseChunkGenerator(); // new Generator02();
 const chunkLoader = new ChunkDataLoader((cx, cy, cz) => generator.generateChunk(vec3(cx, cy, cz)));
-const chunkManager = new ChunkManager(chunkLoader, new UIntChunkMesher());
+const chunkManager = new ChunkManager(chunkLoader, new DefaultMesher());
 
 const params = new URL(self.location.href).searchParams;
 const WORKER_ID = Number(params.get("workerId"));
