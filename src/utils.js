@@ -39,6 +39,10 @@ export class DataBuffer {
         }
     }
 
+    get(idx) {
+        return this.array[idx];
+    }
+
     #extendSize() {
         const tmp = this.array;
         this.array = new this.array.constructor(tmp.length * 2);
@@ -224,8 +228,30 @@ export class GenericBuffer {
     }
 }
 
-export function i32a(...elements) {    
+export function i32a(...elements) {
     return new Int32Array(elements);
+}
+
+export class MovingAverage {
+    constructor(size = 10) {
+        this.times = new Array(size).fill(0);
+        this.fill = 0;
+        this.timesIdx = 0;
+        this.timesSum = 0;
+    }
+    add(value) {
+        this.timesSum -= this.times[this.timesIdx];
+        if (this.fill < this.times.length)
+            this.fill++;
+        this.times[this.timesIdx] = value;
+        this.timesSum += value;
+        this.timesIdx = (this.timesIdx + 1) % this.times.length;
+    }
+    average() {
+        if (this.fill === 0)
+            return 0;
+        return this.timesSum / this.fill;
+    }
 }
 
 export class ImagePixels {
