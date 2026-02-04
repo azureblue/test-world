@@ -30,14 +30,14 @@ export class Block {
 
 export const BLOCK_IDS = {
     EMPTY: 0,
-    DIRT: 1,
-    DIRT_GRASS: 2,
-    GRASS: 3,
-    GRAVE: 4,
-    ROCK: 5,
+    DIRT: 1 | (1 << 31),
+    DIRT_GRASS: 2 | (1 << 31),
+    GRASS: 3 | (1 << 31),
+    GRAVE: 4 | (1 << 31),
+    ROCK: 5 | (1 << 31),
     WATER: 6,
-    SAND: 7,
-    GRASS_SHORT: 8,
+    SAND: 7 | (1 << 31),
+    GRASS_SHORT: 8 | (1 << 31),
     CHUNK_EDGE: 255
 };
 
@@ -50,7 +50,7 @@ const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
 const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
 const BLOCK_WATER = BLOCK_IDS.WATER;
 
-export const BLOCKS = [
+const BLOCKS = [
     null,
     new Block(1, "block_dirt", [1, 1, 1, 1, 1, 1], true),
     new Block(2, "block_dirtgrass", [3, 2, 2, 2, 2, 1], true),
@@ -77,11 +77,14 @@ const BLOCK_SOLID = [
 Object.freeze(BLOCK_SOLID);
 
 export function isSolid(block) {
-    return BLOCK_SOLID[block];
+    return (block >>> 31 & 1) !== 0;
 }
 
 export function isSolidInt(block) {
-    return isSolid(block) ? 1 : 0;
+    return block >>> 31 & 1;
 }
 
+export function getBlockById(id) {
+    return BLOCKS[id & 0x7FFFFFFF];
+}
 

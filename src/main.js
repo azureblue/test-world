@@ -1,8 +1,8 @@
 import { Camera, FrustumCuller } from "./camera.js";
-import { UIntMesh } from "./chunk.js";
 import { Projection, FVec3, mat4, fvec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { KeyboardInput, MouseInput } from "./input.js";
+import { UIntMesh } from "./mesher.js";
 import { FPSCounter } from "./perf.js";
 import { TextureArray } from "./textures.js";
 import { Replacer, Resources, writeVoxelWireframe } from "./utils.js";
@@ -120,7 +120,8 @@ export async function start() {
 
     const currentChunk = await world.getCurrentChunk();
     // const peek = currentChunk.peek(0, 0);
-    const camera = new Camera(new FVec3(0, 100, 0));
+    const camera = new Camera(new FVec3(-5, 3, 0));
+    // const camera = new Camera(new FVec3(75, -40, -23));
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
 
     const cameraSpeed = 0.5;
