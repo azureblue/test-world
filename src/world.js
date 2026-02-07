@@ -442,7 +442,7 @@ export class World {
         if (entry === undefined || !entry.loaded)
             return 0;
 
-        return entry.chunk.data.get(bh, bx, by);
+        return entry.chunk.data.getHXY(bh, bx, by);
     }
 
     /**
