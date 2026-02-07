@@ -1,0 +1,74 @@
+{
+    "textures": [
+        {
+            "id": 0,
+            "name": "grass",
+            "src": "grass,0,0"
+        },
+        {
+            "id": 1,
+            "name": "dirt",
+            "src": "dirt,0,0"
+        },
+        {
+            "id": 2,
+            "name": "dirt.grass",
+            "src": [
+                "t:dirt",
+                "t:grass",
+                "mask,0,0"
+            ],
+            "ops": [
+                {
+                    "name": "mask"
+                }
+            ]
+        },
+        {
+            "id": 500,
+            "name": "water",
+            "src": "water,0,0",
+            "ops": [
+                {
+                    "name": "alpha",
+                    "params": {
+                        "alpha": 0.8
+                    }
+                }
+            ]
+
+        }
+    ],
+    "blocks": [
+        {
+            "id": 0,
+            "name": "none",
+            "solid": false
+        },
+        {
+            "id": 1,
+            "name": "block_dirt",
+            "textures": [ "dirt", "dirt", "dirt", "dirt", "dirt", "dirt" ],
+            "solid": true
+        },
+        {
+            "id": 2,
+            "name": "block_grass",
+            "textures": [ "grass", "grass", "grass", "grass", "grass", "grass" ],
+            "solid": true
+        },
+        {
+            "id": 3,
+            "name": "block_dirt_grass",
+            "textures": [ "grass", "dirt.grass", "dirt.grass", "dirt.grass", "dirt.grass", "dirt" ],
+            "solid": true
+        },
+        {
+            "id": 500,
+            "name": "block_water",
+            "textures": [ "water", "water", "water", "water", "water", "water" ],
+            "solid": false,
+            "alphaTest": 0.5
+        }
+    ]
+}
