@@ -295,7 +295,7 @@ export class Direction {
      * @param {FVec3} worldDir 
      * @param {number} bits 
      */
-    constructor(id, worldDir, logicDir,bits) {
+    constructor(id, worldDir, logicDir, bits) {
         this.id = id;
         this.worldDir = worldDir;
         this.logicDir = logicDir;
@@ -384,8 +384,35 @@ export function vec2(x, y) {
     return new Vec2(x, y);
 }
 
-
-
+export const Dir27 = [
+/* 0*/ vec3(-1, -1, -1),
+/* 1*/ vec3(0, -1, -1),
+/* 2*/ vec3(1, -1, -1),
+/* 3*/ vec3(-1, 0, -1),
+/* 4*/ vec3(0, 0, -1),
+/* 5*/ vec3(1, 0, -1),
+/* 6*/ vec3(-1, 1, -1),
+/* 7*/ vec3(0, 1, -1),
+/* 8*/ vec3(1, 1, -1),
+/* 9*/ vec3(-1, -1, 0),
+/*10*/ vec3(0, -1, 0),
+/*11*/ vec3(1, -1, 0),
+/*12*/ vec3(-1, 0, 0),
+/*13*/ vec3(0, 0, 0),
+/*14*/ vec3(1, 0, 0),
+/*15*/ vec3(-1, 1, 0),
+/*16*/ vec3(0, 1, 0),
+/*17*/ vec3(1, 1, 0),
+/*18*/ vec3(-1, -1, 1),
+/*19*/ vec3(0, -1, 1),
+/*20*/ vec3(1, -1, 1),
+/*21*/ vec3(-1, 0, 1),
+/*22*/ vec3(0, 0, 1),
+/*23*/ vec3(1, 0, 1),
+/*24*/ vec3(-1, 1, 1),
+/*25*/ vec3(0, 1, 1),
+/*26*/ vec3(1, 1, 1),
+];
 
 export { Frustum, FrustumPlanes, FVec2, fvec2, FVec3, fvec3, FVec4, Mat3, mat3, Mat4, mat4, Projection };
 

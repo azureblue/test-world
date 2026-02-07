@@ -1,4 +1,4 @@
-import { fvec3, FVec3, IVec3 } from "./geom.js";
+import { Dir27, fvec3, FVec3, IVec3 } from "./geom.js";
 import { ChunkMesher } from "./mesher.js";
 import { Array3D, MovingAverage } from "./utils.js";
 
@@ -15,6 +15,10 @@ export function posToKey3(cx, cy, cz) {
 
 export class ChunkData extends Array3D {
 
+    #bounds = null;
+    #boundsValid = false;
+
+
     /**
      * @param {Uint32Array} [data]
      */
@@ -30,17 +34,21 @@ export class ChunkData extends Array3D {
     getCheck(h, x, y) {
         if (h >= CHUNK_SIZE || h < 0 || x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE)
             return BLOCK_CHUNK_EDGE;
-        return this.get(h, x, y);
+        return this.getHXY(h, x, y);
     }
 
     peak(x, y) {
         for (let peek = CHUNK_SIZE - 1; peek > 0; peek--)
-            if (this.get(peek, x, y) !== BLOCK_EMPTY)
+            if (this.getHXY(peek, x, y) !== BLOCK_EMPTY)
                 return peek;
         return 0;
     }
 
-    findBoundsNonZero() {
+    /**     
+     * @returns {minH:number, maxH:number, minY:number, maxY:number, minX:number, maxX:number} | null
+     */
+    bounds() {
+        if (this.#boundsValid) return this.#bounds;
         const data = this.data;
 
         let minH = CHUNK_SIZE, maxH = -1;
@@ -62,12 +70,15 @@ export class ChunkData extends Array3D {
 
 
         if (maxH < 0)
-            return null;
-        return { minH: minH, maxH: maxH, minY, maxY, minX, maxX };
+            this.#bounds = null;
+        else
+            this.#bounds = { minH: minH, maxH: maxH, minY, maxY, minX, maxX };
+        this.#boundsValid = true;
+        return this.#bounds;
     }
 }
 
-class ChunkDataExtended extends Array3D {
+export class ChunkDataExtended extends Array3D {
 
     constructor() {
         super(CHUNK_SIZE + 2, CHUNK_SIZE + 2);
@@ -84,115 +95,113 @@ class ChunkDataExtended extends Array3D {
 
         switch (dir27) {
 
-            case 0: this.setXYZ(0, 0, 0, chunkData.getCheck(e, e, e)); break;
-            case 2: this.setXYZ(E, 0, 0, chunkData.getCheck(0, e, e)); break;
-            case 6: this.setXYZ(0, E, 0, chunkData.getCheck(e, 0, e)); break;
-            case 8: this.setXYZ(E, E, 0, chunkData.getCheck(0, 0, e)); break;
-            case 18: this.setXYZ(0, 0, E, chunkData.getCheck(e, e, 0)); break;
-            case 20: this.setXYZ(E, 0, E, chunkData.getCheck(0, e, 0)); break;
-            case 24: this.setXYZ(0, E, E, chunkData.getCheck(e, 0, 0)); break;
-            case 26: this.setXYZ(E, E, E, chunkData.getCheck(0, 0, 0)); break;
-            
+            case 0: this.setXYZ(0, 0, 0, chunkData.getXYZ(e, e, e)); break;
+            case 2: this.setXYZ(E, 0, 0, chunkData.getXYZ(0, e, e)); break;
+            case 6: this.setXYZ(0, E, 0, chunkData.getXYZ(e, 0, e)); break;
+            case 8: this.setXYZ(E, E, 0, chunkData.getXYZ(0, 0, e)); break;
+            case 18: this.setXYZ(0, 0, E, chunkData.getXYZ(e, e, 0)); break;
+            case 20: this.setXYZ(E, 0, E, chunkData.getXYZ(0, e, 0)); break;
+            case 24: this.setXYZ(0, E, E, chunkData.getXYZ(e, 0, 0)); break;
+            case 26: this.setXYZ(E, E, E, chunkData.getXYZ(0, 0, 0)); break;
+
             case 4:
                 for (let y = 0; y < CHUNK_SIZE; y++)
                     for (let x = 0; x < CHUNK_SIZE; x++)
-                        this.setXYZ(x + 1, y + 1, 0, chunkData.getCheck(x, y, e));
+                        this.setXYZ(x + 1, y + 1, 0, chunkData.getXYZ(x, y, e));
                 break;
             case 10:
                 for (let z = 0; z < CHUNK_SIZE; z++)
                     for (let x = 0; x < CHUNK_SIZE; x++)
-                        this.setXYZ(x + 1, 0, z + 1, chunkData.getCheck(x, e, z));
+                        this.setXYZ(x + 1, 0, z + 1, chunkData.getXYZ(x, e, z));
                 break;
             case 12:
                 for (let z = 0; z < CHUNK_SIZE; z++)
                     for (let y = 0; y < CHUNK_SIZE; y++)
-                        this.setXYZ(0, y + 1, z + 1, chunkData.getCheck(e, y, z));
+                        this.setXYZ(0, y + 1, z + 1, chunkData.getXYZ(e, y, z));
                 break;
             case 14:
                 for (let z = 0; z < CHUNK_SIZE; z++)
                     for (let y = 0; y < CHUNK_SIZE; y++)
-                        this.setXYZ(E, y + 1, z + 1, chunkData.getCheck(0, y, z));
+                        this.setXYZ(E, y + 1, z + 1, chunkData.getXYZ(0, y, z));
                 break;
             case 16:
                 for (let z = 0; z < CHUNK_SIZE; z++)
                     for (let x = 0; x < CHUNK_SIZE; x++)
-                        this.setXYZ(x + 1, E, z + 1, chunkData.getCheck(x, 0, z));
+                        this.setXYZ(x + 1, E, z + 1, chunkData.getXYZ(x, 0, z));
                 break;
             case 22:
                 for (let y = 0; y < CHUNK_SIZE; y++)
                     for (let x = 0; x < CHUNK_SIZE; x++)
-                        this.setXYZ(x + 1, y + 1, E, chunkData.getCheck(x, y, 0));
+                        this.setXYZ(x + 1, y + 1, E, chunkData.getXYZ(x, y, 0));
                 break;
 
             case 1:
                 for (let x = 0; x < CHUNK_SIZE; x++)
-                    this.setXYZ(x + 1, 0, 0, chunkData.getCheck(x, e, e));
+                    this.setXYZ(x + 1, 0, 0, chunkData.getXYZ(x, e, e));
                 break;
 
             case 3:
                 for (let y = 0; y < CHUNK_SIZE; y++)
-                    this.setXYZ(0, y + 1, 0, chunkData.getCheck(e, y, e));
+                    this.setXYZ(0, y + 1, 0, chunkData.getXYZ(e, y, e));
                 break;
 
             case 5:
                 for (let y = 0; y < CHUNK_SIZE; y++)
-                    this.setXYZ(E, y + 1, 0, chunkData.getCheck(0, y, e));
+                    this.setXYZ(E, y + 1, 0, chunkData.getXYZ(0, y, e));
                 break;
 
             case 7:
                 for (let x = 0; x < CHUNK_SIZE; x++)
-                    this.setXYZ(x + 1, E, 0, chunkData.getCheck(x, 0, e));
+                    this.setXYZ(x + 1, E, 0, chunkData.getXYZ(x, 0, e));
                 break;
 
 
             case 9:
                 for (let z = 0; z < CHUNK_SIZE; z++)
-                    this.setXYZ(0, 0, z + 1, chunkData.getCheck(e, e, z));
+                    this.setXYZ(0, 0, z + 1, chunkData.getXYZ(e, e, z));
                 break;
 
             case 11:
                 for (let z = 0; z < CHUNK_SIZE; z++)
-                    this.setXYZ(E, 0, z + 1, chunkData.getCheck(0, e, z));
+                    this.setXYZ(E, 0, z + 1, chunkData.getXYZ(0, e, z));
                 break;
 
             case 15:
                 for (let z = 0; z < CHUNK_SIZE; z++)
-                    this.setXYZ(0, E, z + 1, chunkData.getCheck(e, 0, z));
+                    this.setXYZ(0, E, z + 1, chunkData.getXYZ(e, 0, z));
                 break;
 
             case 17:
                 for (let z = 0; z < CHUNK_SIZE; z++)
-                    this.setXYZ(E, E, z + 1, chunkData.getCheck(0, 0, z));
+                    this.setXYZ(E, E, z + 1, chunkData.getXYZ(0, 0, z));
                 break;
 
             case 19:
                 for (let x = 0; x < CHUNK_SIZE; x++)
-                    this.setXYZ(x + 1, 0, E, chunkData.getCheck(x, e, 0));
+                    this.setXYZ(x + 1, 0, E, chunkData.getXYZ(x, e, 0));
                 break;
 
             case 21:
                 for (let y = 0; y < CHUNK_SIZE; y++)
-                    this.setXYZ(0, y + 1, E, chunkData.getCheck(e, y, 0));
+                    this.setXYZ(0, y + 1, E, chunkData.getXYZ(e, y, 0));
                 break;
 
             case 23:
                 for (let y = 0; y < CHUNK_SIZE; y++)
-                    this.setXYZ(E, y + 1, E, chunkData.getCheck(0, y, 0));
+                    this.setXYZ(E, y + 1, E, chunkData.getXYZ(0, y, 0));
                 break;
 
             case 25:
                 for (let x = 0; x < CHUNK_SIZE; x++)
-                    this.setXYZ(x + 1, E, E, chunkData.getCheck(x, 0, 0));
+                    this.setXYZ(x + 1, E, E, chunkData.getXYZ(x, 0, 0));
                 break;
-
 
             case 13:
                 for (let z = 0; z < CHUNK_SIZE; z++)
                     for (let y = 0; y < CHUNK_SIZE; y++)
                         for (let x = 0; x < CHUNK_SIZE; x++)
-                            this.setXYZ(x + 1, y + 1, z + 1, chunkData.getCheck(x, y, z));
+                            this.setXYZ(x + 1, y + 1, z + 1, chunkData.getXYZ(x, y, z));
                 break;
-
         }
     }
 }
@@ -213,7 +222,7 @@ export class ChunkDataLoader {
         let chunkData = this.#cache.get(key);
         if (chunkData === undefined) {
             chunkData = this.#generator(cx, cy, cz);
-            // this.#cache.set(key, chunkData);
+            this.#cache.set(key, chunkData);
         }
         return chunkData;
     }
@@ -248,7 +257,7 @@ export class Chunk {
     }
 
     #updateCornersData() {
-        const bounds = this.data.findBoundsNonZero();
+        const bounds = this.data.bounds();
         if (!bounds) {
             return;
         }
@@ -330,9 +339,39 @@ export class ChunkManager {
         const position = new IVec3(cx, cy, cz);
 
         const chunkData = this.#chunkLoader.getChunkSync(cx, cy, cz);
+        const chunkDataExtended = new ChunkDataExtended();
+        const bounds = chunkData.bounds();
+        let adj27Needed = (1 << 27) - 1
+        if (bounds) {
+            if (bounds.minH > 0) {
+                adj27Needed &= 0b111111111111111111000000000;
+            }
+            if (bounds.maxH < CHUNK_SIZE) {
+                adj27Needed &= 0b000000000111111111111111111;
+            }
+            if (bounds.minX > 0) {
+                adj27Needed &= 0b110110110110110110110110110;
+            }
+            if (bounds.maxX < CHUNK_SIZE) {
+                adj27Needed &= 0b011011011011011011011011011;
+            }
+            if (bounds.minY > 0) {
+                adj27Needed &= 0b111111000111111000111111000;
+            }
+            if (bounds.maxY < CHUNK_SIZE) {
+                adj27Needed &= 0b00111111000111111000111111;
+            }
+
+            for (let dir27 = 0; dir27 < 27; dir27++, adj27Needed >>>= 1) {
+                if ((adj27Needed & 1) === 0) continue;
+                const dirOffset = Dir27[dir27];
+                const adjChunkData = this.#chunkLoader.getChunkSync(cx + dirOffset.x, cy + dirOffset.y, cz + dirOffset.z);
+                chunkDataExtended.setAdjData(dir27, adjChunkData);
+            }
+        }
         const now = performance.now();
         const meshData = this.#chunkMesher.createMeshes(
-            position, this.#chunkLoader
+            position, chunkDataExtended
         );
         this.#avgTime.add(performance.now() - now);
         console.log(`${this.#avgTime.average().toFixed(0)}`);

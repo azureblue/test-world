@@ -324,12 +324,16 @@ export class Array3D {
     /**
      * @param {number} size 
      * @param {number} height 
+     * @param {Uint32Array} [data]
      */
-    constructor(size, height) {
+    constructor(size, height, data = null) {
         this.#size = size | 0;
         this.#height = height | 0;
         this.#planeSize = (size * size) | 0;
         this.data = new Uint32Array(this.#planeSize * height);
+        if (data !== null) {
+            this.data.set(data);
+        }
     }
 
     setHXY(h, x, y, v) {
