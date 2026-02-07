@@ -1,4 +1,5 @@
-import { is2Pow } from "./utils.js";
+import { ImagePixels, ImageResources } from "./image.js";
+import { is2Pow, Logger } from "./utils.js";
 
 class ImageFilters {
 
@@ -21,6 +22,84 @@ class ImageFilters {
         }
     }
 }
+
+const ImageOps = {
+
+    /**
+     * @param {Array<ImageData>} images
+     * @return {ImageData}
+    */
+    mask: function (images, params = {}) {
+
+        if (images.length < 3)
+            throw "Mask operation requires at least 3 images";
+
+        const [imageA, imageB, mask] = images.splice(0, 3);
+
+        if (imageA.width !== imageB.width || imageA.height !== imageB.height ||
+            imageA.width !== mask.width || imageA.height !== mask.height) {
+            throw "Mask operation requires all images to have the same dimensions";
+        }
+
+        const result = new ImageData(imageA.width, imageA.height);
+        const dataA = imageA.data;
+        const dataB = imageB.data;
+        const maskData = images[2].data;
+        
+        const resultData = result.data;
+        for (let i = 0; i < dataA.length; i += 4) {
+            const maskValue = mask.data[i] / 255.0;
+            resultData[i] = dataA[i] * (maskValue) + dataB[i] * (1 - maskValue);
+            resultData[i + 1] = dataA[i + 1] * (maskValue) + dataB[i + 1] * (1 - maskValue);
+            resultData[i + 2] = dataA[i + 2] * (maskValue) + dataB[i + 2] * (1 - maskValue);
+            resultData[i + 3] = Math.min(255, dataA[i + 3] + dataB[i + 3]);
+        }        
+    }
+}
+
+class TextureLoader {    
+    static #logger = new Logger("TextureLoader");
+    /**
+     * @param {ImageResources} imageResources 
+     * @param {Array<{id: number, name: string, src: string | Array<string>, ops?: Array<Object>}>} textureConfig
+     */
+    static load(imageResources, textureConfig) {
+        /**
+         * @type {Map<string, ImagePixels>}
+         */
+        const textures = new Map();        
+        textureConfig.forEach(texDef => {
+            let images = (Array.isArray(texDef.src) ? texDef.src : [texDef.src])
+                .map(src => {
+                if (src.startsWith("t:")) {
+                    this.#logger.debug(`Loading texture reference ${src}`);
+                    const source = textures.get(src.substring(2));
+                    if (!source) {
+                        throw `Missing texture reference ${src}`;
+                    }
+                    return source.copy();
+                }
+                this.#logger.debug(`Loading image resource ${src}`);
+                    return imageResources.getImage(src).copy();
+                });
+                
+            if (texDef.ops) {
+                texDef.ops.forEach(op => {
+                    const opName = op.name;
+                    if (ImageOps[opName]) {                        
+                        ImageOps[opName](images, op.params);
+                    }
+                });
+            }
+            if (images.length !== 1)
+                throw "texture operations did not result in single image";
+            
+            textures.set(texDef.name, images[0]);
+        });
+        return textures;
+    }       
+}
+
 
 const textureFilters = {
     6: [
