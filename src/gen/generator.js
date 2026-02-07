@@ -64,15 +64,15 @@ export class PixelDataChunkGenerator {
                 const dirtLayer = Math.max(0, 10 - Math.floor((10 / 58) * height));
 
                 for (let r = 0; r < height - dirtLayer; r++) {
-                    chunk.set(r, x, ry, BLOCK_IDS.ROCK);
+                    chunk.setHXY(r, x, ry, BLOCK_IDS.ROCK);
                 }
                 for (let e = height - dirtLayer; e < height - 1; e++) {
-                    chunk.set(e, x, ry, BLOCK_IDS.DIRT);
+                    chunk.setHXY(e, x, ry, BLOCK_IDS.DIRT);
                 }
                 if (dirtLayer > 0) {
-                    chunk.set(height - 1, x, ry, BLOCK_IDS.DIRT_GRASS);
+                    chunk.setHXY(height - 1, x, ry, BLOCK_IDS.DIRT_GRASS);
                     if (Math.random() < 0.02 && height < CHUNK_HEIGHT - 1) {
-                        chunk.set(height, x, ry, BLOCK_IDS.GRASS_SHORT);
+                        chunk.setHXY(height, x, ry, BLOCK_IDS.GRASS_SHORT);
                     }
                 }
                 // if (Math.random() < 0.1)
@@ -80,7 +80,7 @@ export class PixelDataChunkGenerator {
 
                 for (let w = height; w < 30; w++) {
                     if (chunk.get(w, x, ry) == BLOCK_IDS.EMPTY)
-                        chunk.set(w, x, ry, BLOCK_IDS.WATER);
+                        chunk.setHXY(w, x, ry, BLOCK_IDS.WATER);
                 }
 
 
@@ -108,7 +108,7 @@ export class RandomDataChunkGenerator {
             for (let y = 0; y < CHUNK_SIZE; y++)
                 for (let x = 0; x < CHUNK_SIZE; x++) {
                     if (this.#rng.uniform() < 0.15) {
-                        chunk.set(h, x, y, this.#blocks[Math.round(this.#rng.uniform() * 3)]);
+                        chunk.setHXY(h, x, y, this.#blocks[Math.round(this.#rng.uniform() * 3)]);
                     }
                 }
         return chunk;
@@ -563,16 +563,16 @@ export class NoiseChunkGenerator {
                 const chunkEndH = chunkStartH + CHUNK_SIZE;
                 let r = chunkStartH;
                 for (; r < Math.min(height - 1, chunkEndH); r++) {
-                    chunk.set(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
+                    chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
                 }
 
                 if (r < chunkEndH && r < height) {
-                    chunk.set(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
+                    chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
                 }
 
                 for (let w = r; w < Math.min(-55, chunkEndH); w++) {
-                    if (chunk.get(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
-                        chunk.set(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
+                    if (chunk.getHXY(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
+                        chunk.setHXY(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
                 }
             }
         return chunk;
@@ -610,15 +610,15 @@ export class FunctionChunkGenerator {
                 const dirtLayer = Math.max(0, 10 - Math.floor((10 / 58) * height));
 
                 for (let r = 0; r < height - dirtLayer; r++) {
-                    chunk.set(r, rx, ry, BLOCK_IDS.ROCK);
+                    chunk.setHXY(r, rx, ry, BLOCK_IDS.ROCK);
                 }
                 for (let e = height - dirtLayer; e < height - 1; e++) {
-                    chunk.set(e, rx, ry, BLOCK_IDS.DIRT);
+                    chunk.setHXY(e, rx, ry, BLOCK_IDS.DIRT);
                 }
                 if (dirtLayer > 0) {
-                    chunk.set(height - 1, rx, ry, BLOCK_IDS.DIRT_GRASS);
+                    chunk.setHXY(height - 1, rx, ry, BLOCK_IDS.DIRT_GRASS);
                     if (Math.random() < 0.02 && height < CHUNK_HEIGHT - 1) {
-                        chunk.set(height, rx, ry, BLOCK_IDS.GRASS_SHORT);
+                        chunk.setHXY(height, rx, ry, BLOCK_IDS.GRASS_SHORT);
                     }
                 }
                 // if (Math.random() < 0.1)
@@ -626,7 +626,7 @@ export class FunctionChunkGenerator {
 
                 for (let w = height; w < 20; w++) {
                     if (chunk.get(w, rx, ry) == BLOCK_IDS.EMPTY)
-                        chunk.set(w, rx, ry, BLOCK_IDS.WATER);
+                        chunk.setHXY(w, rx, ry, BLOCK_IDS.WATER);
                 }
             }
         return chunk;

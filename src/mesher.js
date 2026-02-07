@@ -290,7 +290,7 @@ export class UIntChunkMesher0 extends ChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.FRONT, x, y, (blockTextures[1] << 8) | shadows);
+                        layersCurrent.setHXY(Direction.FRONT, x, y, (blockTextures[1] << 8) | shadows);
                     }
 
                     if (!isSolid(adj.get(0, -1, 0))) {
@@ -307,7 +307,7 @@ export class UIntChunkMesher0 extends ChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextures[2] << 8) | (shadows));
+                        layersCurrent.setHXY(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextures[2] << 8) | (shadows));
                     }
 
                     if (!isSolid(adj.get(0, 0, 1))) {
@@ -324,7 +324,7 @@ export class UIntChunkMesher0 extends ChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextures[3] << 8) | shadows);
+                        layersCurrent.setHXY(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextures[3] << 8) | shadows);
                     }
 
                     if (!isSolid(adj.get(0, 1, 0))) {
@@ -341,7 +341,7 @@ export class UIntChunkMesher0 extends ChunkMesher {
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextures[4] << 8) | (shadows));
+                        layersCurrent.setHXY(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextures[4] << 8) | (shadows));
                     }
                 }
 
@@ -508,7 +508,7 @@ export class UIntChunkMesher0 extends ChunkMesher {
             this.#cy = cy;
             this.#cz = cz;
             this.#ch[13] = loader.getChunkSync(cx, cy, cz);
-            this.#currentGet = this.#ch[13].get.bind(this.#ch[13]);
+            this.#currentGet = this.#ch[13].getHXY.bind(this.#ch[13]);
         }
 
         setPosition(h, x, y) {
@@ -547,7 +547,7 @@ export class UIntChunkMesher0 extends ChunkMesher {
             const ox = sx * (1 - ((x & 1) << 1));
             const oy = sy * (1 - ((y & 1) << 1));
 
-            return this.#getChunk(ox, oy, oz).get(h & 31, x & 31, y & 31);
+            return this.#getChunk(ox, oy, oz).getHXY(h & 31, x & 31, y & 31);
         }
 
         getChunkData() {
@@ -732,7 +732,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
                             let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         }
-                        layersCurrent.set(Direction.FRONT, x, y, (blockTextures[1] << 8) | shadows);
+                        layersCurrent.setHXY(Direction.FRONT, x, y, (blockTextures[1] << 8) | shadows);
                     }
 
                     if (!isSolid(adjPrecompute[dirTo27[Direction.LEFT]])) {
@@ -746,7 +746,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
 
                         }
-                        layersCurrent.set(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextures[2] << 8) | (shadows));
+                        layersCurrent.setHXY(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextures[2] << 8) | (shadows));
                     }
 
                     if (!isSolid(adjPrecompute[dirTo27[Direction.BACK]])) {
@@ -759,7 +759,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
                             let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         }
-                        layersCurrent.set(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextures[3] << 8) | shadows);
+                        layersCurrent.setHXY(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextures[3] << 8) | shadows);
                     }
 
                     if (!isSolid(adjPrecompute[dirTo27[Direction.RIGHT]])) {
@@ -772,7 +772,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
                             let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         }
-                        layersCurrent.set(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextures[4] << 8) | (shadows));
+                        layersCurrent.setHXY(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextures[4] << 8) | (shadows));
                     }
                 }
 
@@ -1315,4 +1315,4 @@ export class UIntChunkMesher2 extends ChunkMesher {
 
 }
 
-export {UIntChunkMesher1 as DefaultMesher};
+export {UIntChunkMesher0 as DefaultMesher};

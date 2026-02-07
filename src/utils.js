@@ -329,15 +329,23 @@ export class Array3D {
         this.#size = size | 0;
         this.#height = height | 0;
         this.#planeSize = (size * size) | 0;
-        this.data = new Uint32Array((this.#planeSize * height));
+        this.data = new Uint32Array(this.#planeSize * height);
     }
 
-    set(h, x, y, v) {
+    setHXY(h, x, y, v) {
         this.data[this.#planeSize * h + y * this.#size + x] = v;
     }
 
-    get(h, x, y) {
+    setXYZ(x, y, z, v) {
+        this.data[this.#planeSize * z + y * this.#size + x] = v;
+    }
+
+    getHXY(h, x, y) {
         return this.data[this.#planeSize * h + y * this.#size + x];
+    }
+
+    getXYZ(x, y, z) {
+        return this.data[this.#planeSize * z + y * this.#size + x];
     }
 
     fill(v) {
