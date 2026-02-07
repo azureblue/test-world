@@ -1,5 +1,5 @@
 import { BLOCK_IDS, getBlockById, isSolid, isSolidInt } from "./blocks.js";
-import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataLoader} from "./chunk.js";
+import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataExtended, ChunkDataLoader } from "./chunk.js";
 import { Direction, DirXY, FVec3, IVec3, vec3 } from "./geom.js";
 import { Array2D, Array3D, i32a, UInt32Buffer } from "./utils.js";
 
@@ -640,17 +640,16 @@ export class UIntChunkMesher1 extends ChunkMesher {
 
     /**
      * @param {IVec3} position 
-     * @param {ChunkDataLoader} chunkLoader
+     * @param {ChunkDataExtended} chunkData
      * 
      * @returns {UIntMeshData}
      */
-    createMeshes(position, chunkLoader) {
-        const adj = new UIntChunkMesher1.Adj27(chunkLoader, position.x, position.y, position.z);
-        const adjPrecompute = adj.precomputIsSolidInt;
-        const adjCornerIdxs = UIntChunkMesher1.Adj27.adjDirCornersIdxs;
-        const dirTo27 = UIntChunkMesher1.Adj27.dirTo27
+    createMeshes(position, chunkData) {
         this.#bufferSolid.reset();
         this.#bufferWater.reset();
+        const sideDir0 = new DirXY();
+        const sideDir1 = new DirXY();
+        const cornerDir = new DirXY();
         const layers = this.#sideLayers;
         layers[0].fill(0);
         this.#grasslike.reset();
@@ -660,20 +659,21 @@ export class UIntChunkMesher1 extends ChunkMesher {
         let topRow = this.#topRow;
         let currentRow = this.#currentRow;
 
-        for (let h = 0; h < CHUNK_SIZE; h++) {
-
+        for (let h = 1; h < CHUNK_SIZE + 1; h++) {
+            const realH = h - 1;
             upLayer.fill(0);
             downLayer.fill(0);
-            const topLayer = h & 1;
+            const topLayer = realH & 1;
             const currentLayer = 1 - topLayer;
             const layersTop = layers[topLayer];
             const layersCurrent = layers[currentLayer];
             layersCurrent.fill(0);
 
-            for (let y = 0; y < CHUNK_SIZE; y++)
-                for (let x = 0; x < CHUNK_SIZE; x++) {
-                    adj.setPosition(h, x, y);
-                    const blockId = adj.get(0, 0, 0);
+            for (let y = 1; y < CHUNK_SIZE + 1; y++)
+                for (let x = 1; x < CHUNK_SIZE + 1; x++) {
+                    const realX = x - 1;
+                    const realY = y - 1;                    
+                    const blockId = chunkData.getHXY(h, x, y);
                     if (blockId == BLOCK_EMPTY)
                         continue;
 
@@ -682,97 +682,116 @@ export class UIntChunkMesher1 extends ChunkMesher {
                         continue;
                     }
 
-                    adj.preprocess();
 
                     const block = getBlockById(blockId);
                     const blockTextures = block.textureIds;
                     const isWater = blockId == BLOCK_WATER;
-                    const above = adjPrecompute[dirTo27[Direction.UP]];
+                    const above = chunkData.getHXY(h + 1, x, y)
                     if (!isSolid(above)) {
                         if (isWater && above == BLOCK_WATER)
                             continue;
                         let shadows = 0;
                         if (!isWater) {
-                            const baseIdx = 12 * Direction.UP;
                             for (let v = 0; v < 4; v++) {
-                                const dirShadowCornerIdx = baseIdx + v * 3;
-                                let s0 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx]]);
-                                let s1 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 1]]);
-                                let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
+                                let s0 = isSolidInt(chunkData.getHXY(h + 1, x + sideDir0.x, y + sideDir0.y));
+                                let s1 = isSolidInt(chunkData.getHXY(h + 1, x + sideDir1.x, y + sideDir1.y));
+                                let c = isSolidInt(chunkData.getHXY(h + 1, x + cornerDir.x, y + cornerDir.y));
                                 shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                                sideDir0.rotateCCW();
+                                sideDir1.rotateCCW();
+                                cornerDir.rotateCCW();
                             }
                         }
-                        upLayer.set(x, y, (blockTextures[0] << 8) | (shadows));
+                        upLayer.set(realX, realY, (blockTextures[0] << 8) | (shadows));
                     }
 
                     if (isWater)
                         continue;
 
-                    if (!isSolid(adjPrecompute[dirTo27[Direction.DOWN]])) {
+                    if (!isSolid(chunkData.getHXY(h - 1, x, y))) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
+                        cornerDir.set(-1, -1);
                         let shadows = 0;
-                        const baseIdx = 12 * Direction.DOWN;
                         for (let v = 0; v < 4; v++) {
-                            const dirShadowCornerIdx = baseIdx + v * 3;
-                            let s0 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx]]);
-                            let s1 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 1]]);
-                            let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
+                            let s0 = isSolidInt(chunkData.getHXY(h - 1, x + sideDir0.x, y - sideDir0.y));
+                            let s1 = isSolidInt(chunkData.getHXY(h - 1, x + sideDir1.x, y - sideDir1.y));
+                            let c = isSolidInt(chunkData.getHXY(h - 1, x + cornerDir.x, y - cornerDir.y));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
+                            cornerDir.rotateCCW();
                         }
 
-                        downLayer.set(x, CHUNK_SIZE - y - 1, (blockTextures[5] << 8) | (shadows));
+                        downLayer.set(realX, CHUNK_SIZE - realY - 1, (blockTextures[5] << 8) | (shadows));
                     }
 
-                    if (!isSolid(adjPrecompute[dirTo27[Direction.FRONT]])) {
+                    if (!isSolid(chunkData.getHXY(h, x, y - 1))) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
+                        cornerDir.set(-1, -1);
                         let shadows = 0;
-                        const baseIdx = 12 * Direction.FRONT;
                         for (let v = 0; v < 4; v++) {
-                            const dirShadowCornerIdx = baseIdx + v * 3;
-                            let s0 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx]]);
-                            let s1 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 1]]);
-                            let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x + sideDir0.x, y - 1));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x + sideDir1.x, y - 1));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x + cornerDir.x, y - 1));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
+                            cornerDir.rotateCCW();
                         }
-                        layersCurrent.setHXY(Direction.FRONT, x, y, (blockTextures[1] << 8) | shadows);
+                        layersCurrent.setHXY(Direction.FRONT, realX, realY, (blockTextures[1] << 8) | shadows);
                     }
 
-                    if (!isSolid(adjPrecompute[dirTo27[Direction.LEFT]])) {
+                    if (!isSolid(chunkData.getHXY(h, x - 1, y))) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
+                        cornerDir.set(-1, -1);
                         let shadows = 0;
-                        const baseIdx = 12 * Direction.LEFT;
                         for (let v = 0; v < 4; v++) {
-                            const dirShadowCornerIdx = baseIdx + v * 3;
-                            let s0 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx]]);
-                            let s1 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 1]]);
-                            let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x - 1, y - sideDir0.x));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x - 1, y - sideDir1.x));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x - 1, y - cornerDir.x));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
+                            cornerDir.rotateCCW();
                         }
-                        layersCurrent.setHXY(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextures[2] << 8) | (shadows));
+                        layersCurrent.setHXY(Direction.LEFT, CHUNK_SIZE - 1 - realY, realX, (blockTextures[2] << 8) | (shadows));
                     }
 
-                    if (!isSolid(adjPrecompute[dirTo27[Direction.BACK]])) {
+                    if (!isSolid(chunkData.getHXY(h, x, y + 1))) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
+                        cornerDir.set(-1, -1);
                         let shadows = 0;
-                        const baseIdx = 12 * Direction.BACK;
                         for (let v = 0; v < 4; v++) {
-                            const dirShadowCornerIdx = baseIdx + v * 3;
-                            let s0 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx]]);
-                            let s1 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 1]]);
-                            let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x - sideDir0.x, y + 1));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x - sideDir1.x, y + 1));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x - cornerDir.x, y + 1));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
+                            cornerDir.rotateCCW();
                         }
-                        layersCurrent.setHXY(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextures[3] << 8) | shadows);
+                        layersCurrent.setHXY(Direction.BACK, CHUNK_SIZE - 1 - realX, CHUNK_SIZE - 1 - realY, (blockTextures[3] << 8) | shadows);
                     }
 
-                    if (!isSolid(adjPrecompute[dirTo27[Direction.RIGHT]])) {
+                    if (!isSolid(chunkData.getHXY(h, x + 1, y))) {
+                        sideDir0.set(-1, 0);
+                        sideDir1.set(0, -1);
+                        cornerDir.set(-1, -1);
                         let shadows = 0;
-                        const baseIdx = 12 * Direction.RIGHT;
                         for (let v = 0; v < 4; v++) {
-                            const dirShadowCornerIdx = baseIdx + v * 3;
-                            let s0 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx]]);
-                            let s1 = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 1]]);
-                            let c = isSolidInt(adjPrecompute[adjCornerIdxs[dirShadowCornerIdx + 2]]);
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x + 1, y + sideDir0.x));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x + 1, y + sideDir1.x));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x + 1, y + cornerDir.x));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            sideDir0.rotateCCW();
+                            sideDir1.rotateCCW();
+                            cornerDir.rotateCCW();
                         }
-                        layersCurrent.setHXY(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextures[4] << 8) | (shadows));
+                        layersCurrent.setHXY(Direction.RIGHT, realY, CHUNK_SIZE - 1 - realX, (blockTextures[4] << 8) | (shadows));
                     }
                 }
 
@@ -819,7 +838,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
                         let x = i & CHUNK_SIZE_MASK;
                         let y = i >> CHUNK_SIZE_BIT_LEN;
 
-                        this.#addFace(top & 0x1FFFF, h - topH,
+                        this.#addFace(top & 0x1FFFF, realH - topH,
                             dirXXAdd + dirXXMul * x + dirXYMul * y,
                             dirYYAdd + dirYXMul * x + dirYYMul * y,
                             dir, (top >> 17) & 0xFF, topH);
@@ -855,7 +874,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
                         } else {
                             const topW = top >> 17 & 0xFF;
                             const yy = (y - topH) * (0b1 - (upDown << 1)) + (CHUNK_SIZE - 1) * (upDown);
-                            this.#addFace(top & 0x1FFFF, h, i, yy, Direction.UP + upDown * 5, topW, topH);
+                            this.#addFace(top & 0x1FFFF, realH, i, yy, Direction.UP + upDown * 5, topW, topH);
                         }
                     }
                     const tmp = currentRow;
@@ -870,7 +889,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
                     const topH = top >> 25;
                     const topW = top >> 17 & 0xFF;
                     const y = (CHUNK_SIZE - topH) * (0b1 - (upDown << 1)) + (CHUNK_SIZE - 1) * (upDown);
-                    this.#addFace(top & 0x1FFFF, h, i, y, Direction.UP + upDown * 5, topW, topH);
+                    this.#addFace(top & 0x1FFFF, realH, i, y, Direction.UP + upDown * 5, topW, topH);
                 }
             }
         }
@@ -922,110 +941,6 @@ export class UIntChunkMesher1 extends ChunkMesher {
         return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
             resultData);
     }
-
-    static Adj27 = class Adj27 {
-        #loader;
-        #cx; #cy; #cz;
-        #neededAdjs;
-
-        /** @type {(ChunkData|null)[]} */
-        #ch = new Array(27).fill(null);
-        precomputIsSolidInt = new Uint32Array(27);
-        #currentGet;
-
-        #h; #x; #y;
-
-        static map27ToXYZ = new Int32Array([-1, -1, -1, 0, -1, -1, 1, -1, -1, -1, 0, -1, 0, 0, -1, 1, 0, -1, -1, 1, -1, 0, 1, -1, 1, 1, -1, -1, -1, 0, 0, -1, 0, 1, -1, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 1, 0, 0, 1, 0, 1, 1, 0, -1, -1, 1, 0, -1, 1, 1, -1, 1, -1, 0, 1, 0, 0, 1, 1, 0, 1, -1, 1, 1, 0, 1, 1, 1, 1, 1]);
-        static dirTo27 = new Uint32Array([22, 10, 12, 16, 14, 4]);
-        static adjDirCorners = new Uint32Array([0x07bc0000, 0x001c0a07, 0x01248249, 0x070281c0, 0x04920924, 0x000001ef]);
-        static adjDirCornersIdxsStride = 12;
-        static adjDirCornersIdxs = new Uint32Array([21, 19, 18, 19, 23, 20, 23, 25, 26, 25, 21, 24, 9, 1, 0, 1, 11, 2, 11, 19, 20, 19, 9, 18, 15, 3, 6, 3, 9, 0, 9, 21, 18, 21, 15, 24, 17, 7, 8, 7, 15, 6, 15, 25, 24, 25, 17, 26, 11, 5, 2, 5, 17, 8, 17, 23, 26, 23, 11, 20, 3, 7, 6, 7, 5, 8, 5, 1, 2, 1, 3, 0]);
-      
-        constructor(loader, cx, cy, cz) {
-            this.#loader = loader;
-            this.#cx = cx;
-            this.#cy = cy;
-            this.#cz = cz;
-
-            // center od razu
-            this.#ch[13] = loader.getChunkSync(cx, cy, cz); // (0,0,0) => idx 13
-            this.#currentGet = this.#ch[13].get.bind(this.#ch[13]);
-        }
-
-        setPosition(h, x, y) {
-            this.#h = h;
-            this.#x = x;
-            this.#y = y;
-        }
-
-        #idx(ox, oy, oz) {
-            return (oz + 1) * 9 + (oy + 1) * 3 + (ox + 1);
-        }
-
-        #getChunk(ox, oy, oz) {
-            const idx = this.#idx(ox, oy, oz);
-            let c = this.#ch[idx];
-            if (c !== null) return c;
-            c = this.#loader.getChunkSync(this.#cx + ox, this.#cy + oy, this.#cz + oz);
-            this.#ch[idx] = c;
-            return c;
-        }
-
-        preprocess() {
-            const dirOffsets = Direction.offsets;
-            let neededAdjs = 0;
-            // this.precomputIsSolidInt.fill(0);
-            for (let dir = 0; dir < 6; dir++) {
-                const dirOffsetIdx = dir * 3;
-                const blockId = this.get(
-                    dirOffsets[dirOffsetIdx],
-                    dirOffsets[dirOffsetIdx + 1],
-                    dirOffsets[dirOffsetIdx + 2]
-                );
-                this.precomputIsSolidInt[Adj27.dirTo27[dir]] = blockId;
-                if (isSolidInt(blockId) === 1)
-                    continue;
-                neededAdjs |= (Adj27.adjDirCorners[dir]);
-            }
-            for (let i = 0; neededAdjs !== 0; i++) {
-                if ((neededAdjs & 1) === 1) {
-                    const ox = Adj27.map27ToXYZ[i * 3 + 0];
-                    const oy = Adj27.map27ToXYZ[i * 3 + 1];
-                    const oz = Adj27.map27ToXYZ[i * 3 + 2];
-                    this.precomputIsSolidInt[i] = this.get(ox, oy, oz);
-                }
-                neededAdjs >>>= 1;
-            }
-        }
-
-        isSolidDir(dir) {
-            return (this.precomputIsSolidInt & (this.dirTo27[dir])) === 1;
-        }
-
-        get(dx, dy, dh) {
-            let h = (this.#h + dh) | 0;
-            let x = (this.#x + dx) | 0;
-            let y = (this.#y + dy) | 0;
-
-            if (((h | x | y) & -32) === 0) {
-                return this.#currentGet(h, x, y);
-            }
-
-            const sh = (h >> 5) & 1;
-            const sx = (x >> 5) & 1;
-            const sy = (y >> 5) & 1;
-
-            const oz = sh * (1 - ((h & 1) << 1));
-            const ox = sx * (1 - ((x & 1) << 1));
-            const oy = sy * (1 - ((y & 1) << 1));
-
-            return this.#getChunk(ox, oy, oz).get(h & 31, x & 31, y & 31);
-        }
-
-        getChunkData() {
-            return this.#ch[13];
-        }
-    }
 }
 
 export class UIntChunkMesher2 extends ChunkMesher {
@@ -1048,14 +963,10 @@ export class UIntChunkMesher2 extends ChunkMesher {
 
     wMergeMasks = i32a(0, 1, 1, 0);
     hMergeMasks = i32a(0, 0, 1, 1);
-    /**
-     * @param {number} data 8 bits (2nd lsb) texture + 8 bits (1st lsb) shadows
-     * @param {number} h 
-     * @param {number} x 
-     * @param {number} y 
-     * @param {number} direction
-     */
-    #addFace(data, h, x, y, direction, width, height, reverseWinding = false) {
+
+    #addFace(direction, h, x, y, data, reverseWinding = false) {
+        const width = 1;
+        const height = 1;
         const dirBits = direction;
         const textureId = data >> 8;
         const shadows = data & 0b11111111;
@@ -1100,11 +1011,11 @@ export class UIntChunkMesher2 extends ChunkMesher {
 
     /**
      * @param {IVec3} position 
-     * @param {ChunkDataLoader} chunkLoader
+     * @param {ChunkDataExtended} chunkData
      * 
      * @returns {UIntMeshData}
      */
-    createMeshes(position, chunkLoader) {
+    createMeshes(position, chunkData) {
         this.#bufferSolid.reset();
         this.#bufferWater.reset();
         this.#grasslike.reset();
@@ -1113,20 +1024,13 @@ export class UIntChunkMesher2 extends ChunkMesher {
         const sideDir1 = new DirXY();
         const cornerDir = new DirXY();
 
-        const adj = new UIntChunkMesher2.Adj27(chunkLoader, position.x, position.y, position.z);
-        for (let h = 0; h < CHUNK_SIZE; h++) {
-            upLayer.fill(0);
-            downLayer.fill(0);
-            const topLayer = h & 1;
-            const currentLayer = 1 - topLayer;
-            const layersTop = layers[topLayer];
-            const layersCurrent = layers[currentLayer];
-            layersCurrent.fill(0);
-
-            for (let y = 0; y < CHUNK_SIZE; y++)
-                for (let x = 0; x < CHUNK_SIZE; x++) {
-                    adj.setPosition(h, x, y);
-                    const blockId = adj.get(0, 0, 0);
+        for (let h = 1; h < CHUNK_SIZE + 1; h++)
+            for (let y = 1; y < CHUNK_SIZE + 1; y++)
+                for (let x = 1; x < CHUNK_SIZE + 1; x++) {
+                    const realX = x - 1;
+                    const realY = y - 1;
+                    const realH = h - 1;
+                    const blockId = chunkData.getHXY(h, x, y);
                     if (blockId == BLOCK_EMPTY)
                         continue;
 
@@ -1138,7 +1042,7 @@ export class UIntChunkMesher2 extends ChunkMesher {
                     const block = getBlockById(blockId);
                     const blockTextures = block.textureIds;
                     const isWater = blockId == BLOCK_WATER;
-                    const above = adj.get(1, 0, 0);
+                    const above = chunkData.getHXY(h + 1, x, y)
                     if (!isSolid(above)) {
                         if (isWater && above == BLOCK_WATER)
                             continue;
@@ -1148,171 +1052,130 @@ export class UIntChunkMesher2 extends ChunkMesher {
                         let shadows = 0;
                         if (!isWater) {
                             for (let v = 0; v < 4; v++) {
-                                let s0 = isSolidInt(adj.get(1, sideDir0.x, sideDir0.y));
-                                let s1 = isSolidInt(adj.get(1, sideDir1.x, sideDir1.y));
-                                let c = isSolidInt(adj.get(1, cornerDir.x, cornerDir.y));
+                                let s0 = isSolidInt(chunkData.getHXY(h + 1, x + sideDir0.x, y + sideDir0.y));
+                                let s1 = isSolidInt(chunkData.getHXY(h + 1, x + sideDir1.x, y + sideDir1.y));
+                                let c = isSolidInt(chunkData.getHXY(h + 1, x + cornerDir.x, y + cornerDir.y));
                                 shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                                 sideDir0.rotateCCW();
                                 sideDir1.rotateCCW();
                                 cornerDir.rotateCCW();
                             }
                         }
-                        upLayer.set(x, y, (blockTextures[0] << 8) | (shadows));
+                        this.#addFace(Direction.UP, realH, realX, realY, (blockTextures[0] << 8) | (shadows));
                     }
 
                     if (isWater)
                         continue;
 
-                    if (!isSolid(adj.get(-1, 0, 0))) {
+                    if (!isSolid(chunkData.getHXY(h - 1, x, y))) {
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(-1, sideDir0.x, -sideDir0.y));
-                            let s1 = isSolidInt(adj.get(-1, sideDir1.x, -sideDir1.y));
-                            let c = isSolidInt(adj.get(-1, cornerDir.x, -cornerDir.y));
+                            let s0 = isSolidInt(chunkData.getHXY(h - 1, x + sideDir0.x, y - sideDir0.y));
+                            let s1 = isSolidInt(chunkData.getHXY(h - 1, x + sideDir1.x, y - sideDir1.y));
+                            let c = isSolidInt(chunkData.getHXY(h - 1, x + cornerDir.x, y - cornerDir.y));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                             sideDir0.rotateCCW();
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
 
-                        downLayer.set(x, CHUNK_SIZE - y - 1, (blockTextures[5] << 8) | (shadows));
+                        this.#addFace(Direction.DOWN, realH, realX, realY, (blockTextures[5] << 8) | (shadows));
                     }
 
-                    if (!isSolid(adj.get(0, 0, -1))) {
+                    if (!isSolid(chunkData.getHXY(h, x, y - 1))) {
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir0.y, sideDir0.x, -1));
-                            let s1 = isSolidInt(adj.get(sideDir1.y, sideDir1.x, -1));
-                            let c = isSolidInt(adj.get(cornerDir.y, cornerDir.x, -1));
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x + sideDir0.x, y - 1));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x + sideDir1.x, y - 1));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x + cornerDir.x, y - 1));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                             sideDir0.rotateCCW();
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.FRONT, x, y, (blockTextures[1] << 8) | shadows);
+                        this.#addFace(Direction.FRONT, realH, realX, realY, (blockTextures[1] << 8) | (shadows));
                     }
 
-                    if (!isSolid(adj.get(0, -1, 0))) {
+                    if (!isSolid(chunkData.getHXY(h, x - 1, y))) {
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir0.y, -1, -sideDir0.x));
-                            let s1 = isSolidInt(adj.get(sideDir1.y, -1, -sideDir1.x));
-                            let c = isSolidInt(adj.get(cornerDir.y, -1, -cornerDir.x));
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x - 1, y - sideDir0.x));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x - 1, y - sideDir1.x));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x - 1, y - cornerDir.x));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                             sideDir0.rotateCCW();
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.LEFT, CHUNK_SIZE - 1 - y, x, (blockTextures[2] << 8) | (shadows));
+                        this.#addFace(Direction.LEFT, realH, realX, realY, (blockTextures[2] << 8) | (shadows));
                     }
 
-                    if (!isSolid(adj.get(0, 0, 1))) {
+                    if (!isSolid(chunkData.getHXY(h, x, y + 1))) {
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir0.y, -sideDir0.x, 1));
-                            let s1 = isSolidInt(adj.get(sideDir1.y, -sideDir1.x, 1));
-                            let c = isSolidInt(adj.get(cornerDir.y, -cornerDir.x, 1));
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x - sideDir0.x, y + 1));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x - sideDir1.x, y + 1));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x - cornerDir.x, y + 1));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                             sideDir0.rotateCCW();
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.BACK, CHUNK_SIZE - 1 - x, CHUNK_SIZE - 1 - y, (blockTextures[3] << 8) | shadows);
+                        this.#addFace(Direction.BACK, realH, realX, realY, (blockTextures[3] << 8) | (shadows));
                     }
 
-                    if (!isSolid(adj.get(0, 1, 0))) {
+                    if (!isSolid(chunkData.getHXY(h, x + 1, y))) {
                         sideDir0.set(-1, 0);
                         sideDir1.set(0, -1);
                         cornerDir.set(-1, -1);
                         let shadows = 0;
                         for (let v = 0; v < 4; v++) {
-                            let s0 = isSolidInt(adj.get(sideDir0.y, 1, sideDir0.x));
-                            let s1 = isSolidInt(adj.get(sideDir1.y, 1, sideDir1.x));
-                            let c = isSolidInt(adj.get(cornerDir.y, 1, cornerDir.x));
+                            let s0 = isSolidInt(chunkData.getHXY(h + sideDir0.y, x + 1, y + sideDir0.x));
+                            let s1 = isSolidInt(chunkData.getHXY(h + sideDir1.y, x + 1, y + sideDir1.x));
+                            let c = isSolidInt(chunkData.getHXY(h + cornerDir.y, x + 1, y + cornerDir.x));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                             sideDir0.rotateCCW();
                             sideDir1.rotateCCW();
                             cornerDir.rotateCCW();
                         }
-                        layersCurrent.set(Direction.RIGHT, y, CHUNK_SIZE - 1 - x, (blockTextures[4] << 8) | (shadows));
+                        this.#addFace(Direction.RIGHT, realH, realX, realY, (blockTextures[4] << 8) | (shadows));
                     }
                 }
 
 
-            for (let g of this.#grasslike) {
-                //blockId << 16 | h << 8 | y << 4 | x
-                const x = g & 0x1F;
-                const y = (g >> 5) & 0x1F;
-                const h = (g >> 10) & 0x1F;
-                const blockId = (g >> 16) & 0xFFFF;
-                this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_0, 1, 1);
-                this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_0, 1, 1, true);
-                this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_1, 1, 1);
-                this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_1, 1, 1, true);
-            }
-            const solids = this.#bufferSolid.trimmed();
-            const waters = this.#bufferWater.trimmed();
-            const resultData = new Uint32Array(waters.length + solids.length);
-            resultData.set(solids);
-            resultData.set(waters, solids.length);
-            return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
-                resultData);
+        for (let g of this.#grasslike) {
+            //blockId << 16 | h << 8 | y << 4 | x
+            const x = g & 0x1F;
+            const y = (g >> 5) & 0x1F;
+            const h = (g >> 10) & 0x1F;
+            const blockId = (g >> 16) & 0xFFFF;
+            this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_0, 1, 1);
+            this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_0, 1, 1, true);
+            this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_1, 1, 1);
+            this.#addFace(blockId << 8, h, x, y, Direction.DIAGONAL_1, 1, 1, true);
         }
-    }
+        const solids = this.#bufferSolid.trimmed();
+        const waters = this.#bufferWater.trimmed();
+        const resultData = new Uint32Array(waters.length + solids.length);
+        resultData.set(solids);
+        resultData.set(waters, solids.length);
+        return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
+            resultData);
 
-    static Adj27 = class {
-        #loader;
-        #cx; #cy; #cz;
-
-        /** @type {(ChunkData|null)[]} */
-        #ch = new Array(27).fill(null);
-
-        #h; #x; #y;
-        #currentGet
-
-        constructor(loader, cx, cy, cz) {
-            this.#loader = loader;
-            this.#cx = cx;
-            this.#cy = cy;
-            this.#cz = cz;
-            this.#ch[13] = loader.getChunkSync(cx, cy, cz);
-            this.#currentGet = this.#ch[13].get.bind(this.#ch[13]);
-        }
-
-        setPosition(h, x, y) {
-            this.#h = h;
-            this.#x = x;
-            this.#y = y;
-        }
-
-        get(dh, dx, dy) {
-            let h = (this.#h + dh) | 0;
-            let x = (this.#x + dx) | 0;
-            let y = (this.#y + dy) | 0;
-
-            if (((h | x | y) & -32) === 0) {
-                return this.#currentGet(h, x, y);
-            }
-            return BLOCK_EMPTY
-        }
-
-        getChunkData() {
-            return this.#ch[13];
-        }
     }
 
 }
 
-export {UIntChunkMesher0 as DefaultMesher};
+export { UIntChunkMesher1 as DefaultMesher };
