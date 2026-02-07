@@ -1,0 +1,21 @@
+{
+  "sysroot_src": "/media/ext0/apps/rust/rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library",
+  "crates": [
+    {
+      "root_module": "src-rust/open_simplex_noise_2.rs",
+      "edition": "2021",
+      "deps": [],
+      "cfg": ["target_arch=\"wasm32\""],
+      "env": {},
+      "is_workspace_member": true
+    },
+     {
+      "root_module": "src-rust/mesher.rs",
+      "edition": "2021",
+      "deps": [],
+      "cfg": ["target_arch=\"wasm32\""],
+      "env": {},
+      "is_workspace_member": true
+    }
+  ]
+}
