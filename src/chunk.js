@@ -67,6 +67,136 @@ export class ChunkData extends Array3D {
     }
 }
 
+class ChunkDataExtended extends Array3D {
+
+    constructor() {
+        super(CHUNK_SIZE + 2, CHUNK_SIZE + 2);
+    }
+
+
+    /**
+     * @param {number} dir27
+     * @param {ChunkData} chunkData
+     */
+    setAdjData(dir27, chunkData) {
+        const E = CHUNK_SIZE + 1;
+        const e = CHUNK_SIZE - 1;
+
+        switch (dir27) {
+
+            case 0: this.setXYZ(0, 0, 0, chunkData.getCheck(e, e, e)); break;
+            case 2: this.setXYZ(E, 0, 0, chunkData.getCheck(0, e, e)); break;
+            case 6: this.setXYZ(0, E, 0, chunkData.getCheck(e, 0, e)); break;
+            case 8: this.setXYZ(E, E, 0, chunkData.getCheck(0, 0, e)); break;
+            case 18: this.setXYZ(0, 0, E, chunkData.getCheck(e, e, 0)); break;
+            case 20: this.setXYZ(E, 0, E, chunkData.getCheck(0, e, 0)); break;
+            case 24: this.setXYZ(0, E, E, chunkData.getCheck(e, 0, 0)); break;
+            case 26: this.setXYZ(E, E, E, chunkData.getCheck(0, 0, 0)); break;
+            
+            case 4:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setXYZ(x + 1, y + 1, 0, chunkData.getCheck(x, y, e));
+                break;
+            case 10:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setXYZ(x + 1, 0, z + 1, chunkData.getCheck(x, e, z));
+                break;
+            case 12:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let y = 0; y < CHUNK_SIZE; y++)
+                        this.setXYZ(0, y + 1, z + 1, chunkData.getCheck(e, y, z));
+                break;
+            case 14:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let y = 0; y < CHUNK_SIZE; y++)
+                        this.setXYZ(E, y + 1, z + 1, chunkData.getCheck(0, y, z));
+                break;
+            case 16:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setXYZ(x + 1, E, z + 1, chunkData.getCheck(x, 0, z));
+                break;
+            case 22:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setXYZ(x + 1, y + 1, E, chunkData.getCheck(x, y, 0));
+                break;
+
+            case 1:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setXYZ(x + 1, 0, 0, chunkData.getCheck(x, e, e));
+                break;
+
+            case 3:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setXYZ(0, y + 1, 0, chunkData.getCheck(e, y, e));
+                break;
+
+            case 5:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setXYZ(E, y + 1, 0, chunkData.getCheck(0, y, e));
+                break;
+
+            case 7:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setXYZ(x + 1, E, 0, chunkData.getCheck(x, 0, e));
+                break;
+
+
+            case 9:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setXYZ(0, 0, z + 1, chunkData.getCheck(e, e, z));
+                break;
+
+            case 11:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setXYZ(E, 0, z + 1, chunkData.getCheck(0, e, z));
+                break;
+
+            case 15:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setXYZ(0, E, z + 1, chunkData.getCheck(e, 0, z));
+                break;
+
+            case 17:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setXYZ(E, E, z + 1, chunkData.getCheck(0, 0, z));
+                break;
+
+            case 19:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setXYZ(x + 1, 0, E, chunkData.getCheck(x, e, 0));
+                break;
+
+            case 21:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setXYZ(0, y + 1, E, chunkData.getCheck(e, y, 0));
+                break;
+
+            case 23:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setXYZ(E, y + 1, E, chunkData.getCheck(0, y, 0));
+                break;
+
+            case 25:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setXYZ(x + 1, E, E, chunkData.getCheck(x, 0, 0));
+                break;
+
+
+            case 13:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let y = 0; y < CHUNK_SIZE; y++)
+                        for (let x = 0; x < CHUNK_SIZE; x++)
+                            this.setXYZ(x + 1, y + 1, z + 1, chunkData.getCheck(x, y, z));
+                break;
+
+        }
+    }
+}
+
 export class ChunkDataLoader {
     /** @type {Map<string, ChunkData>} */
     #cache = new Map();
