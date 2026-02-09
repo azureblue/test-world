@@ -1,7 +1,7 @@
 import { ChunkDataLoader, ChunkManager } from "./chunk.js";
 import { NoiseChunkGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
-import { DefaultMesher } from "./mesher.js";
+import { DefaultMesher, UIntWasmMesher } from "./mesher.js";
 import { Logger } from "./utils.js";
 
 console.log("WORKER BOOTED", self.location?.href);
@@ -37,9 +37,9 @@ const chunkManager = new ChunkManager(chunkLoader, new DefaultMesher());
 
 const params = new URL(self.location.href).searchParams;
 const WORKER_ID = Number(params.get("workerId"));
-const logger = new Logger("Chunk load worker " +WORKER_ID);
+const logger = new Logger("Chunk load worker " + WORKER_ID);
 
-function loadAndPost(chunkPos) {    
+function loadAndPost(chunkPos) {
     const chunkLoadStart = performance.now();
     const cx = chunkPos.x;
     const cy = chunkPos.y;
@@ -79,12 +79,15 @@ onmessage = (message) => {
     }
 };
 
-logger.info("chunk loader worker initialized, workerId: " + WORKER_ID);
-postMessage({
-    type: "ready",
-    data: {
-        workerId: WORKER_ID
-    }
+UIntWasmMesher.init().then(() => {
+
+    logger.info("chunk loader worker initialized, workerId: " + WORKER_ID);
+    postMessage({
+        type: "ready",
+        data: {
+            workerId: WORKER_ID
+        }
+    });
 });
 
 // for (const e of initialQueue) {

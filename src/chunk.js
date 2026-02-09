@@ -1,5 +1,5 @@
 import { Dir27, fvec3, FVec3, IVec3 } from "./geom.js";
-import { ChunkMesher } from "./mesher.js";
+// import { ChunkMesher } from "./mesher.js";
 import { Array3D, MovingAverage } from "./utils.js";
 
 export const CHUNK_SIZE_BIT_LEN = 5 | 0;
@@ -77,6 +77,20 @@ export class ChunkData extends Array3D {
         return this.#bounds;
     }
 }
+
+export class ChunkDataProvider {
+
+    /**
+     * @param {number} cx 
+     * @param {number} cy 
+     * @param {number} cz 
+     * @returns {ChunkData}
+     */
+    getChunk(cx, cy, cz) {
+        throw new Error("not implemented");
+    }
+}
+
 
 export class ChunkDataExtended extends Array3D {
 
@@ -204,7 +218,44 @@ export class ChunkDataExtended extends Array3D {
                 break;
         }
     }
+
+    static load(chunkDataProvider, cx, cy, cz) {
+        const chunkData = chunkDataProvider(cx, cy, cz);
+        const chunkDataExtended = new ChunkDataExtended();
+        const bounds = chunkData.bounds();
+        let adj27Needed = (1 << 27) - 1
+        if (bounds) {
+            if (bounds.minH > 0) {
+                adj27Needed &= 0b111111111111111111000000000;
+            }
+            if (bounds.maxH < CHUNK_SIZE) {
+                adj27Needed &= 0b000000000111111111111111111;
+            }
+            if (bounds.minX > 0) {
+                adj27Needed &= 0b110110110110110110110110110;
+            }
+            if (bounds.maxX < CHUNK_SIZE) {
+                adj27Needed &= 0b011011011011011011011011011;
+            }
+            if (bounds.minY > 0) {
+                adj27Needed &= 0b111111000111111000111111000;
+            }
+            if (bounds.maxY < CHUNK_SIZE) {
+                adj27Needed &= 0b000111111000111111000111111;
+            }
+
+            for (let dir27 = 0; dir27 < 27; dir27++, adj27Needed >>>= 1) {
+                if ((adj27Needed & 1) === 0) continue;
+                const dirOffset = Dir27[dir27];
+                const adjChunkData = chunkDataProvider(cx + dirOffset.x, cy + dirOffset.y, cz + dirOffset.z);
+                if (!adjChunkData) continue;
+                chunkDataExtended.setAdjData(dir27, adjChunkData);
+            }
+        }
+        return chunkDataExtended;
+    }
 }
+
 
 export class ChunkDataLoader {
     /** @type {Map<string, ChunkData>} */
@@ -322,7 +373,7 @@ export class ChunkSpec {
 }
 
 export class ChunkManager {
-    #chunkLoader
+    #chunkLoader    
     #chunkMesher
     #avgTime = new MovingAverage(200);
 
@@ -333,47 +384,20 @@ export class ChunkManager {
     constructor(chunkLoader, chunkMesher) {
         this.#chunkLoader = chunkLoader;
         this.#chunkMesher = chunkMesher;
+        
     }
 
     async load(cx, cy, cz) {
         const position = new IVec3(cx, cy, cz);
-
         const chunkData = this.#chunkLoader.getChunkSync(cx, cy, cz);
-        const chunkDataExtended = new ChunkDataExtended();
-        const bounds = chunkData.bounds();
-        let adj27Needed = (1 << 27) - 1
-        if (bounds) {
-            if (bounds.minH > 0) {
-                adj27Needed &= 0b111111111111111111000000000;
-            }
-            if (bounds.maxH < CHUNK_SIZE) {
-                adj27Needed &= 0b000000000111111111111111111;
-            }
-            if (bounds.minX > 0) {
-                adj27Needed &= 0b110110110110110110110110110;
-            }
-            if (bounds.maxX < CHUNK_SIZE) {
-                adj27Needed &= 0b011011011011011011011011011;
-            }
-            if (bounds.minY > 0) {
-                adj27Needed &= 0b111111000111111000111111000;
-            }
-            if (bounds.maxY < CHUNK_SIZE) {
-                adj27Needed &= 0b00111111000111111000111111;
-            }
-
-            for (let dir27 = 0; dir27 < 27; dir27++, adj27Needed >>>= 1) {
-                if ((adj27Needed & 1) === 0) continue;
-                const dirOffset = Dir27[dir27];
-                const adjChunkData = this.#chunkLoader.getChunkSync(cx + dirOffset.x, cy + dirOffset.y, cz + dirOffset.z);
-                chunkDataExtended.setAdjData(dir27, adjChunkData);
-            }
-        }
+        const chunkDataExtended = ChunkDataExtended.load((cx, cy, cz) => this.#chunkLoader.getChunkSync(cx, cy, cz), cx, cy, cz);
+        
         const now = performance.now();
         const meshData = this.#chunkMesher.createMeshes(
             position, chunkDataExtended
         );
         this.#avgTime.add(performance.now() - now);
+        // console.log(`data:${meshData.input.length}, average mesh time: ${this.#avgTime.average().toFixed(0)} ms`);
         console.log(`${this.#avgTime.average().toFixed(0)}`);
 
         return new ChunkSpec(chunkData, meshData);
