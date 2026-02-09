@@ -1,7 +1,8 @@
 import { BLOCK_IDS, getBlockById, isSolid, isSolidInt } from "./blocks.js";
 import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataExtended, ChunkDataLoader } from "./chunk.js";
 import { Direction, DirXY, FVec3, IVec3, vec3 } from "./geom.js";
-import { Array2D, Array3D, i32a, UInt32Buffer } from "./utils.js";
+import { Array2D, Array3D, i32a, Resources, UInt32Buffer } from "./utils.js";
+
 
 const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
 const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
@@ -558,9 +559,7 @@ export class UIntChunkMesher0 extends ChunkMesher {
 
 
 export class UIntChunkMesher1 extends ChunkMesher {
-    static {
-        console.log("new mesher");
-    }
+
 
     /**
      * @type {UInt32Buffer}
@@ -672,7 +671,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
             for (let y = 1; y < CHUNK_SIZE + 1; y++)
                 for (let x = 1; x < CHUNK_SIZE + 1; x++) {
                     const realX = x - 1;
-                    const realY = y - 1;                    
+                    const realY = y - 1;
                     const blockId = chunkData.getHXY(h, x, y);
                     if (blockId == BLOCK_EMPTY)
                         continue;
@@ -943,10 +942,7 @@ export class UIntChunkMesher1 extends ChunkMesher {
     }
 }
 
-export class UIntChunkMesher2 extends ChunkMesher {
-    static {
-        console.log("new mesher");
-    }
+export class UIntChunkMesherQ extends ChunkMesher {
 
     /**
      * @type {UInt32Buffer}
@@ -1178,4 +1174,76 @@ export class UIntChunkMesher2 extends ChunkMesher {
 
 }
 
-export { UIntChunkMesher1 as DefaultMesher };
+export class UIntWasmMesher extends ChunkMesher {
+
+
+    /**
+     * @param {IVec3} position 
+     * @param {ChunkDataExtended} chunkData
+     * 
+     * @returns {UIntMeshData}
+     */
+    createMeshes(position, chunkData) {
+        const input = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base, chunkData.data.length);
+        input.set(chunkData.data);
+        const len = UIntWasmMesher.wasmCreateMesh(
+            UIntWasmMesher._heap_base,
+            UIntWasmMesher._heap_base + chunkData.data.length * 4,
+            UIntWasmMesher._heap_base + chunkData.data.length * 4 + UIntWasmMesher.#outputSize
+        )
+        const output = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base + chunkData.data.length * 4, chunkData.data.length);
+        const trimmedOutput = new Uint32Array(len)
+        trimmedOutput.set(output.subarray(0, len));
+        return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
+            trimmedOutput);
+
+    }
+
+    static #outputSize;
+
+    static async init() {
+
+        const PAGE = 64 * 1024;
+        const bytesToPages = (b) => (b + PAGE - 1) >>> 16; // ceil(b/65536)
+
+        const MAX_FACES = 32 * 32 * 32 * 3;
+
+        const CHUNK_SIZE_EXTENDED = 32 + 2;
+        const INPUT_SIZE = CHUNK_SIZE_EXTENDED ** 3 * 2 * 4;
+        const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
+
+        // Twoje bufory:
+        const buffersBytes = INPUT_SIZE + OUTPUT_SIZE * 2;
+
+        // sensowny zapas na stack (np. 1 MiB) + trochę luzu
+        const STACK_BYTES = 1 * 1024 * 1024;
+        const SLACK_BYTES = 256 * 1024;
+
+        const totalBytes = buffersBytes + STACK_BYTES + SLACK_BYTES;
+        const initialPages = bytesToPages(totalBytes);
+
+
+        const mem = new WebAssembly.Memory({
+            initial: initialPages,
+            maximum: initialPages, // albo daj większe i pozwól grow()
+        });
+
+        UIntWasmMesher.#outputSize = OUTPUT_SIZE;
+
+        const wasmResult = await WebAssembly.instantiateStreaming(
+            fetch(Resources.relativeToRoot("./mesher.wasm")),
+            {
+                env: {
+                    memory: mem
+                }
+            }
+        );
+        const instance = wasmResult.instance;
+        UIntWasmMesher._heap_base = instance.exports.__heap_base;
+        UIntWasmMesher.wasmCreateMesh = instance.exports.create_mesh;
+        UIntWasmMesher.mem = mem;
+
+    }
+}
+
+export { UIntWasmMesher as DefaultMesher };
