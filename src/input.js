@@ -1,8 +1,9 @@
 export class MouseInput {
     #movement = { x: 0, y: 0 };
+    #mouseDownHandler = null;
     #pause = false;
     constructor(element, pointerLocking = false) {
-        this.#movement = { x: 0, y: 0 };        
+        this.#movement = { x: 0, y: 0 };
 
         element.addEventListener("mousemove", (me) => {
             if (this.pause)
@@ -10,10 +11,19 @@ export class MouseInput {
             this.#movement.x += me.movementX;
             this.#movement.y += me.movementY;
         });
-        
+
         if (pointerLocking) {
-            element.addEventListener("mousedown", async () => element.requestPointerLock());
+            element.addEventListener("mousedown", async () => {
+                element.requestPointerLock();
+                if (this.#mouseDownHandler) {
+                    this.#mouseDownHandler();
+                }
+            });
         }
+    }
+
+    onMouseDown(handler) {
+        this.#mouseDownHandler = handler;
     }
 
     get pause() {
@@ -57,7 +67,7 @@ export class KeyboardInput {
      * @type {{ [key: string]: { pressed: boolean, handler: (pressed: boolean) => void } }}
      */
     #keys = {};
-    
+
     /**
      * Creates an instance of KeyboardInput.
      * 
@@ -86,7 +96,7 @@ export class KeyboardInput {
                     this.#keys[ev.key].handler(true);
                 }
                 ev.preventDefault();
-            }            
+            }
         }, true);
 
         targetElement.addEventListener("keyup", (ev) => {

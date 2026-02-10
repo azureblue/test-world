@@ -1,6 +1,6 @@
-import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData } from "./chunk.js";
+import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, ChunkDataExtended } from "./chunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
-import { UIntMesh } from "./mesher.js";
+import { UIntChunkMesherQ, UIntMesh } from "./mesher.js";
 import { GenericBuffer, Logger, Resources } from "./utils.js";
 const logger = new Logger("World");
 const CHUNK_RENDER_DIST = 6;
@@ -34,6 +34,7 @@ class ChunkEntry {
     chunk;
     loaded = false;
     shouldRemove = false;
+    dirty = false;
 
     /** @param {Vec3} position */
     constructor(position) {
@@ -97,6 +98,7 @@ export class World {
     #pos = fvec3();
     #chunkPos = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
     #chunkPosChanged = false;
+    #quickMesher = new UIntChunkMesherQ();
 
     /**@type {Array<Vec3>} */
     #rangeDeltas;
@@ -217,8 +219,12 @@ export class World {
         }
         const entry = this.#chunks.get(key);
         if (entry.loaded) {
+            if (!entry.dirty) {
+                logger.warn("got chunk data, but not dirty" + key);
+            }
             // logger.warn("got chunk data, but already loaded" + key);
         }
+
         const now = performance.now();
         const chunkData = new ChunkData();
         chunkData.data.set(data.rawChunkData);
@@ -421,9 +427,52 @@ export class World {
 
     /**
      * @param {IVec3} pos 
+     * @returns {IVec3}
      */
     switchBlockPos(pos) {
         return new ivec3(pos.x, pos.y, -pos.z - 1);
+    }
+
+    /**
+     * 
+     * @param {IVec3} pos logical position
+     * @returns 
+     */
+    removeBlock(pos) {
+        performance.mark("removeBlockStart");
+        const start = performance.now();
+        
+        const cx = pos.x >> CHUNK_SIZE_BIT_LEN;
+        const cy = pos.z >> CHUNK_SIZE_BIT_LEN;
+        const cz = pos.y >> CHUNK_SIZE_BIT_LEN;
+        const bx = pos.x & 0x1F;
+        const by = pos.z & 0x1F;
+        const bh = pos.y & 0x1F;
+        const entry = this.#chunks.get(pos3ToKey(cx, cy, cz));
+        if (entry === undefined || !entry.loaded)
+            return;
+
+        entry.chunk.data.setHXY(bh, bx, by, 0);
+        
+        const chunkDataExtended = ChunkDataExtended.load(
+            (cx, cy, cz) => {
+                const key = pos3ToKey(cx, cy, cz);
+                const entry = this.#chunks.get(key);
+                if (entry === undefined || !entry.loaded) {
+                    return null;
+                }
+                return entry.chunk.data;
+            }, cx, cy, cz);
+        const beforeMesh = performance.now();
+        const mesh = this.#quickMesher.createMeshes(entry.position, chunkDataExtended);
+        entry.chunk.mesh?.dispose();
+        const uintMesh = UIntMesh.load(mesh.input, mesh.mTranslation);
+        entry.chunk.mesh = uintMesh;
+        entry.dirty = true;
+        const end = performance.now();
+        console.log(`before mesh: ${(beforeMesh - start).toFixed(0)} ms, mesh time: ${(end - beforeMesh).toFixed(0)} ms`);
+
+        
     }
 
     /**
