@@ -1,5 +1,5 @@
 import { Camera, FrustumCuller } from "./camera.js";
-import { Projection, FVec3, mat4, fvec3 } from "./geom.js";
+import { Projection, FVec3, mat4, fvec3, vec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { KeyboardInput, MouseInput } from "./input.js";
 import { UIntMesh } from "./mesher.js";
@@ -128,17 +128,28 @@ export async function start() {
 
     let pause = false;
     
-    const mouseInput = new MouseInput(canvas, true);
+    const mouseInput = new MouseInput(canvas, true);    
     const keyboardInput = new KeyboardInput(document.body, 
         [" ", "w", "a", "s", "d", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Control"], {
             " ": (pressed) => pressed && (pause = !pause)
             
         }
-    );        
+    ); 
 
     const fpsCounter = new FPSCounter();
     const blockLocation = new BlockLocation();
     const chunkVisibleExtra = Symbol('chunkVisibleExtra');
+    let raycastBlock = null;
+    mouseInput.onMouseDown(() => {
+        if (pause) {
+            return
+        }
+        if (raycastBlock !== null) {
+            const logicPos = world.switchBlockPos(vec3(raycastBlock.x, raycastBlock.y, raycastBlock.z));
+            world.removeBlock(logicPos);
+        }
+    });
+    
     function draw() {
         if (pause) {
             requestAnimationFrame(draw);
@@ -194,15 +205,14 @@ export async function start() {
 
         const pos = camera.position;
         const dir = camera.direction;
-
-        const out = world.raycasti(pos, dir, 5);
-        if (out !== null) {
+        raycastBlock = world.raycasti(pos, dir, 5);
+        if (raycastBlock !== null) {
             // gl.disable(gl.DEPTH_TEST);
-            world.blockAtWorldIPos(fvec3(out.x, out.y, out.z));
+            world.blockAtWorldIPos(fvec3(raycastBlock.x, raycastBlock.y, raycastBlock.z));
             // console.log(out.value);
             gl.useProgram(blockHighlightProgram.program);
             gl.bindBuffer(gl.ARRAY_BUFFER, bhBuffer);
-            writeVoxelWireframe(bhFBuffer, out.x, out.y, out.z);
+            writeVoxelWireframe(bhFBuffer, raycastBlock.x, raycastBlock.y, raycastBlock.z);
             gl.bufferData(gl.ARRAY_BUFFER, bhFBuffer, gl.DYNAMIC_DRAW);
             gl.vertexAttribPointer(aInBH, 3, gl.FLOAT, false, 0, 0);
             gl.drawArrays(gl.LINES, 0, 24);
@@ -224,7 +234,7 @@ export async function start() {
                 `pos x:${blockLocation.blockInChunkPos.x} y:${blockLocation.blockInChunkPos.y} z:${blockLocation.blockInChunkPos.z} ` +
                 `real pos x:${blockLocation.realX()} y:${blockLocation.realY()} z:${blockLocation.realZ()}` +
                 `block ${block} ` +
-                `${out === null ? "" : "looking at " + out.block + " at " + out.x + " " + out.y + " " + out.z}`;
+                `${raycastBlock === null ? "" : "looking at " + raycastBlock.block + " at " + raycastBlock.x + " " + raycastBlock.y + " " + raycastBlock.z}`;
         }
         requestAnimationFrame(draw);
         fpsCounter.frame();
