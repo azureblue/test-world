@@ -1,12 +1,13 @@
-import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, ChunkDataExtended } from "./chunk.js";
+import { Chunk, ChunkData, ChunkDataExtended } from "./chunk.js";
+import { CHUNK_VOLUME_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, CHUNK_PLANE_SIZE } from "./consts.js";
+import { CHUNK_SIZE } from "./consts.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
 import { UIntChunkMesherQ, UIntMesh } from "./mesher.js";
-import { GenericBuffer, Logger, Resources } from "./utils.js";
+import { Array3D, GenericBuffer, Logger, Resources, UInt32Buffer } from "./utils.js";
 const logger = new Logger("World");
 const CHUNK_RENDER_DIST = 6;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * 4;
-
 
 export class BlockLocation {
     constructor() {

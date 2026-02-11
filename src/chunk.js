@@ -1,17 +1,17 @@
+import { CHUNK_PLANE_SIZE, CHUNK_SIZE, CHUNK_SIZE_MASK, CHUNK_VOLUME_SIZE } from "./consts.js";
 import { Dir27, fvec3, FVec3, IVec3 } from "./geom.js";
-// import { ChunkMesher } from "./mesher.js";
 import { Array3D, MovingAverage } from "./utils.js";
 
-export const CHUNK_SIZE_BIT_LEN = 5 | 0;
-export const CHUNK_SIZE = 32 | 0;
-export const CHUNK_H = 32 | 0;
-export const TEX_ID_BIT_LEN = 9 | 0;
-
-export const CHUNK_SIZE_MASK = (CHUNK_SIZE - 1) | 0;
+/*
+ * chunk data:
+10987654321098765432109876543210
+_____ssssssss   lllllsiiiiiiiiii
+*/
 
 export function posToKey3(cx, cy, cz) {
     return `${cx},${cy},${cz}`;
 }
+
 
 export class ChunkData extends Array3D {
 
@@ -68,13 +68,31 @@ export class ChunkData extends Array3D {
                     if (x + 1 > maxX) maxX = x + 1;
                 }
 
-
         if (maxH < 0)
             this.#bounds = null;
         else
             this.#bounds = { minH: minH, maxH: maxH, minY, maxY, minX, maxX };
         this.#boundsValid = true;
         return this.#bounds;
+    }
+
+    
+}
+
+export class ChunkMask {
+    data = new UInt32Buffer(CHUNK_VOLUME_SIZE >>> 5);
+    set(x, y, z, v) {
+        const bitIdx = z * CHUNK_PLANE_SIZE + y * CHUNK_SIZE + x;
+        const intIdx = bitIdx >>> 5;
+        const bitOffset = bitIdx & CHUNK_SIZE_MASK;
+        this.data[intIdx] ^= (-v ^ x) & (1 << bitOffset);
+    }
+
+    get(x, y, z) {
+        const bitIdx = z * CHUNK_PLANE_SIZE + y * CHUNK_SIZE + x;
+        const intIdx = bitIdx >>> 5;
+        const bitOffset = bitIdx & CHUNK_SIZE_MASK;
+        return (this.data[intIdx] >>> bitOffset) & 1;
     }
 }
 

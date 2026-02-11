@@ -1,6 +1,7 @@
 import { blend, BLEND_MODE } from "../blend.js";
 import { BLOCK_IDS } from "../blocks.js";
-import { CHUNK_SIZE, ChunkData } from "../chunk.js";
+import { ChunkData } from "../chunk.js";
+import { CHUNK_SIZE } from "../consts.js";
 import { Vec2, Vec3 } from "../geom.js";
 import { hash01, hash32 } from "../noise/hash.js";
 import { Generator } from "../noise/noise.js";

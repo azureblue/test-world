@@ -1,5 +1,7 @@
 import { BLOCK_IDS, getBlockById, isSolid, isSolidInt } from "./blocks.js";
-import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataExtended, ChunkDataLoader } from "./chunk.js";
+import { ChunkDataExtended, ChunkDataLoader } from "./chunk.js";
+import { CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "./consts.js";
+import { CHUNK_SIZE } from "./consts.js";
 import { Direction, DirXY, FVec3, IVec3, vec3 } from "./geom.js";
 import { Array2D, Array3D, i32a, Resources, UInt32Buffer } from "./utils.js";
 
