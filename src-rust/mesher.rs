@@ -103,6 +103,30 @@ impl DirXY {
     }
 }
 
+struct Array3DView<'a> {
+    data: &'a [u32],
+    plane_size: u32,
+    sy: u32,
+    sz: u32
+}
+
+impl<'a> Array3DView<'a> {
+    pub unsafe fn from_raw(data: *const u32, sx: u32, sy: u32, sz: u32) -> Self {        
+        let plane_size = sx * sy;
+        Self { data: core::slice::from_raw_parts(data, (plane_size * sz) as usize), plane_size, sy, sz }
+    }
+
+    #[inline(always)]
+    pub fn get_xyz(&self, x: u32, y: u32, z: u32) -> u32 {
+        self.data[(z * self.plane_size +  y * self.sy + x) as usize]
+    }
+
+    #[inline(always)]
+    pub fn get_hxy(&self, h: u32, x: u32, y: u32) -> u32 {
+        self.data[(h * self.plane_size + y * self.sy + x) as usize]
+    }
+}
+
 struct FaceBuffer {
     mesh_data_solid: *mut u32,
     mesh_data_solid_idx: usize,
@@ -221,13 +245,15 @@ pub fn create_mesh(
         mesh_data_water_idx: 0,
     };
 
+    let chunk_data = unsafe { Array3DView::from_raw(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E) };
+
     for h in 1..CHUNK_SIZE + 1 {
         for y in 1..CHUNK_SIZE + 1 {
             for x in 1..CHUNK_SIZE + 1 {
                 let real_x = x - 1;
                 let real_y = y - 1;
                 let real_h = h - 1;
-                let block_id = get_hxy(in_chunk_data_ptr, h, x, y);
+                let block_id = chunk_data.get_hxy(h, x, y);
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
@@ -238,7 +264,7 @@ pub fn create_mesh(
                 // }
                 let block_textures = BLOCKS_TEXTURES[decode_block_id(block_id) as usize];
                 let is_water = block_id == BLOCK_WATER;
-                let above = get_hxy(in_chunk_data_ptr, h + 1, x, y);
+                let above = chunk_data.get_hxy(h + 1, x, y);
                 if (!is_solid(above)) {
                     if (is_water && above == BLOCK_WATER) {
                         continue;
@@ -248,21 +274,18 @@ pub fn create_mesh(
                     corner_dir.set(-1, -1);
                     let mut shadows = 0u32;
                     if (!is_water) {
-                        for v in 0..4 {
-                            let s0 = is_solid_int(get_hxy(
-                                in_chunk_data_ptr,
+                        for v in 0..4 {                            
+                            let s0 = is_solid_int(chunk_data.get_hxy(                                
                                 (h + 1) as u32,
                                 (x as i32 + side_dir0.x) as u32,
                                 (y as i32 + side_dir0.y) as u32,
                             ));
-                            let s1 = is_solid_int(get_hxy(
-                                in_chunk_data_ptr,
+                            let s1 = is_solid_int(chunk_data.get_hxy(
                                 (h + 1) as u32,
                                 (x as i32 + side_dir1.x) as u32,
                                 (y as i32 + side_dir1.y) as u32,
                             ));
-                            let c = is_solid_int(get_hxy(
-                                in_chunk_data_ptr,
+                            let c = is_solid_int(chunk_data.get_hxy(
                                 (h + 1) as u32,
                                 (x as i32 + corner_dir.x) as u32,
                                 (y as i32 + corner_dir.y) as u32,
@@ -287,26 +310,23 @@ pub fn create_mesh(
                     continue;
                 }
 
-                if (!is_solid(get_hxy(in_chunk_data_ptr, h - 1, x, y))) {
+                if (!is_solid(chunk_data.get_hxy(h - 1, x, y))) {
                     side_dir0.set(-1, 0);
                     side_dir1.set(0, -1);
                     corner_dir.set(-1, -1);
                     let mut shadows = 0;
                     for v in 0..4 {
-                        let s0 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s0 = is_solid_int(chunk_data.get_hxy(
                             (h - 1) as u32,
                             (x as i32 + side_dir0.x) as u32,
                             (y as i32 - side_dir0.y) as u32,
                         ));
-                        let s1 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s1 = is_solid_int(chunk_data.get_hxy(
                             (h - 1) as u32,
                             (x as i32 + side_dir1.x) as u32,
                             (y as i32 - side_dir1.y) as u32,
                         ));
-                        let c = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let c = is_solid_int(chunk_data.get_hxy(
                             (h - 1) as u32,
                             (x as i32 + corner_dir.x) as u32,
                             (y as i32 - corner_dir.y) as u32,
@@ -327,26 +347,23 @@ pub fn create_mesh(
                     );
                 }
 
-                if (!is_solid(get_hxy(in_chunk_data_ptr, h, x, y - 1))) {
+                if (!is_solid(chunk_data.get_hxy(h, x, y - 1))) {
                     side_dir0.set(-1, 0);
                     side_dir1.set(0, -1);
                     corner_dir.set(-1, -1);
                     let mut shadows = 0;
                     for v in 0..4 {
-                        let s0 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s0 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir0.y) as u32,
                             (x as i32 + side_dir0.x) as u32,
                             (y - 1) as u32,
                         ));
-                        let s1 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s1 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir1.y) as u32,
                             (x as i32 + side_dir1.x) as u32,
                             (y - 1) as u32,
                         ));
-                        let c = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let c = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + corner_dir.y) as u32,
                             (x as i32 + corner_dir.x) as u32,
                             (y - 1) as u32,
@@ -366,26 +383,23 @@ pub fn create_mesh(
                     );
                 }
 
-                if (!is_solid(get_hxy(in_chunk_data_ptr, h, x - 1, y))) {
+                if (!is_solid(chunk_data.get_hxy(h, x - 1, y))) {
                     side_dir0.set(-1, 0);
                     side_dir1.set(0, -1);
                     corner_dir.set(-1, -1);
                     let mut shadows = 0;
                     for v in 0..4 {
-                        let s0 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s0 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir0.y) as u32,
                             (x - 1) as u32,
                             (y as i32 - side_dir0.x) as u32,
                         ));
-                        let s1 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s1 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir1.y) as u32,
                             (x - 1) as u32,
                             (y as i32 - side_dir1.x) as u32,
                         ));
-                        let c = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let c = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + corner_dir.y) as u32,
                             (x - 1) as u32,
                             (y as i32 - corner_dir.x) as u32,
@@ -405,26 +419,23 @@ pub fn create_mesh(
                     );
                 }
 
-                if (!is_solid(get_hxy(in_chunk_data_ptr, h, x, y + 1))) {
+                if (!is_solid(chunk_data.get_hxy(h, x, y + 1))) {
                     side_dir0.set(-1, 0);
                     side_dir1.set(0, -1);
                     corner_dir.set(-1, -1);
                     let mut shadows = 0;
                     for v in 0..4 {
-                        let s0 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s0 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir0.y) as u32,
                             (x as i32 - side_dir0.x) as u32,
                             (y + 1) as u32,
                         ));
-                        let s1 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s1 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir1.y) as u32,
                             (x as i32 - side_dir1.x) as u32,
                             (y + 1) as u32,
                         ));
-                        let c = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let c = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + corner_dir.y) as u32,
                             (x as i32 - corner_dir.x) as u32,
                             (y + 1) as u32,
@@ -444,26 +455,23 @@ pub fn create_mesh(
                     );
                 }
 
-                if (!is_solid(get_hxy(in_chunk_data_ptr, h, x + 1, y))) {
+                if (!is_solid(chunk_data.get_hxy(h, x + 1, y))) {
                     side_dir0.set(-1, 0);
                     side_dir1.set(0, -1);
                     corner_dir.set(-1, -1);
                     let mut shadows = 0;
                     for v in 0..4 {
-                        let s0 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s0 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir0.y) as u32,
                             (x + 1) as u32,
                             (y as i32 + side_dir0.x) as u32,
                         ));
-                        let s1 = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let s1 = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + side_dir1.y) as u32,
                             (x + 1) as u32,
                             (y as i32 + side_dir1.x) as u32,
                         ));
-                        let c = is_solid_int(get_hxy(
-                            in_chunk_data_ptr,
+                        let c = is_solid_int(chunk_data.get_hxy(
                             (h as i32 + corner_dir.y) as u32,
                             (x + 1) as u32,
                             (y as i32 + corner_dir.x) as u32,
