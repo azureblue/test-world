@@ -103,17 +103,17 @@ impl DirXY {
     }
 }
 
-struct Array3DView<'a> {
-    data: &'a [u32],
+struct Array3D<'a> {
+    data: &'a mut [u32],
     plane_size: u32,
     sy: u32,
     sz: u32
 }
 
-impl<'a> Array3DView<'a> {
-    pub unsafe fn from_raw(data: *const u32, sx: u32, sy: u32, sz: u32) -> Self {        
+impl<'a> Array3D<'a> {
+    pub unsafe fn from_raw(data: *mut u32, sx: u32, sy: u32, sz: u32) -> Self {        
         let plane_size = sx * sy;
-        Self { data: core::slice::from_raw_parts(data, (plane_size * sz) as usize), plane_size, sy, sz }
+        Self { data: core::slice::from_raw_parts_mut(data, (plane_size * sz) as usize), plane_size, sy, sz }
     }
 
     #[inline(always)]
@@ -124,6 +124,16 @@ impl<'a> Array3DView<'a> {
     #[inline(always)]
     pub fn get_hxy(&self, h: u32, x: u32, y: u32) -> u32 {
         self.data[(h * self.plane_size + y * self.sy + x) as usize]
+    }
+
+    #[inline(always)]
+    pub fn set_xyz(&mut self, x: u32, y: u32, z: u32, value: u32) {
+        self.data[(z * self.plane_size +  y * self.sy + x) as usize] = value;
+    }
+
+    #[inline(always)]
+    pub fn set_hxy(&mut self, h: u32, x: u32, y: u32, value: u32) {
+        self.data[(h * self.plane_size + y * self.sy + x) as usize] = value;
     }
 }
 
@@ -245,7 +255,7 @@ pub fn create_mesh(
         mesh_data_water_idx: 0,
     };
 
-    let chunk_data = unsafe { Array3DView::from_raw(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E) };
+    let chunk_data = unsafe { Array3D::from_raw(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E) };
 
     for h in 1..CHUNK_SIZE + 1 {
         for y in 1..CHUNK_SIZE + 1 {
