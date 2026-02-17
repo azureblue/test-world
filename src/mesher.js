@@ -1212,10 +1212,8 @@ export class UIntWasmMesher extends ChunkMesher {
         const INPUT_SIZE = CHUNK_SIZE_EXTENDED ** 3 * 2 * 4;
         const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
 
-        // Twoje bufory:
         const buffersBytes = INPUT_SIZE + OUTPUT_SIZE * 2;
 
-        // sensowny zapas na stack (np. 1 MiB) + trochę luzu
         const STACK_BYTES = 1 * 1024 * 1024;
         const SLACK_BYTES = 256 * 1024;
 
@@ -1225,7 +1223,7 @@ export class UIntWasmMesher extends ChunkMesher {
 
         const mem = new WebAssembly.Memory({
             initial: initialPages,
-            maximum: initialPages, // albo daj większe i pozwól grow()
+            maximum: initialPages,
         });
 
         UIntWasmMesher.#outputSize = OUTPUT_SIZE;
