@@ -54,22 +54,22 @@ const DIRECTION_ENCODE: [i32; 40] = [
 
 #[inline(always)]
 fn is_solid(block: u32) -> bool {
-    return (block >> 31 & 1) != 0;
+    (block & 0x8000_0000) != 0
 }
 
 #[inline(always)]
 fn is_solid_int(block: u32) -> u32 {
-    return block >> 31 & 1;
+    block >> 31
 }
 
 #[inline(always)]
 fn decode_block_id(id: u32) -> u32 {
-    return id & 0x7FFFFFFF;
+    id & 0x7fff_ffff
 }
 
 struct DirXY {
     x: i32,
-    y: i32
+    y: i32,
 }
 
 impl DirXY {
@@ -83,40 +83,40 @@ impl DirXY {
     }
 }
 
-struct Array3D<'a> {
-    data: &'a mut [u32],
+struct Array3D {
+    data: *mut u32,
     plane_size: u32,
-    sy: u32
+    sy: u32,
 }
 
-impl<'a> Array3D<'a> {
+impl Array3D {
     pub unsafe fn from_raw(data: *mut u32, sx: u32, sy: u32, sz: u32) -> Self {
         let plane_size = sx * sy;
-        Self {
-            data: core::slice::from_raw_parts_mut(data, (plane_size * sz) as usize),
-            plane_size,
-            sy
-        }
+        Self { data, plane_size, sy }
     }
 
     #[inline(always)]
     pub fn get_xyz(&self, x: u32, y: u32, z: u32) -> u32 {
-        self.data[(z * self.plane_size + y * self.sy + x) as usize]
+        unsafe { *self.data.add((z * self.plane_size + y * self.sy + x) as usize) }
     }
 
     #[inline(always)]
     pub fn get_hxy(&self, h: u32, x: u32, y: u32) -> u32 {
-        self.data[(h * self.plane_size + y * self.sy + x) as usize]
+        unsafe { *self.data.add((h * self.plane_size + y * self.sy + x) as usize) }
     }
 
     #[inline(always)]
     pub fn set_xyz(&mut self, x: u32, y: u32, z: u32, value: u32) {
-        self.data[(z * self.plane_size + y * self.sy + x) as usize] = value;
+        unsafe {
+            *self.data.add((z * self.plane_size + y * self.sy + x) as usize) = value;
+        }
     }
 
     #[inline(always)]
     pub fn set_hxy(&mut self, h: u32, x: u32, y: u32, value: u32) {
-        self.data[(h * self.plane_size + y * self.sy + x) as usize] = value;
+        unsafe {
+            *self.data.add((h * self.plane_size + y * self.sy + x) as usize) = value;
+        }
     }
 
     #[inline(always)]
@@ -124,23 +124,30 @@ impl<'a> Array3D<'a> {
         (plane * self.plane_size) as usize
     }
 
+    #[inline(always)]
     pub fn row_idx(&self, plane: u32, row: u32) -> usize {
         (plane * self.plane_size + row * self.sy) as usize
     }
 
+    #[inline(always)]
     pub fn set_idx(&mut self, idx: u32, value: u32) {
-        self.data[idx as usize] = value;
+        unsafe {
+            *self.data.add(idx as usize) = value;
+        }
     }
 
+    #[inline(always)]
     pub fn get_idx(&self, idx: u32) -> u32 {
-        self.data[idx as usize]
+        unsafe { *self.data.add(idx as usize) }
     }
 
     pub fn fill_planes(&mut self, from: u32, n: u32, value: u32) {
         let start = (from * self.plane_size) as usize;
         let end = ((from + n) * self.plane_size) as usize;
         for i in start..end {
-            self.data[i] = value;
+            unsafe {
+                *self.data.add(i) = value;
+            }
         }
     }
 }
@@ -183,7 +190,8 @@ impl FaceBuffer {
         };
 
         let reversed: u32 = if reverse_winding { 1 } else { 0 };
-        let corner_shadows = [corner0_shadow, corner1_shadow, corner2_shadow, corner3_shadow];
+        let cs = corner0_shadow | (corner1_shadow << 2) | (corner2_shadow << 4) | (corner3_shadow << 6);
+        // let corner_shadows = [corner0_shadow, corner1_shadow, corner2_shadow, corner3_shadow];
         let mut lower = 0;
         if (texture_id == BLOCK_WATER && dir == UP) {
             lower = 2;
@@ -195,6 +203,12 @@ impl FaceBuffer {
         let bits = 0u32 | (lower << 29) | ((texture_id & 0b0_1111_1111) << 19) | ((dir & 0b111) << 16);
 
         let vns = WINDING[(flip * 2 + reversed) as usize];
+
+        let (dst, idx) = if texture_id == BLOCK_WATER {
+            (&mut self.mesh_data_water, &mut self.mesh_data_water_idx)
+        } else {
+            (&mut self.mesh_data_solid, &mut self.mesh_data_solid_idx)
+        };
 
         for i in 0..6 {
             let vn = vns[i] as usize;
@@ -211,26 +225,15 @@ impl FaceBuffer {
                     + MERGE_VECTOR_W[dir as usize][Z] * width as i32 * MERGE_MASKS_W[vn]
                     + MERGE_VECTOR_H[dir as usize][Z] * height as i32 * MERGE_MASKS_H[vn]) as u32;
             let pos_bits = zb << 14 | yb << 7 | xb;
-            if (texture_id == BLOCK_WATER) {
-                unsafe {
-                    *self.mesh_data_water.add(self.mesh_data_water_idx) = pos_bits;
-                    *self.mesh_data_water.add(self.mesh_data_water_idx + 1) = bits
-                        | (merge_bits_width * MERGE_MASKS_W[vn] as u32)
-                        | (merge_bits_height * MERGE_MASKS_H[vn] as u32)
-                        | (corner_shadows[vn] << 27);
-                }
-                self.mesh_data_water_idx += 2;
-                continue;
-            } else {
-                unsafe {
-                    *self.mesh_data_solid.add(self.mesh_data_solid_idx) = pos_bits;
-                    *self.mesh_data_solid.add(self.mesh_data_solid_idx + 1) = bits
-                        | (merge_bits_width * MERGE_MASKS_W[vn] as u32)
-                        | (merge_bits_height * MERGE_MASKS_H[vn] as u32)
-                        | (corner_shadows[vn] << 27);
-                }
-                self.mesh_data_solid_idx += 2;
+
+            unsafe {
+                *dst.add(*idx) = pos_bits;
+                *dst.add(*idx + 1) = bits
+                    | (merge_bits_width * MERGE_MASKS_W[vn] as u32)
+                    | (merge_bits_height * MERGE_MASKS_H[vn] as u32)
+                    | (((cs >> (vn * 2)) & 3) << 27);
             }
+            *idx += 2;
         }
     }
 }
@@ -425,6 +428,7 @@ pub fn create_mesh(in_chunk_data_ptr: *mut u32, out_mesh_ptr: *mut u32, tmp_mesh
             // return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
             // resultData);
         }
+
         let layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
         for dir in 1..5 {
@@ -444,27 +448,30 @@ pub fn create_mesh(in_chunk_data_ptr: *mut u32, out_mesh_ptr: *mut u32, tmp_mesh
                 let mut i = y;
                 while i < row_end {
                     let mut j = i + 1;
+                    let data_i = layers.get_idx(i as u32);                    
+                    if (data_i == 0) {
+                        i += 1;
+                        continue;
+                    }
                     while j < row_end {
-                        if (layers.get_idx(i as u32) != layers.get_idx(j as u32)) {
+                        if (data_i != layers.get_idx(j as u32)) {
                             break;
                         }
                         layers.set_idx(j as u32, 0);
                         j += 1;
                     }
-                    if (layers.get_idx(i as u32) == 0) {
-                        i += 1;
-                        continue;
-                    }
-                    layers.set_idx(i as u32, layers.get_idx(i as u32) | (1 << 25) | ((j - i) << 17));
+                    layers.set_idx(i as u32, data_i | (1 << 25) | ((j - i) << 17));
                     i = j;
                 }
             }
-
-            for i in 0..layer_len {
+            let mut i = 0;
+            while i < layer_len {
                 let top = layers.get_idx((layer_start_top + i) as u32);
                 if (top == 0) {
+                    i += 1;
                     continue;
                 }
+                let top_w = (top >> 17) & 0xFF;
                 let top_h = top >> 25;
                 let cur = layers.get_idx((layer_start_current + i) as u32);
                 if ((top & 0x01FFFFFF) == (cur & 0x01FFFFFF) && top_h < CHUNK_SIZE) {
@@ -477,12 +484,13 @@ pub fn create_mesh(in_chunk_data_ptr: *mut u32, out_mesh_ptr: *mut u32, tmp_mesh
                         real_h - top_h,
                         (dir_xx_add + dir_xx_mul * x as i32 + dir_xy_mul * y as i32) as u32,
                         (dir_yy_add + dir_yx_mul * x as i32 + dir_yy_mul * y as i32) as u32,
-                        (top >> 17) & 0xFF,
+                        top_w,
                         top_h,
                         top & 0x1FFFF,
                         false,
                     );
                 }
+                i += top_w;
             }
         }
 
@@ -491,7 +499,7 @@ pub fn create_mesh(in_chunk_data_ptr: *mut u32, out_mesh_ptr: *mut u32, tmp_mesh
             let layer_idx = up_down * 5;
             t_c.fill(0);
             let mut current_row_idx = 0;
-            let mut top_row_idx ;
+            let mut top_row_idx;
             for y in 0..CHUNK_SIZE {
                 current_row_idx = (y & 1) * CHUNK_SIZE;
                 top_row_idx = (CHUNK_SIZE - current_row_idx);
@@ -502,30 +510,34 @@ pub fn create_mesh(in_chunk_data_ptr: *mut u32, out_mesh_ptr: *mut u32, tmp_mesh
 
                 let mut i = 0;
                 while i < CHUNK_SIZE {
-                    if (t_c[(current_row_idx + i) as usize] == 0) {
+                    let idx_i = (current_row_idx + i) as usize;
+                    if (t_c[idx_i] == 0) {
                         i += 1;
                         continue;
                     }
                     let mut j = i + 1;
                     while j < CHUNK_SIZE {
-                        if (t_c[(current_row_idx + i) as usize] != t_c[(current_row_idx + j) as usize]) {
+                        let idx_j = (current_row_idx + j) as usize;
+                        if (t_c[idx_i] != t_c[idx_j]) {
                             break;
                         }
-                        t_c[(current_row_idx + j) as usize] = 0;
+                        t_c[idx_j] = 0;
                         j += 1;
                     }
-                    t_c[(current_row_idx + i) as usize] |= (1 << 25) | ((j - i) << 17);
+                    t_c[idx_i] |= (1 << 25) | ((j - i) << 17);
                     i = j;
                 }
                 for i in 0..CHUNK_SIZE {
-                    let top = t_c[(top_row_idx + i) as usize];
+                    let idx_i = (current_row_idx + i) as usize;
+                    let idx_top = (top_row_idx + i) as usize;
+                    let top = t_c[idx_top];
                     if (top == 0) {
                         continue;
                     }
                     let top_h = top >> 25;
-                    let cur = t_c[(current_row_idx + i) as usize];
+                    let cur = t_c[idx_i];
                     if ((top & 0x01FFFFFF) == (cur & 0x01FFFFFF)) {
-                        t_c[(current_row_idx + i) as usize] = cur & 0x01FFFFFF | (top_h + 1) << 25;
+                        t_c[idx_i] = cur & 0x01FFFFFF | (top_h + 1) << 25;
                     } else {
                         let top_w = (top >> 17) & 0xFF;
                         let yy = if up_down == 0 { (y - top_h) } else { (CHUNK_SIZE - 1) - (y - top_h) };
