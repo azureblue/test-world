@@ -386,8 +386,10 @@ export class ChunkManager {
         this.#chunkMesher = chunkMesher;
         
     }
-
+    #meshDataTotalLen = 0;
+    #loading = 0;
     async load(cx, cy, cz) {
+        this.#loading++;
         const position = new IVec3(cx, cy, cz);
         const chunkData = this.#chunkLoader.getChunkSync(cx, cy, cz);
         const chunkDataExtended = ChunkDataExtended.load((cx, cy, cz) => this.#chunkLoader.getChunkSync(cx, cy, cz), cx, cy, cz);
@@ -396,9 +398,14 @@ export class ChunkManager {
         const meshData = this.#chunkMesher.createMeshes(
             position, chunkDataExtended
         );
+        this.#meshDataTotalLen += meshData.input.length;
+        
         this.#avgTime.add(performance.now() - now);
         // console.log(`data:${meshData.input.length}, average mesh time: ${this.#avgTime.average().toFixed(0)} ms`);
         console.log(`${this.#avgTime.average().toFixed(0)}`);
+        if ((this.#loading % 64) === 0) {
+            console.log("mesh len: " + this.#meshDataTotalLen);
+        }
 
         return new ChunkSpec(chunkData, meshData);
     }
