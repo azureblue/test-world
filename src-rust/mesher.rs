@@ -225,10 +225,10 @@ impl FaceBuffer {
                     + MERGE_VECTOR_W[dir as usize][Z] * width as i32 * MERGE_MASKS_W[vn]
                     + MERGE_VECTOR_H[dir as usize][Z] * height as i32 * MERGE_MASKS_H[vn]) as u32;
             let pos_bits = zb << 14 | yb << 7 | xb;
-
+            let id = *idx;
             unsafe {
-                *dst.add(*idx) = pos_bits;
-                *dst.add(*idx + 1) = bits
+                *dst.add(id) = pos_bits;
+                *dst.add(id + 1) = bits
                     | (merge_bits_width * MERGE_MASKS_W[vn] as u32)
                     | (merge_bits_height * MERGE_MASKS_H[vn] as u32)
                     | (((cs >> (vn * 2)) & 3) << 27);
