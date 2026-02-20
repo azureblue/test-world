@@ -540,9 +540,9 @@ export class NoiseChunkGenerator {
      */
     generateChunk(chunkPos) {
         const chunk = new ChunkData();
-        // if (chunkPos.z !== 0) {
-        //     return chunk;
-        // }
+        if (chunkPos.z !== 0 || chunkPos.x !== 0 || chunkPos.y !== 0) {
+            return chunk;
+        }
         const startX = (chunkPos.x * CHUNK_SIZE);
         const startY = (chunkPos.y * CHUNK_SIZE);
         // if (startX != 0 || startY != 0) {
@@ -551,29 +551,34 @@ export class NoiseChunkGenerator {
 
         for (let y = 0; y < CHUNK_SIZE; y++)
             for (let x = 0; x < CHUNK_SIZE; x++) {
-                const rx = x; //CHUNK_SIZE - x - 1;
-                const ry = y;//CHUNK_SIZE - y - 1;
-                const noiseOutput = this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
-                //ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
-                //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
-                const noiseImproved = noiseOutput; //spreadTanh(noiseOutput, 2);
-                let height = Math.floor(noiseImproved * MAX_HEIGHT);
-
-                const chunkStartH = chunkPos.z * CHUNK_SIZE;
-                const chunkEndH = chunkStartH + CHUNK_SIZE;
-                let r = chunkStartH;
-                for (; r < Math.min(height - 1, chunkEndH); r++) {
-                    chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
+                for (let h = 0; h < CHUNK_SIZE; h++) {
+                    if (((x ^ y ^ h) & 2) == 0)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
                 }
+                // const rx = x; //CHUNK_SIZE - x - 1;
+                // const ry = y;//CHUNK_SIZE - y - 1;
+                // const noiseOutput = this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
+                // //ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
+                // //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
+                // const noiseImproved = noiseOutput; //spreadTanh(noiseOutput, 2);
+                // let height = Math.floor(noiseImproved * MAX_HEIGHT);
 
-                if (r < chunkEndH && r < height) {
-                    chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
-                }
 
-                for (let w = r; w < Math.min(-55, chunkEndH); w++) {
-                    if (chunk.getHXY(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
-                        chunk.setHXY(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
-                }
+                // const chunkStartH = chunkPos.z * CHUNK_SIZE;
+                // const chunkEndH = chunkStartH + CHUNK_SIZE;
+                // let r = chunkStartH;
+                // for (; r < Math.min(height - 1, chunkEndH); r++) {
+                //     chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
+                // }
+
+                // if (r < chunkEndH && r < height) {
+                //     chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
+                // }
+
+                // for (let w = r; w < Math.min(-55, chunkEndH); w++) {
+                //     if (chunk.getHXY(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
+                //         chunk.setHXY(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
+                // }
             }
         return chunk;
     }
@@ -751,4 +756,69 @@ export class Generator02 extends FunctionChunkGenerator {
         );
 
     }
+}
+
+
+export class TestGenerator {
+
+    /**
+     * @param {Vec3} chunkPos
+     */
+    generateChunk(chunkPos) {
+        const chunk = new ChunkData();
+        if (chunkPos.equals(0, 0, 0)) {
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    for (let h = 0; h < CHUNK_SIZE; h++) {
+                        if (((x ^ y ^ h) & 1) == 0)
+                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                    }
+
+
+                }
+        } else if (chunkPos.equals(2, 0, 0)) {
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    for (let h = 0; h < CHUNK_SIZE; h++)
+                        if (((x ^ y ^ h) & 2) == 0)
+                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        } else if (chunkPos.equals(0, 2, 0)) {
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    for (let h = 0; h < CHUNK_SIZE; h++)
+                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        }  else if (chunkPos.equals(2, 2, 0)) {
+            for (let h = 0; h < CHUNK_SIZE; h++) {
+                if ((h & 1) == 1)
+                    continue;
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)                        
+                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+            }
+        } else if (chunkPos.equals(-2, 0, 0)) {
+            for (let y = 0; y < CHUNK_SIZE; y++) {
+                if ((y & 1) == 1)
+                    continue;
+            for (let h = 0; h < CHUNK_SIZE; h++) 
+                    for (let x = 0; x < CHUNK_SIZE; x++)                        
+                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+            }
+        } else if (chunkPos.equals(0, -2, 0)) {
+            for (let x = 0; x < CHUNK_SIZE; x++) {                       
+                if ((x & 1) == 1)
+                    continue;
+            for (let y = 0; y < CHUNK_SIZE; y++) 
+            for (let h = 0; h < CHUNK_SIZE; h++) 
+                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+            }
+        }
+
+        return chunk;
+    }
+}
+
+
+
+export function createGenerator() {
+    return new TestGenerator();
 }

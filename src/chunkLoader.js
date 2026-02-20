@@ -1,5 +1,5 @@
 import { ChunkDataLoader, ChunkManager } from "./chunk.js";
-import { NoiseChunkGenerator } from "./gen/generator.js";
+import { createGenerator, NoiseChunkGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
 import { DefaultMesher, UIntWasmMesher } from "./mesher.js";
 import { Logger } from "./utils.js";
@@ -31,7 +31,7 @@ console.log("WORKER BOOTED", self.location?.href);
 // const heightmap = await Resources.loadImage("./images/test.png");
 // const heightmapPixels = ImagePixels.from(heightmap);
 
-const generator = new NoiseChunkGenerator(); // new Generator02();
+const generator = createGenerator(); // new Generator02();
 const chunkLoader = new ChunkDataLoader((cx, cy, cz) => generator.generateChunk(vec3(cx, cy, cz)));
 const chunkManager = new ChunkManager(chunkLoader, new DefaultMesher());
 
