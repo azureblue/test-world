@@ -367,6 +367,10 @@ export class Vec3 {
         this.y = y;
         this.z = z;
     }
+
+    equals(x, y, z) {
+        return this.x === x && this.y === y && this.z === z;
+    }
 }
 
 export function vec3(x, y, z) {
