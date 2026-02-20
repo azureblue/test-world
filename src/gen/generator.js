@@ -540,45 +540,35 @@ export class NoiseChunkGenerator {
      */
     generateChunk(chunkPos) {
         const chunk = new ChunkData();
-        if (chunkPos.z !== 0 || chunkPos.x !== 0 || chunkPos.y !== 0) {
-            return chunk;
-        }
+
         const startX = (chunkPos.x * CHUNK_SIZE);
         const startY = (chunkPos.y * CHUNK_SIZE);
-        // if (startX != 0 || startY != 0) {
-        //      return chunk;
-        // }
+      
 
         for (let y = 0; y < CHUNK_SIZE; y++)
-            for (let x = 0; x < CHUNK_SIZE; x++) {
-                for (let h = 0; h < CHUNK_SIZE; h++) {
-                    if (((x ^ y ^ h) & 2) == 0)
-                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+            for (let x = 0; x < CHUNK_SIZE; x++) {               
+                const noiseOutput = this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
+                // ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
+                //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
+                const noiseImproved = noiseOutput; //spreadTanh(noiseOutput, 2);
+                let height = Math.floor(noiseImproved * MAX_HEIGHT);
+
+
+                const chunkStartH = chunkPos.z * CHUNK_SIZE;
+                const chunkEndH = chunkStartH + CHUNK_SIZE;
+                let r = chunkStartH;
+                for (; r < Math.min(height - 1, chunkEndH); r++) {
+                    chunk.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT);
                 }
-                // const rx = x; //CHUNK_SIZE - x - 1;
-                // const ry = y;//CHUNK_SIZE - y - 1;
-                // const noiseOutput = this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
-                // //ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
-                // //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
-                // const noiseImproved = noiseOutput; //spreadTanh(noiseOutput, 2);
-                // let height = Math.floor(noiseImproved * MAX_HEIGHT);
 
+                if (r < chunkEndH && r < height) {
+                    chunk.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT_GRASS);
+                }
 
-                // const chunkStartH = chunkPos.z * CHUNK_SIZE;
-                // const chunkEndH = chunkStartH + CHUNK_SIZE;
-                // let r = chunkStartH;
-                // for (; r < Math.min(height - 1, chunkEndH); r++) {
-                //     chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT);
-                // }
-
-                // if (r < chunkEndH && r < height) {
-                //     chunk.setHXY(r - chunkStartH, rx, ry, BLOCK_IDS.DIRT_GRASS);
-                // }
-
-                // for (let w = r; w < Math.min(-55, chunkEndH); w++) {
-                //     if (chunk.getHXY(w - chunkStartH, rx, ry) == BLOCK_IDS.EMPTY)
-                //         chunk.setHXY(w - chunkStartH, rx, ry, BLOCK_IDS.WATER);
-                // }
+                for (let w = r; w < Math.min(-55, chunkEndH); w++) {
+                    if (chunk.getHXY(w - chunkStartH, x, y) == BLOCK_IDS.EMPTY)
+                        chunk.setHXY(w - chunkStartH, x, y, BLOCK_IDS.WATER);
+                }
             }
         return chunk;
     }
@@ -820,5 +810,5 @@ export class TestGenerator {
 
 
 export function createGenerator() {
-    return new TestGenerator();
+    return new NoiseChunkGenerator();
 }
