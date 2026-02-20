@@ -1184,14 +1184,17 @@ export class UIntWasmMesher extends ChunkMesher {
      * @returns {UIntMeshData}
      */
     createMeshes(position, chunkData) {
+        const MAX_FACES = 32 * 32 * 32 * 3;
+        const MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
+        const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
         const input = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base, chunkData.data.length);
         input.set(chunkData.data);
         const len = UIntWasmMesher.wasmCreateMesh(
             UIntWasmMesher._heap_base,
-            UIntWasmMesher._heap_base + chunkData.data.length * 4,
-            UIntWasmMesher._heap_base + chunkData.data.length * 4 + UIntWasmMesher.#outputSize
+            UIntWasmMesher._heap_base + input.byteLength,
+            UIntWasmMesher._heap_base + input.byteLength + OUTPUT_SIZE
         )
-        const output = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base + chunkData.data.length * 4, chunkData.data.length);
+        const output = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base + input.byteLength, OUTPUT_SIZE / 4);
         const trimmedOutput = new Uint32Array(len)
         trimmedOutput.set(output.subarray(0, len));
         return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
@@ -1214,8 +1217,8 @@ export class UIntWasmMesher extends ChunkMesher {
 
         const buffersBytes = INPUT_SIZE + OUTPUT_SIZE * 2;
 
-        const STACK_BYTES = 1 * 1024 * 1024;
-        const SLACK_BYTES = 256 * 1024;
+        const STACK_BYTES = 2 * 1024 * 1024;
+        const SLACK_BYTES = 1024 * 1024;
 
         const totalBytes = buffersBytes + STACK_BYTES + SLACK_BYTES;
         const initialPages = bytesToPages(totalBytes);
@@ -1237,7 +1240,7 @@ export class UIntWasmMesher extends ChunkMesher {
             }
         );
         const instance = wasmResult.instance;
-        UIntWasmMesher._heap_base = instance.exports.__heap_base;
+        UIntWasmMesher._heap_base = instance.exports.__heap_base.value;
         UIntWasmMesher.wasmCreateMesh = instance.exports.create_mesh;
         UIntWasmMesher.mem = mem;
 
