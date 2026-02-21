@@ -1,6 +1,6 @@
 import { Dir27, fvec3, FVec3, IVec3 } from "./geom.js";
 import { Logger } from "./logging.js";
-import { Array3D, MovingAverage } from "./utils.js";
+import { Array3D, MovingAverage, perfDiff } from "./utils.js";
 
 export const CHUNK_SIZE_BIT_LEN = 5 | 0;
 export const CHUNK_SIZE = 32 | 0;
@@ -218,6 +218,24 @@ export class ChunkDataExtended extends Array3D {
         }
     }
 
+    /**
+     * @param {ChunkData} chunkData 
+     * @returns {ChunkDataExtended}
+     */
+    static fromChunkData(chunkData) {
+        const chunkDataExtended = new ChunkDataExtended();
+        const data = chunkData.data;
+        const dataE = chunkDataExtended.data;
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            for (let y = 0; y < CHUNK_SIZE; y++) {
+                const rowOffset = chunkData.rowIdx(z, y);
+                const rowOffsetE = chunkDataExtended.rowIdx(z + 1, y + 1) + 1;
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    dataE[rowOffsetE + x] = data[rowOffset + x];
+            }
+        return chunkDataExtended;
+    }
+
     static load(chunkDataProvider, cx, cy, cz) {
         const chunkData = chunkDataProvider(cx, cy, cz);
         const chunkDataExtended = new ChunkDataExtended();
@@ -372,7 +390,7 @@ export class ChunkSpec {
 }
 
 export class ChunkManager {
-    #chunkLoader    
+    #chunkLoader
     #chunkMesher
     #avgTime = new MovingAverage(200);
 
@@ -383,22 +401,25 @@ export class ChunkManager {
     constructor(chunkLoader, chunkMesher) {
         this.#chunkLoader = chunkLoader;
         this.#chunkMesher = chunkMesher;
-        
+
     }
     async load(cx, cy, cz) {
         const position = new IVec3(cx, cy, cz);
         const chunkData = this.#chunkLoader.getChunkSync(cx, cy, cz);
         const chunkDataExtended = ChunkDataExtended.load((cx, cy, cz) => this.#chunkLoader.getChunkSync(cx, cy, cz), cx, cy, cz);
-        
+
         const now = performance.now();
         const meshData = this.#chunkMesher.createMeshes(
             position, chunkDataExtended
         );
-        
-        this.#avgTime.add(performance.now() - now);
-        // console.log(`data:${meshData.input.length}, average mesh time: ${this.#avgTime.average().toFixed(0)} ms`);
-        Logger.log(() => `${this.#avgTime.average().toFixed(0)}`);
-         
+        const meshTime = perfDiff(now);
+        this.#avgTime.add(meshTime);
+        if (meshData.input.length > 0) {
+            Logger.log(() => `m: ${meshTime.toFixed(1)}, s: ${meshData.input.length}`);
+            // console.log(`data:${meshData.input.length}, average mesh time: ${this.#avgTime.average().toFixed(0)} ms`);
+            Logger.log(() => `${this.#avgTime.average().toFixed(4)}`);
+        }
+
 
         return new ChunkSpec(chunkData, meshData);
     }
