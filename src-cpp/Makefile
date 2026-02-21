@@ -1,6 +1,6 @@
 ../src/mesher.wasm: mesher.cpp
 	clang --target=wasm32 \
-	-O2 \
+	-O3 \
 	-ffreestanding -fno-builtin \
 	-fno-exceptions -fno-rtti \
 	-fno-threadsafe-statics \
