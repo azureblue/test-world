@@ -543,10 +543,10 @@ export class NoiseChunkGenerator {
 
         const startX = (chunkPos.x * CHUNK_SIZE);
         const startY = (chunkPos.y * CHUNK_SIZE);
-      
+
 
         for (let y = 0; y < CHUNK_SIZE; y++)
-            for (let x = 0; x < CHUNK_SIZE; x++) {               
+            for (let x = 0; x < CHUNK_SIZE; x++) {
                 const noiseOutput = this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
                 // ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
                 //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
@@ -749,6 +749,78 @@ export class Generator02 extends FunctionChunkGenerator {
 }
 
 
+
+export const GeneratorPatterns = {
+    fullChecker: chunk => {
+        for (let h = 0; h < CHUNK_SIZE; h++)
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    if (((x ^ y ^ h) & 1) == 0)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        return chunk;
+    },
+    doubleChecker: chunk => {
+        for (let h = 0; h < CHUNK_SIZE; h++)
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    if (((x ^ y ^ h) & 2) == 0)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        return chunk;
+    },
+    fullSolid: chunk => {
+        for (let h = 0; h < CHUNK_SIZE; h++)
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        return chunk;
+    },
+    horizontalStripes: chunk => {
+        for (let h = 0; h < CHUNK_SIZE; h++) {
+            if ((h & 1) == 1)
+                continue;
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        }
+        return chunk;
+    },
+    verticalStripesY: chunk => {
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+            if ((y & 1) == 1)
+                continue;
+            for (let h = 0; h < CHUNK_SIZE; h++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        }
+        return chunk;
+    },
+    verticalStripesX: chunk => {
+        for (let x = 0; x < CHUNK_SIZE; x++) {
+            if ((x & 1) == 1)
+                continue;
+            for (let h = 0; h < CHUNK_SIZE; h++)
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+        }
+        return chunk;
+    },
+    border: chunk => {
+        for (let h = 0; h < CHUNK_SIZE; h++)            
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    if (x == 0 || y == 0 || x == CHUNK_SIZE - 1 || y == CHUNK_SIZE - 1)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+         for (let y = 0; y < CHUNK_SIZE; y++)
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                chunk.setHXY(0, x, y, BLOCK_IDS.DIRT_GRASS);
+                chunk.setHXY(CHUNK_SIZE - 1, x, y, BLOCK_IDS.DIRT_GRASS);
+            }
+
+        return chunk;
+    }
+
+}
+
 export class TestGenerator {
 
     /**
@@ -763,8 +835,6 @@ export class TestGenerator {
                         if (((x ^ y ^ h) & 1) == 0)
                             chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
                     }
-
-
                 }
         } else if (chunkPos.equals(2, 0, 0)) {
             for (let y = 0; y < CHUNK_SIZE; y++)
@@ -773,33 +843,34 @@ export class TestGenerator {
                         if (((x ^ y ^ h) & 2) == 0)
                             chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
         } else if (chunkPos.equals(0, 2, 0)) {
-            for (let y = 0; y < CHUNK_SIZE; y++)
-                for (let x = 0; x < CHUNK_SIZE; x++)
-                    for (let h = 0; h < CHUNK_SIZE; h++)
-                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
-        }  else if (chunkPos.equals(2, 2, 0)) {
+            for (let h = 0; h < CHUNK_SIZE; h++)
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+
+        } else if (chunkPos.equals(2, 2, 0)) {
             for (let h = 0; h < CHUNK_SIZE; h++) {
                 if ((h & 1) == 1)
                     continue;
                 for (let y = 0; y < CHUNK_SIZE; y++)
-                    for (let x = 0; x < CHUNK_SIZE; x++)                        
-                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
             }
         } else if (chunkPos.equals(-2, 0, 0)) {
             for (let y = 0; y < CHUNK_SIZE; y++) {
                 if ((y & 1) == 1)
                     continue;
-            for (let h = 0; h < CHUNK_SIZE; h++) 
-                    for (let x = 0; x < CHUNK_SIZE; x++)                        
-                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                for (let h = 0; h < CHUNK_SIZE; h++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
             }
         } else if (chunkPos.equals(0, -2, 0)) {
-            for (let x = 0; x < CHUNK_SIZE; x++) {                       
+            for (let x = 0; x < CHUNK_SIZE; x++) {
                 if ((x & 1) == 1)
                     continue;
-            for (let y = 0; y < CHUNK_SIZE; y++) 
-            for (let h = 0; h < CHUNK_SIZE; h++) 
-                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    for (let h = 0; h < CHUNK_SIZE; h++)
+                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
             }
         }
 
