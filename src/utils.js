@@ -56,6 +56,10 @@ export class DataBuffer {
         return new this.array.constructor(this.array.subarray(0, this.#pos));
     }
 
+    view() {
+        return this.array.subarray(0, this.#pos);
+    }
+
     reset(size = 0) {
         this.#pos = 0;
         if (size !== 0) {
@@ -496,8 +500,12 @@ export function logHash(buffer, msg = "") {
     });
 }
 
-export function perfDiff(startTime, precision = 2) {
+export function perfDiffStr(startTime, precision = 2) {
     return (performance.now() - startTime).toPrecision(precision);
+}
+
+export function perfDiff(startTime) {
+    return (performance.now() - startTime);
 }
 
 /**
@@ -591,3 +599,34 @@ export function writeVoxelWireframe(target, x, y, z, size = 1, pad = 0.001) {
     target[i++] = x0; target[i++] = y0; target[i++] = z1;
     target[i++] = x0; target[i++] = y1; target[i++] = z1;
 }
+
+export const Arrays = {
+    median(array) {
+        const sorted = Array.from(array).sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    },
+    min(array) {
+        let min = Infinity;
+        for (const value of array) {
+            if (value < min) min = value;
+        }
+        return min;
+    },
+    max(array) {
+        let max = -Infinity;
+        for (const value of array) {
+            if (value > max) max = value;
+        }
+        return max;
+    },
+    average(array) {
+        let sum = 0;
+        for (const value of array) {
+            sum += value;
+        }
+        return sum / array.length;
+    }
+}
+
+Object.freeze(Arrays);
