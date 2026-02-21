@@ -180,18 +180,19 @@ struct FaceBuffer {
             uint zb = h + (VERTEX_OFFSETS[dir][Z] + MERGE_VECTOR_W[dir][Z] * width * MERGE_MASKS_W[vn] + MERGE_VECTOR_H[dir][Z] * height * MERGE_MASKS_H[vn]);
             uint pos_bits = zb << 14 | yb << 7 | xb;
             dst[(*idx)++] = pos_bits;
-            dst[(*idx)++] = bits | (merge_bits_width * MERGE_MASKS_W[vn]) | (merge_bits_height * MERGE_MASKS_H[vn]) | (((cs >> (vn * 2)) & 3) << 27);            
+            dst[(*idx)++] = bits | (merge_bits_width * MERGE_MASKS_W[vn]) | (merge_bits_height * MERGE_MASKS_H[vn]) | (((cs >> (vn * 2)) & 3) << 27);
         }
     }
 };
 
 extern "C"
-__attribute__((export_name("create_mesh")))
-uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_ptr, uint* __restrict tmp_mesh_ptr) {
+    __attribute__((export_name("create_mesh")))
+    uint
+    create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_ptr, uint* __restrict tmp_mesh_ptr) {
     dir_xy side_dir0;
     dir_xy side_dir1;
     dir_xy corner_dir;
-    
+
     FaceBuffer buffer = {
         .mesh_data_solid = out_mesh_ptr,
         .mesh_data_solid_idx = 0,
@@ -223,7 +224,7 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
-             const uint *block_textures = BLOCKS_TEXTURES[decode_block_id(block_id)];
+                const uint* block_textures = BLOCKS_TEXTURES[decode_block_id(block_id)];
                 uint is_water = block_id == BLOCK_WATER;
                 uint above = data.get_hxy(h + 1, x, y);
                 if (!is_solid(above)) {
@@ -236,9 +237,9 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     uint shadows = 0;
                     if (!is_water) {
                         for (uint v = 0; v < 4; v++) {
-                            uint s0 = is_solid_int(data.get_hxy((h + 1) , (x  + side_dir0.x) , (y  + side_dir0.y) ));
-                            uint s1 = is_solid_int(data.get_hxy((h + 1) , (x  + side_dir1.x) , (y  + side_dir1.y) ));
-                            uint c = is_solid_int(data.get_hxy((h + 1) , (x  + corner_dir.x) , (y  + corner_dir.y) ));
+                            uint s0 = is_solid_int(data.get_hxy((h + 1), (x + side_dir0.x), (y + side_dir0.y)));
+                            uint s1 = is_solid_int(data.get_hxy((h + 1), (x + side_dir1.x), (y + side_dir1.y)));
+                            uint c = is_solid_int(data.get_hxy((h + 1), (x + corner_dir.x), (y + corner_dir.y)));
                             shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                             side_dir0.rotate_ccw();
                             side_dir1.rotate_ccw();
@@ -259,9 +260,9 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     corner_dir.set(-1, -1);
                     uint shadows = 0;
                     for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h - 1) , (x  + side_dir0.x) , (y  - side_dir0.y) ));
-                        uint s1 = is_solid_int(data.get_hxy((h - 1) , (x  + side_dir1.x) , (y  - side_dir1.y) ));
-                        uint c = is_solid_int(data.get_hxy((h - 1) , (x  + corner_dir.x) , (y  - corner_dir.y) ));
+                        uint s0 = is_solid_int(data.get_hxy((h - 1), (x + side_dir0.x), (y - side_dir0.y)));
+                        uint s1 = is_solid_int(data.get_hxy((h - 1), (x + side_dir1.x), (y - side_dir1.y)));
+                        uint c = is_solid_int(data.get_hxy((h - 1), (x + corner_dir.x), (y - corner_dir.y)));
                         shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         side_dir0.rotate_ccw();
                         side_dir1.rotate_ccw();
@@ -276,9 +277,9 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     corner_dir.set(-1, -1);
                     uint shadows = 0;
                     for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h  + side_dir0.y) , (x  + side_dir0.x) , (y - 1) ));
-                        uint s1 = is_solid_int(data.get_hxy((h  + side_dir1.y) , (x  + side_dir1.x) , (y - 1) ));
-                        uint c = is_solid_int(data.get_hxy((h  + corner_dir.y) , (x  + corner_dir.x) , (y - 1) ));
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + side_dir0.x), (y - 1)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + side_dir1.x), (y - 1)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + corner_dir.x), (y - 1)));
                         shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         side_dir0.rotate_ccw();
                         side_dir1.rotate_ccw();
@@ -293,9 +294,9 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     corner_dir.set(-1, -1);
                     uint shadows = 0;
                     for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h  + side_dir0.y) , (x - 1) , (y  - side_dir0.x) ));
-                        uint s1 = is_solid_int(data.get_hxy((h  + side_dir1.y) , (x - 1) , (y  - side_dir1.x) ));
-                        uint c = is_solid_int(data.get_hxy((h  + corner_dir.y) , (x - 1) , (y  - corner_dir.x) ));
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - 1), (y - side_dir0.x)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - 1), (y - side_dir1.x)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - 1), (y - corner_dir.x)));
                         shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         side_dir0.rotate_ccw();
                         side_dir1.rotate_ccw();
@@ -305,8 +306,7 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                         current_layer_offset + DIRECTION_LEFT,
                         CHUNK_SIZE - 1 - real_y,
                         real_x,
-                        (block_textures[2] << 8) | shadows
-                    );
+                        (block_textures[2] << 8) | shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y + 1))) {
@@ -314,10 +314,10 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     side_dir1.set(0, -1);
                     corner_dir.set(-1, -1);
                     uint shadows = 0;
-                    for (uint v = 0; v < 4; v++)                    {
-                        uint s0 = is_solid_int(data.get_hxy((h  + side_dir0.y) , (x  - side_dir0.x) , (y + 1) ));
-                        uint s1 = is_solid_int(data.get_hxy((h  + side_dir1.y) , (x  - side_dir1.x) , (y + 1) ));
-                        uint c = is_solid_int(data.get_hxy((h  + corner_dir.y) , (x  - corner_dir.x) , (y + 1) ));
+                    for (uint v = 0; v < 4; v++) {
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - side_dir0.x), (y + 1)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - side_dir1.x), (y + 1)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - corner_dir.x), (y + 1)));
                         shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         side_dir0.rotate_ccw();
                         side_dir1.rotate_ccw();
@@ -327,8 +327,7 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                         current_layer_offset + DIRECTION_BACK,
                         CHUNK_SIZE - 1 - real_x,
                         CHUNK_SIZE - 1 - real_y,
-                        (block_textures[3] << 8) | shadows
-                    );
+                        (block_textures[3] << 8) | shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
@@ -337,9 +336,9 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     corner_dir.set(-1, -1);
                     uint shadows = 0;
                     for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h  + side_dir0.y) , (x + 1) , (y  + side_dir0.x) ));
-                        uint s1 = is_solid_int(data.get_hxy((h  + side_dir1.y) , (x + 1) , (y  + side_dir1.x) ));
-                        uint c = is_solid_int(data.get_hxy((h  + corner_dir.y) , (x + 1) , (y  + corner_dir.x) ));
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + 1), (y + side_dir0.x)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + 1), (y + side_dir1.x)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + 1), (y + corner_dir.x)));
                         shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
                         side_dir0.rotate_ccw();
                         side_dir1.rotate_ccw();
@@ -349,10 +348,9 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                         current_layer_offset + DIRECTION_RIGHT,
                         real_y,
                         CHUNK_SIZE - 1 - real_x,
-                        (block_textures[4] << 8) | shadows
-                    );
+                        (block_textures[4] << 8) | shadows);
                 }
-            }            
+            }
         }
         uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
@@ -372,13 +370,13 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                 uint row_end = y + CHUNK_SIZE;
                 for (uint i = y; i < row_end;) {
                     uint j = i + 1;
-                    uint data_i = layers.get_idx(i);                    
+                    uint data_i = layers.get_idx(i);
                     if (data_i == 0) {
                         i++;
                         continue;
                     }
                     while (j < row_end) {
-                        if (data_i != layers.get_idx(j)) 
+                        if (data_i != layers.get_idx(j))
                             break;                        
                         j += 1;
                     }
@@ -408,14 +406,13 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                         top_w,
                         top_h,
                         top & 0x1FFFF,
-                        false
-                    );
+                        false);
                 }
                 i += top_w;
             }
         }
 
-        uint t_c [CHUNK_SIZE * 2];
+        uint t_c[CHUNK_SIZE * 2];
         for (uint up_down = 0; up_down < 2; up_down++) {
             uint layer_idx = up_down * 5;
             for (uint i = 0; i < CHUNK_SIZE * 2; i++) {
@@ -428,10 +425,10 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                 top_row_idx = (CHUNK_SIZE - current_row_idx);
                 uint row_idx = layers.row_idx(layer_idx, y);
                 for (uint i = 0; i < CHUNK_SIZE; i++) {
-                    t_c[(current_row_idx + i) ] = layers.get_idx((row_idx + i));
-                }                
+                    t_c[(current_row_idx + i)] = layers.get_idx((row_idx + i));
+                }
                 for (uint i = 0; i < CHUNK_SIZE;) {
-                    uint idx_i = (current_row_idx + i) ;
+                    uint idx_i = (current_row_idx + i);
                     if (t_c[idx_i] == 0) {
                         i += 1;
                         continue;
@@ -447,8 +444,8 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     i = j;
                 }
                 for (uint i = 0; i < CHUNK_SIZE;) {
-                    uint idx_i = (current_row_idx + i) ;
-                    uint idx_top = (top_row_idx + i) ;
+                    uint idx_i = (current_row_idx + i);
+                    uint idx_top = (top_row_idx + i);
                     uint top = t_c[idx_top];
                     if (top == 0) {
                         i++;
@@ -459,7 +456,7 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                     uint cur = t_c[idx_i];
                     if ((top & 0x01FFFFFF) == (cur & 0x01FFFFFF)) {
                         t_c[idx_i] = cur & 0x01FFFFFF | (top_h + 1) << 25;
-                    } else {                        
+                    } else {
                         uint yy = (up_down == 0) ? (y - top_h) : ((CHUNK_SIZE - 1) - (y - top_h));
                         buffer.add_face(DIRECTION_UP + up_down * 5, real_h, i, yy, top_w, top_h, top & 0x1FFFF, false);
                     }
@@ -468,7 +465,7 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
             }
 
             for (uint i = 0; i < CHUNK_SIZE;) {
-                uint top = t_c[(current_row_idx + i) ];
+                uint top = t_c[(current_row_idx + i)];
                 if (top == 0) {
                     i++;
                     continue;
@@ -511,8 +508,7 @@ uint create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_p
                 top_w,
                 top_h,
                 top & 0x1FFFF,
-                false
-            );
+                false);
             i += top_w;
         }
     }
