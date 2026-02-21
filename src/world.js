@@ -1,8 +1,10 @@
 import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, ChunkDataExtended } from "./chunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
+import { Logger } from "./logging.js";
 import { UIntChunkMesherQ, UIntMesh } from "./mesher.js";
-import { GenericBuffer, Logger, Resources } from "./utils.js";
+import { GenericBuffer, perfDiff, Resources } from "./utils.js";
 const logger = new Logger("World");
+
 const CHUNK_RENDER_DIST = 6;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * 4;
@@ -220,7 +222,7 @@ export class World {
         const entry = this.#chunks.get(key);
         if (entry.loaded) {
             if (!entry.dirty) {
-                logger.warn("got chunk data, but not dirty" + key);
+                logger.warn(() => "got chunk data, but not dirty" + key);
             }
             // logger.warn("got chunk data, but already loaded" + key);
         }
@@ -236,7 +238,7 @@ export class World {
         const chunk = new Chunk(chunkPos, chunkData, mesh);
         entry.chunk = chunk;
         entry.loaded = true;
-        // logger.debug(`uploading mesh time: ${perfDiff(now)}`);
+        logger.debug(() => `uploading mesh time: ${perfDiff(now)}`);
         if (this.#currentChunkPromise !== null) {
             if (this.#currentChunkPromise.key === key) {
                 this.#currentChunkPromise.resolve(chunk);
