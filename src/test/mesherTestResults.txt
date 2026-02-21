@@ -1,0 +1,19 @@
+--- run 3 ---
+fullChecker   : avg 7.08  min 6.80  max 9.10  median 7.00 
+doubleChecker : avg 3.94  min 3.70  max 4.70  median 3.90 
+fullSolid     : avg 1.08  min 0.90  max 1.40  median 1.10 
+hStripes      : avg 1.13  min 1.00  max 1.50  median 1.10 
+vStripesY     : avg 1.12  min 1.00  max 1.50  median 1.10 
+vStripesX     : avg 1.12  min 0.90  max 1.50  median 1.10 
+border        : avg 1.08  min 0.90  max 2.00  median 1.00 
+test time: 1653.40 ms
+test avg: 2.36 ms
+total test time: 4958.50 ms
+total test avg: 1652.83 ms
+fullChecker   : mesh size 1179648
+doubleChecker : mesh size 562176
+fullSolid     : mesh size 72
+hStripes      : mesh size 1152
+vStripesY     : mesh size 1152
+vStripesX     : mesh size 1152
+border        : mesh size 720

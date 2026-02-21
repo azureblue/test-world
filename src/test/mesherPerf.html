@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+</head>
+<meta charset="UTF-8">
+<title>Mesher perf test</title>
+
+<body>
+</body>
+<script type="module">
+    import { main } from "./mesherPerf.js"
+    function start() {
+        main();
+    }
+    if (document.readyState !== "complete") {
+        document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {        
+        start();
+    }
+</script>
+
+</html>
