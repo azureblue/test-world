@@ -377,7 +377,7 @@ extern "C"
                     }
                     while (j < row_end) {
                         if (data_i != layers.get_idx(j))
-                            break;                        
+                            break;
                         j += 1;
                     }
                     layers.set_idx(i, data_i | 1 << 25 | (j - i) << 17);
@@ -510,6 +510,203 @@ extern "C"
                 top & 0x1FFFF,
                 false);
             i += top_w;
+        }
+    }
+    return buffer.complete();
+}
+
+
+extern "C"
+    __attribute__((export_name("create_mesh_q")))
+    uint
+    create_mesh_q(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_ptr, uint* __restrict tmp_mesh_ptr) {
+    dir_xy side_dir0;
+    dir_xy side_dir1;
+    dir_xy corner_dir;
+
+    FaceBuffer buffer = {
+        .mesh_data_solid = out_mesh_ptr,
+        .mesh_data_solid_idx = 0,
+        .mesh_data_water = tmp_mesh_ptr,
+        .mesh_data_water_idx = 0,
+    };
+
+    array_3d data(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E);
+
+    for (uint h = 1; h < CHUNK_SIZE + 1; h++) {
+        uint real_h = h - 1;
+        for (uint y = 1; y < CHUNK_SIZE + 1; y++) {
+            uint real_y = y - 1;
+            for (uint x = 1; x < CHUNK_SIZE + 1; x++) {
+                uint real_x = x - 1;
+                uint block_id = data.get_hxy(h, x, y);
+                if (block_id == BLOCK_EMPTY) {
+                    continue;
+                }
+                const uint* block_textures = BLOCKS_TEXTURES[decode_block_id(block_id)];
+                uint is_water = block_id == BLOCK_WATER;
+                uint above = data.get_hxy(h + 1, x, y);
+                if (!is_solid(above)) {
+                    if (is_water && above == BLOCK_WATER) {
+                        continue;
+                    }
+                    side_dir0.set(-1, 0);
+                    side_dir1.set(0, -1);
+                    corner_dir.set(-1, -1);
+                    uint shadows = 0;
+                    if (!is_water) {
+                        for (uint v = 0; v < 4; v++) {
+                            uint s0 = is_solid_int(data.get_hxy((h + 1), (x + side_dir0.x), (y + side_dir0.y)));
+                            uint s1 = is_solid_int(data.get_hxy((h + 1), (x + side_dir1.x), (y + side_dir1.y)));
+                            uint c = is_solid_int(data.get_hxy((h + 1), (x + corner_dir.x), (y + corner_dir.y)));
+                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                            side_dir0.rotate_ccw();
+                            side_dir1.rotate_ccw();
+                            corner_dir.rotate_ccw();
+                        }
+                    }
+
+                    buffer.add_face(
+                        DIRECTION_UP,
+                        real_h,
+                        real_x,
+                        real_y,
+                        1,
+                        1,
+                        (block_textures[0] << 8) | (shadows),
+                        false);
+                }
+
+                if (is_water) {
+                    continue;
+                }
+
+                if (!is_solid(data.get_hxy(h - 1, x, y))) {
+                    side_dir0.set(-1, 0);
+                    side_dir1.set(0, -1);
+                    corner_dir.set(-1, -1);
+                    uint shadows = 0;
+                    for (uint v = 0; v < 4; v++) {
+                        uint s0 = is_solid_int(data.get_hxy((h - 1), (x + side_dir0.x), (y - side_dir0.y)));
+                        uint s1 = is_solid_int(data.get_hxy((h - 1), (x + side_dir1.x), (y - side_dir1.y)));
+                        uint c = is_solid_int(data.get_hxy((h - 1), (x + corner_dir.x), (y - corner_dir.y)));
+                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                        side_dir0.rotate_ccw();
+                        side_dir1.rotate_ccw();
+                        corner_dir.rotate_ccw();
+                    }
+
+                    buffer.add_face(
+                        DIRECTION_DOWN,
+                        real_h,
+                        real_x,
+                        real_y,
+                        1,
+                        1,
+                        (block_textures[5] << 8) | (shadows),
+                        false);
+                }
+
+                if (!is_solid(data.get_hxy(h, x, y - 1))) {
+                    side_dir0.set(-1, 0);
+                    side_dir1.set(0, -1);
+                    corner_dir.set(-1, -1);
+                    uint shadows = 0;
+                    for (uint v = 0; v < 4; v++) {
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + side_dir0.x), (y - 1)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + side_dir1.x), (y - 1)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + corner_dir.x), (y - 1)));
+                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                        side_dir0.rotate_ccw();
+                        side_dir1.rotate_ccw();
+                        corner_dir.rotate_ccw();
+                    }
+                    buffer.add_face(
+                        DIRECTION_FRONT,
+                        real_h,
+                        real_x,
+                        real_y,
+                        1,
+                        1,
+                        (block_textures[1] << 8) | shadows,
+                        false);
+                }
+
+                if (!is_solid(data.get_hxy(h, x - 1, y))) {
+                    side_dir0.set(-1, 0);
+                    side_dir1.set(0, -1);
+                    corner_dir.set(-1, -1);
+                    uint shadows = 0;
+                    for (uint v = 0; v < 4; v++) {
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - 1), (y - side_dir0.x)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - 1), (y - side_dir1.x)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - 1), (y - corner_dir.x)));
+                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                        side_dir0.rotate_ccw();
+                        side_dir1.rotate_ccw();
+                        corner_dir.rotate_ccw();
+                    }
+                    buffer.add_face(
+                        DIRECTION_LEFT,
+                        real_h,
+                        real_x,
+                        real_y,
+                        1,
+                        1,
+                        (block_textures[2] << 8) | shadows,
+                        false);
+                }
+
+                if (!is_solid(data.get_hxy(h, x, y + 1))) {
+                    side_dir0.set(-1, 0);
+                    side_dir1.set(0, -1);
+                    corner_dir.set(-1, -1);
+                    uint shadows = 0;
+                    for (uint v = 0; v < 4; v++) {
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - side_dir0.x), (y + 1)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - side_dir1.x), (y + 1)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - corner_dir.x), (y + 1)));
+                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                        side_dir0.rotate_ccw();
+                        side_dir1.rotate_ccw();
+                        corner_dir.rotate_ccw();
+                    }
+                    buffer.add_face(
+                        DIRECTION_BACK,
+                        real_h,
+                        real_x,
+                        real_y,
+                        1,
+                        1,
+                        (block_textures[3] << 8) | shadows,
+                        false);                    
+                }
+
+                if (!is_solid(data.get_hxy(h, x + 1, y))) {
+                    side_dir0.set(-1, 0);
+                    side_dir1.set(0, -1);
+                    corner_dir.set(-1, -1);
+                    uint shadows = 0;
+                    for (uint v = 0; v < 4; v++) {
+                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + 1), (y + side_dir0.x)));
+                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + 1), (y + side_dir1.x)));
+                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + 1), (y + corner_dir.x)));
+                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+                        side_dir0.rotate_ccw();
+                        side_dir1.rotate_ccw();
+                        corner_dir.rotate_ccw();
+                    }
+                    buffer.add_face(
+                        DIRECTION_RIGHT,
+                        real_h,
+                        real_x,
+                        real_y,
+                        1,
+                        1,
+                        (block_textures[4] << 8) | shadows,
+                        false);                   
+                }
+            }
         }
     }
     return buffer.complete();
