@@ -1,7 +1,7 @@
 import { BLOCK_IDS, getBlockById, isSolid, isSolidInt } from "./blocks.js";
 import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataExtended, ChunkDataLoader } from "./chunk.js";
 import { Direction, DirXY, FVec3, IVec3, vec3 } from "./geom.js";
-import { Array2D, Array3D, i32a, Resources, UInt32Buffer } from "./utils.js";
+import { Array2D, Array3D, i32a, perfDiff, perfDiffStr, Resources, UInt32Buffer } from "./utils.js";
 
 
 const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
@@ -1176,6 +1176,12 @@ export class UIntChunkMesherQ extends ChunkMesher {
 
 export class UIntWasmMesher extends ChunkMesher {
 
+    #lastMeshTime = 0;
+    #lastTotalTime = 0;
+
+    constructor() {
+        super();
+    }
 
     /**
      * @param {IVec3} position 
@@ -1184,25 +1190,38 @@ export class UIntWasmMesher extends ChunkMesher {
      * @returns {UIntMeshData}
      */
     createMeshes(position, chunkData) {
+        const startTime = performance.now();
         const MAX_FACES = 32 * 32 * 32 * 3;
         const MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
         const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
         const input = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base, chunkData.data.length);
         input.set(chunkData.data);
+        const startMeshTime = performance.now();
         const len = UIntWasmMesher.wasmCreateMesh(
             UIntWasmMesher._heap_base,
             UIntWasmMesher._heap_base + input.byteLength,
             UIntWasmMesher._heap_base + input.byteLength + OUTPUT_SIZE
         )
+        this.#lastMeshTime = perfDiff(startMeshTime);
         const output = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base + input.byteLength, OUTPUT_SIZE / 4);
         const trimmedOutput = new Uint32Array(len)
         trimmedOutput.set(output.subarray(0, len));
+        this.#lastTotalTime = perfDiff(startTime);
         return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
             trimmedOutput);
 
     }
 
+    lastMeshTime() {
+        return this.#lastMeshTime;
+    }
+
+    lastTotalTime() {
+        return this.#lastTotalTime;
+    }
+
     static #outputSize;
+    static wasmCreateMesh;
 
     static async init() {
 
