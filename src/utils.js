@@ -496,65 +496,6 @@ export function logHash(buffer, msg = "") {
     });
 }
 
-const LOG_LEVEL_ERROR = 0;
-const LOG_LEVEL_WARN = 1;
-const LOG_LEVEL_INFO = 2;
-const LOG_LEVEL_DEBUG = 3;
-
-export class Logger {
-    #name;
-    static #logFunctions = [
-        console.error,
-        console.warn,
-        console.info,
-        console.debug
-    ]
-
-    static #logLevel = 2;
-
-    constructor(name) {
-        this.#name = name;
-    }
-
-    /**
-     * @param {string} msg 
-     */
-    error(msg) {
-        this.#log(msg, LOG_LEVEL_ERROR);
-    }
-
-    /**
-     * @param {string} msg 
-     */
-    debug(msg) {
-        this.#log(msg, LOG_LEVEL_DEBUG);
-    }
-
-    /**
-     * @param {string} msg 
-     */
-    warn(msg) {
-        this.#log(msg, LOG_LEVEL_WARN);
-    }
-
-    /**
-     * @param {string} msg 
-     */
-    info(msg) {
-        this.#log(msg, LOG_LEVEL_INFO);
-    }
-
-    #log(msg, level) {
-        if (level < Logger.#logLevel) {
-            Logger.#logFunctions[level](this.#prepareMsg(msg));
-        }
-    }
-
-    #prepareMsg(msg) {
-        return `${this.#name}: ${msg}`;
-    }
-}
-
 export function perfDiff(startTime, precision = 2) {
     return (performance.now() - startTime).toPrecision(precision);
 }
