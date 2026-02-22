@@ -134,7 +134,7 @@ export function renderTerrain(canvas, startX, startY, width, height, getH, param
 
     const mvp = mat4();
     function updateMVP() {
-        camera.calculateLookAtMatrix(viewMat);
+        camera.calculateViewMatrix(viewMat);
         projection.apply(mvp);
         mvp.mulInPlace(viewMat);
         mvp.mulInPlace(modelMat);
