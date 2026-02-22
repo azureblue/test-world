@@ -1,3 +1,12 @@
+import { BLOCK_IDS, getBlockById, isSolid, isSolidInt } from "../blocks.js";
+import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk.js";
+import { Direction, DirXY, vec3 } from "../geom.js";
+import { Array2D, Array3D, i32a, UInt32Buffer } from "../utils.js";
+import { UIntMeshData, UIntMesher } from "./mesher.js";
+
+const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
+const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
+const BLOCK_WATER = BLOCK_IDS.WATER;
 
 export class UIntChunkMesherQ extends UIntMesher {
 
@@ -223,7 +232,7 @@ export class UIntChunkMesherQ extends UIntMesher {
 
 }
 
-export class UIntChunkMesher1 extends ChunkMesher {
+export class UIntChunkMesher1 extends UIntMesher {
 
 
     /**
@@ -303,12 +312,11 @@ export class UIntChunkMesher1 extends ChunkMesher {
     }
 
     /**
-     * @param {IVec3} position 
      * @param {ChunkDataExtended} chunkData
      * 
      * @returns {UIntMeshData}
      */
-    createMeshes(position, chunkData) {
+    mesh(chunkData) {
         this.#bufferSolid.reset();
         this.#bufferWater.reset();
         const sideDir0 = new DirXY();
@@ -602,7 +610,6 @@ export class UIntChunkMesher1 extends ChunkMesher {
         const resultData = new Uint32Array(waters.length + solids.length);
         resultData.set(solids);
         resultData.set(waters, solids.length);
-        return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
-            resultData);
+        return resultData;
     }
 }
