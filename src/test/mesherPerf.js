@@ -1,12 +1,14 @@
 import { ChunkData, ChunkDataExtended } from "../chunk.js";
 import { GeneratorPatterns } from "../gen/generator.js";
 import { ivec3 } from "../geom.js";
-import { UIntWasmMesher } from "../mesher.js";
+import { UIntChunkMesher1, UIntChunkMesherQ } from "../mesher/uIntMesher.js";
+import { UIntWasmMesher } from "../mesher/uIntWasmMesher.js";
 import { Arrays, Float32Buffer } from "../utils.js";
 
 export async function main() {
     await UIntWasmMesher.init();
-    const mesher = new UIntWasmMesher();
+
+    const mesher = new UIntWasmMesher({ quick: false });
     let chunkDataE = {
         fullChecker: ChunkDataExtended.fromChunkData(GeneratorPatterns.fullChecker(new ChunkData())),
         doubleChecker: ChunkDataExtended.fromChunkData(GeneratorPatterns.doubleChecker(new ChunkData())),
