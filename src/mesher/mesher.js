@@ -1,13 +1,6 @@
-import { BLOCK_IDS } from "../blocks.js";
 import { CHUNK_SIZE, ChunkDataExtended, ChunkDataLoader } from "../chunk.js";
 import { FVec3, IVec3, Vec3, vec3 } from "../geom.js";
 import { perfDiff } from "../utils.js";
-import { UIntWasmMesher } from "./uIntWasmMesher.js";
-
-
-const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
-const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
-const BLOCK_WATER = BLOCK_IDS.WATER;
 
 export class UIntMeshData {
 
@@ -138,4 +131,3 @@ export class UIntMesher extends ChunkMesher {
     }
 }
 
-export { UIntWasmMesher as DefaultMesher };

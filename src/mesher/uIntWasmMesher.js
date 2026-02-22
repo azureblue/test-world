@@ -61,7 +61,7 @@ export class UIntWasmMesher extends UIntMesher {
         // UIntWasmMesher.#outputSize = OUTPUT_SIZE;
 
         const wasmResult = await WebAssembly.instantiateStreaming(
-            fetch(Resources.relativeToRoot("./mesher.wasm")),
+            fetch(Resources.relativeToRoot("./mesher/mesher.wasm")),
             {
                 env: {
                     memory: mem
