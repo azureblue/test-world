@@ -186,7 +186,7 @@ struct FaceBuffer {
 };
 
 extern "C"
-    __attribute__((export_name("create_mesh")))
+__attribute__((export_name("create_mesh")))
     uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_ptr, uint* __restrict tmp_mesh_ptr) {
     dir_xy side_dir0;
@@ -515,7 +515,6 @@ extern "C"
     return buffer.complete();
 }
 
-
 extern "C"
     __attribute__((export_name("create_mesh_q")))
     uint
@@ -679,7 +678,7 @@ extern "C"
                         1,
                         1,
                         (block_textures[3] << 8) | shadows,
-                        false);                    
+                        false);
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
@@ -704,7 +703,7 @@ extern "C"
                         1,
                         1,
                         (block_textures[4] << 8) | shadows,
-                        false);                   
+                        false);
                 }
             }
         }

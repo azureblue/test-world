@@ -1,7 +1,7 @@
 import { ChunkDataLoader, ChunkManager } from "./chunk.js";
 import { createGenerator, NoiseChunkGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
-import { DefaultMesher, UIntWasmMesher } from "./mesher.js";
+import { DefaultMesher, UIntWasmMesher } from "./mesher/mesher.js";
 import { Logger } from "./logging.js";
 
 const params = new URL(self.location.href).searchParams;

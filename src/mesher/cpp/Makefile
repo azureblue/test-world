@@ -1,4 +1,4 @@
-../src/mesher.wasm: mesher.cpp
+mesher.wasm: uIntWasmMesher.cpp
 	clang --target=wasm32 \
 	-O3 \
 	-ffreestanding -fno-builtin \
@@ -11,5 +11,5 @@
 	-Wl,--no-entry \
 	-Wl,--export-all \
 	-Wl,--strip-all \
-	mesher.cpp -o ../src/mesher.wasm
+	uIntWasmMesher.cpp -o mesher.wasm
 	
