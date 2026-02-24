@@ -96,7 +96,7 @@ export class ChunkMesher {
      * @param {ChunkDataLoader} chunkLoader
      * @returns {UIntMeshData}
      */
-    createMeshes(position, chunkLoader) {
+    createMesh(position, chunkLoader) {
         throw new Error("Not implemented");
     }
 }
@@ -118,7 +118,7 @@ export class UIntMesher extends ChunkMesher {
      * 
      * @returns {UIntMeshData}
      */
-    createMeshes(position, chunkData) {
+    createMesh(position, chunkData) {
         const meshStart = performance.now();
         const meshData = this.mesh(chunkData);
         this.#lastMeshTime = perfDiff(meshStart);

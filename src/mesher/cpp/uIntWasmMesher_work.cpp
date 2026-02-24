@@ -16,8 +16,6 @@ const uint PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
 const uint CHUNK_SIZE_E = CHUNK_SIZE + 2;
 const uint MAX_VISIBLE_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 const uint PLANE_SIZE_E = CHUNK_SIZE_E * CHUNK_SIZE_E;
-constexpr int SY = 34;
-constexpr int PS = 1156;
 
 const uint X = 0;
 const uint Y = 1;
@@ -89,8 +87,8 @@ struct array_3d {
         this->sy = sy;
     }
 
-    inline uint is_solid_at(uint idx) {
-        return (*(this->data + idx)) >> 31;
+    inline uint index_of_hxy(uint h, uint x, uint y) {
+        return h * this->plane_size + y * this->sy + x;
     }
 
     inline uint get_xyz(uint x, uint y, uint z) {
@@ -192,7 +190,7 @@ struct FaceBuffer {
 };
 
 extern "C"
-__attribute__((export_name("create_mesh")))
+    __attribute__((export_name("create_mesh")))
     uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint* __restrict out_mesh_ptr, uint* __restrict tmp_mesh_ptr) {
     dir_xy side_dir0;
@@ -213,6 +211,7 @@ __attribute__((export_name("create_mesh")))
 
     uint current_layer_offset = 0;
     uint top_layer_offset = 0;
+    int c00 = 0, c01 = 0, c02 = 0, c10 = 0, c11 = 0, c12 = 0, c20 = 0, c21 = 0, c22 = 0, c30 = 0, c31 = 0, c32 = 0, solid = 0;
 
     for (uint h = 1; h < CHUNK_SIZE + 1; h++) {
         uint real_h = h - 1;
@@ -226,6 +225,7 @@ __attribute__((export_name("create_mesh")))
             for (uint x = 1; x < CHUNK_SIZE + 1; x++) {
                 uint real_x = x - 1;
                 uint real_y = y - 1;
+                int offset = data.index_of_hxy(h, x, y);
                 uint block_id = data.get_hxy(h, x, y);
                 if (block_id == BLOCK_EMPTY) {
                     continue;
@@ -237,20 +237,33 @@ __attribute__((export_name("create_mesh")))
                     if (is_water && above == BLOCK_WATER) {
                         continue;
                     }
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
+
                     uint shadows = 0;
                     if (!is_water) {
-                        for (uint v = 0; v < 4; v++) {
-                            uint s0 = is_solid_int(data.get_hxy((h + 1), (x + side_dir0.x), (y + side_dir0.y)));
-                            uint s1 = is_solid_int(data.get_hxy((h + 1), (x + side_dir1.x), (y + side_dir1.y)));
-                            uint c = is_solid_int(data.get_hxy((h + 1), (x + corner_dir.x), (y + corner_dir.y)));
-                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            side_dir0.rotate_ccw();
-                            side_dir1.rotate_ccw();
-                            corner_dir.rotate_ccw();
-                        }
+                        solid = is_solid_int(data.get_idx(offset + 1121));
+                        c02 = solid;
+                        solid = is_solid_int(data.get_idx(offset + 1122));
+                        c01 = solid;
+                        c10 = solid;
+                        solid = is_solid_int(data.get_idx(offset + 1123));
+                        c12 = solid;
+                        solid = is_solid_int(data.get_idx(offset + 1155));
+                        c00 = solid;
+                        c31 = solid;
+                        solid = is_solid_int(data.get_idx(offset + 1157));
+                        c11 = solid;
+                        c20 = solid;
+                        solid = is_solid_int(data.get_idx(offset + 1189));
+                        c32 = solid;
+                        solid = is_solid_int(data.get_idx(offset + 1190));
+                        c21 = solid;
+                        c30 = solid;
+                        solid = is_solid_int(data.get_idx(offset + 1191));
+                        c22 = solid;
+                        shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+                        shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+                        shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+                        shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
                     }
 
                     layers.set_hxy(0, real_x, real_y, (block_textures[0] << 8) | (shadows));
@@ -261,53 +274,89 @@ __attribute__((export_name("create_mesh")))
                 }
 
                 if (!is_solid(data.get_hxy(h - 1, x, y))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
                     uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h - 1), (x + side_dir0.x), (y - side_dir0.y)));
-                        uint s1 = is_solid_int(data.get_hxy((h - 1), (x + side_dir1.x), (y - side_dir1.y)));
-                        uint c = is_solid_int(data.get_hxy((h - 1), (x + corner_dir.x), (y - corner_dir.y)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    solid = is_solid_int(data.get_idx(offset + -1191));
+                    c32 += solid;
+                    solid = is_solid_int(data.get_idx(offset + -1190));
+                    c21 += solid;
+                    c30 += solid;
+                    solid = is_solid_int(data.get_idx(offset + -1189));
+                    c22 += solid;
+                    solid = is_solid_int(data.get_idx(offset + -1157));
+                    c00 += solid;
+                    c31 += solid;
+                    solid = is_solid_int(data.get_idx(offset + -1155));
+                    c11 += solid;
+                    c20 += solid;
+                    solid = is_solid_int(data.get_idx(offset + -1123));
+                    c02 += solid;
+                    solid = is_solid_int(data.get_idx(offset + -1122));
+                    c01 += solid;
+                    c10 += solid;
+                    solid = is_solid_int(data.get_idx(offset + -1121));
+                    c12 += solid;
+                    shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+                    shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+                    shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+                    shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
                     layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, (block_textures[5] << 8) | (shadows));
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y - 1))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
                     uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + side_dir0.x), (y - 1)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + side_dir1.x), (y - 1)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + corner_dir.x), (y - 1)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    solid = is_solid_int(data.get_idx(offset + -1191));
+                    c02 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1190));
+                    c01 = solid;
+                    c10 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1189));
+                    c12 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -35));
+                    c00 = solid;
+                    c31 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -33));
+                    c11 = solid;
+                    c20 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1121));
+                    c32 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1122));
+                    c21 = solid;
+                    c30 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1123));
+                    c22 = solid;
+                    shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+                    shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+                    shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+                    shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
                     layers.set_hxy(current_layer_offset + DIRECTION_FRONT, real_x, real_y, (block_textures[1] << 8) | shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x - 1, y))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
                     uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - 1), (y - side_dir0.x)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - 1), (y - side_dir1.x)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - 1), (y - corner_dir.x)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    solid = is_solid_int(data.get_idx(offset + -1191));
+                    c12 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1157));
+                    c01 = solid;
+                    c10 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1123));
+                    c02 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -35));
+                    c11 = solid;
+                    c20 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 33));
+                    c00 = solid;
+                    c31 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1121));
+                    c22 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1155));
+                    c21 = solid;
+                    c30 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1189));
+                    c32 = solid;
+                    shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+                    shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+                    shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+                    shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
                     layers.set_hxy(
                         current_layer_offset + DIRECTION_LEFT,
                         CHUNK_SIZE - 1 - real_y,
@@ -316,19 +365,31 @@ __attribute__((export_name("create_mesh")))
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y + 1))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
                     uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - side_dir0.x), (y + 1)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - side_dir1.x), (y + 1)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - corner_dir.x), (y + 1)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    solid = is_solid_int(data.get_idx(offset + -1123));
+                    c12 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1122));
+                    c01 = solid;
+                    c10 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1121));
+                    c02 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 33));
+                    c11 = solid;
+                    c20 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 35));
+                    c00 = solid;
+                    c31 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1189));
+                    c22 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1190));
+                    c21 = solid;
+                    c30 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1191));
+                    c32 = solid;
+                    shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+                    shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+                    shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+                    shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
                     layers.set_hxy(
                         current_layer_offset + DIRECTION_BACK,
                         CHUNK_SIZE - 1 - real_x,
@@ -337,19 +398,31 @@ __attribute__((export_name("create_mesh")))
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
                     uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + 1), (y + side_dir0.x)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + 1), (y + side_dir1.x)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + 1), (y + corner_dir.x)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    solid = is_solid_int(data.get_idx(offset + -1189));
+                    c02 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1155));
+                    c01 = solid;
+                    c10 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -1121));
+                    c12 = solid;
+                    solid = is_solid_int(data.get_idx(offset + -33));
+                    c00 = solid;
+                    c31 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 35));
+                    c11 = solid;
+                    c20 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1123));
+                    c32 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1157));
+                    c21 = solid;
+                    c30 = solid;
+                    solid = is_solid_int(data.get_idx(offset + 1191));
+                    c22 = solid;
+                    shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+                    shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+                    shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+                    shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
                     layers.set_hxy(
                         current_layer_offset + DIRECTION_RIGHT,
                         real_y,

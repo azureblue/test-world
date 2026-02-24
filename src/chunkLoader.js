@@ -1,8 +1,8 @@
 import { ChunkDataLoader, ChunkManager } from "./chunk.js";
-import { createGenerator, NoiseChunkGenerator } from "./gen/generator.js";
+import { createGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
-import { DefaultMesher, UIntWasmMesher } from "./mesher/mesher.js";
 import { Logger } from "./logging.js";
+import { UIntWasmMesher } from "./mesher/uIntWasmMesher.js";
 
 const params = new URL(self.location.href).searchParams;
 const WORKER_ID = Number(params.get("workerId"));
@@ -35,9 +35,11 @@ logger.info(() => "booted " + self.location?.href);
 // const heightmap = await Resources.loadImage("./images/test.png");
 // const heightmapPixels = ImagePixels.from(heightmap);
 
+await UIntWasmMesher.init();
+
 const generator = createGenerator(); // new Generator02();
 const chunkLoader = new ChunkDataLoader((cx, cy, cz) => generator.generateChunk(vec3(cx, cy, cz)));
-const chunkManager = new ChunkManager(chunkLoader, new DefaultMesher());
+const chunkManager = new ChunkManager(chunkLoader, new UIntWasmMesher());
 
 
 
@@ -81,15 +83,13 @@ onmessage = (message) => {
     }
 };
 
-UIntWasmMesher.init().then(() => {
 
-    logger.info(() => "initialized");
-    postMessage({
-        type: "ready",
-        data: {
-            workerId: WORKER_ID
-        }
-    });
+logger.info(() => "initialized");
+postMessage({
+    type: "ready",
+    data: {
+        workerId: WORKER_ID
+    }
 });
 
 // for (const e of initialQueue) {

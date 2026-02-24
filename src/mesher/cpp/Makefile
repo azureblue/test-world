@@ -1,4 +1,4 @@
-mesher.wasm: uIntWasmMesher.cpp
+../uIntWasmMesher.wasmmesher.wasm: uIntWasmMesher.cpp
 	clang --target=wasm32 \
 	-O3 \
 	-ffreestanding -fno-builtin \
@@ -7,9 +7,8 @@ mesher.wasm: uIntWasmMesher.cpp
 	-fno-stack-protector \
 	-nostdlib -nostdinc++ \
 	-Wl,--import-memory \
-	-Wl,--lto-O3 \
 	-Wl,--no-entry \
 	-Wl,--export-all \
 	-Wl,--strip-all \
-	uIntWasmMesher.cpp -o mesher.wasm
+	uIntWasmMesher.cpp -o ../uIntWasmMesher.wasm
 	
