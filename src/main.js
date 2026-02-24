@@ -2,7 +2,7 @@ import { Camera, FrustumCuller } from "./camera.js";
 import { Projection, FVec3, mat4, fvec3, vec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { KeyboardInput, MouseInput } from "./input.js";
-import { UIntMesh } from "./mesher.js";
+import { UIntMesh } from "./mesher/mesher.js";
 import { FPSCounter } from "./perf.js";
 import { TextureArray } from "./textures.js";
 import { Replacer, Resources, writeVoxelWireframe } from "./utils.js";

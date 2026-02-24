@@ -1,7 +1,8 @@
 import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, ChunkDataExtended } from "./chunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
 import { Logger } from "./logging.js";
-import { UIntChunkMesherQ, UIntMesh } from "./mesher.js";
+import { UIntMesh } from "./mesher/mesher.js";
+import { UIntChunkMesherQ } from "./mesher/uIntMesher.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
 const logger = new Logger("World");
 

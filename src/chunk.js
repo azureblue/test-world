@@ -1,9 +1,11 @@
 import { Dir27, fvec3, FVec3, IVec3 } from "./geom.js";
 import { Logger } from "./logging.js";
+import { ChunkMesher } from "./mesher/mesher.js";
 import { Array3D, MovingAverage, perfDiff } from "./utils.js";
 
 export const CHUNK_SIZE_BIT_LEN = 5 | 0;
 export const CHUNK_SIZE = 32 | 0;
+export const CHUNK_SIZE_E = CHUNK_SIZE + 2 | 0;
 export const CHUNK_H = 32 | 0;
 export const TEX_ID_BIT_LEN = 9 | 0;
 
@@ -391,6 +393,7 @@ export class ChunkSpec {
 
 export class ChunkManager {
     #chunkLoader
+    /** @type {ChunkMesher} */
     #chunkMesher
     #avgTime = new MovingAverage(200);
 
@@ -409,7 +412,7 @@ export class ChunkManager {
         const chunkDataExtended = ChunkDataExtended.load((cx, cy, cz) => this.#chunkLoader.getChunkSync(cx, cy, cz), cx, cy, cz);
 
         const now = performance.now();
-        const meshData = this.#chunkMesher.createMeshes(
+        const meshData = this.#chunkMesher.createMesh(
             position, chunkDataExtended
         );
         const meshTime = perfDiff(now);
