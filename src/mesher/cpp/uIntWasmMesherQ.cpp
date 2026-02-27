@@ -27,6 +27,10 @@ constexpr uint UP = 0;
 constexpr uint BLOCK_WATER = 6;
 constexpr uint BLOCK_EMPTY = 0;
 
+constexpr int64 VERTEX_OFFSETS[8][3] = {{0, 0, 1}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 0}, {0, 1, 0}};
+constexpr int64 MERGE_VECTOR_W[8][3] = {{1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {-1, 0, 0}, {0, 1, 0}, {1, 0, 0}, {1, 1, 0}, {1, -1, 0}};
+constexpr int64 MERGE_VECTOR_H[8][3] = {{0, 1, 0}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, -1, 0}, {0, 0, 1}, {0, 0, 1}};
+
 const uint WINDING[4][6] = {{0, 1, 2, 0, 2, 3}, {3, 2, 0, 2, 1, 0}, {1, 2, 3, 1, 3, 0}, {0, 3, 1, 3, 2, 1}};
 const uint MERGE_MASKS_W[4] = {0, 1, 1, 0};
 const uint MERGE_MASKS_H[4] = {0, 0, 1, 1};
@@ -132,33 +136,73 @@ struct array_3d {
     }
 };
 
-const uint64 merge_bits_width = 1ull << 32;
-const uint64 merge_bits_height = 1ull << 39;
-void encode_face_up(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+constexpr uint64 merge_bits_width = 1ull << 32;
+constexpr uint64 merge_bits_height = 1ull << 39;
+constexpr uint64 merge_bits_width_height = merge_bits_width | merge_bits_height;
+
+consteval int64 merge_vector_w_bits(Direction dir) {
+    return (MERGE_VECTOR_W[dir][0] << 0) | (MERGE_VECTOR_W[dir][1] << 7) | (MERGE_VECTOR_W[dir][2] << 14);
+};
+
+consteval int64 merge_vector_h_bits(Direction dir) {
+    return (MERGE_VECTOR_H[dir][0] << 0) | (MERGE_VECTOR_H[dir][1] << 7) | (MERGE_VECTOR_H[dir][2] << 14);
+};
+
+consteval uint64 vertex_offset_bits(Direction dir) {
+    return (VERTEX_OFFSETS[dir][0] << 0) | (VERTEX_OFFSETS[dir][1] << 7) | (VERTEX_OFFSETS[dir][2] << 14);
+};
+
+template<Direction dir>
+__attribute__((always_inline)) static inline
+void encode_face(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = 1;
-    const int mwy = 0;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = 1;
-    const int mhz = 0;
+    const int64 mw  = merge_vector_w_bits(dir);
+    const int64 mh = merge_vector_h_bits(dir);
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 0;
+    uint64 v0 = pos_bits | bits | cs0;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
+    
+    if (cs0 + cs2 > cs1 + cs3) {
+        out[0] = v0;
+        out[1] = v1;
+        out[2] = v2;
+        out[3] = v0;
+        out[4] = v2;
+        out[5] = v3;
+    } else {
+        out[0] = v1;
+        out[1] = v2;
+        out[2] = v3;
+        out[3] = v1;
+        out[4] = v3;
+        out[5] = v0;
+    }        
+    out += 6;
+}
+
+void encode_face_up(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
+    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
+    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
+    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
+    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
+
+    const int64 mw  = 1;
+    const int64 mh = 128;
+
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -178,31 +222,23 @@ void encode_face_up(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
     out += 6;
 }
 
-void encode_face_front(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+void encode_face_front(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = 1;
-    const int mwy = 0;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = 0;
-    const int mhz = 1;
+    const int64 mw  = 1;
+    const int64 mh = 16384;
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 65536;
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -222,31 +258,23 @@ void encode_face_front(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) 
     out += 6;
 }
 
-void encode_face_left(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+void encode_face_left(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = 0;
-    const int mwy = -1;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = 0;
-    const int mhz = 1;
+    const int64 mw  = -128;
+    const int64 mh = 16384;
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 131072;
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -266,31 +294,23 @@ void encode_face_left(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
     out += 6;
 }
 
-void encode_face_back(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+void encode_face_back(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = -1;
-    const int mwy = 0;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = 0;
-    const int mhz = 1;
+    const int64 mw  = -1;
+    const int64 mh = 16384;
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 196608;
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -310,31 +330,23 @@ void encode_face_back(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
     out += 6;
 }
 
-void encode_face_right(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+void encode_face_right(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = 0;
-    const int mwy = 1;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = 0;
-    const int mhz = 1;
+    const int64 mw  = 128;
+    const int64 mh = 16384;
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 262144;
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -354,31 +366,23 @@ void encode_face_right(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) 
     out += 6;
 }
 
-void encode_face_down(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+void encode_face_down(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = 1;
-    const int mwy = 0;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = -1;
-    const int mhz = 0;
+    const int64 mw  = 1;
+    const int64 mh = -128;
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 327680;
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -398,31 +402,23 @@ void encode_face_down(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
     out += 6;
 }
 
-void encode_face_diagonal0(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+void encode_face_diagonal0(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = 1;
-    const int mwy = 1;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = 0;
-    const int mhz = 1;
+    const int64 mw  = 129;
+    const int64 mh = 16384;
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 393216;
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -442,31 +438,23 @@ void encode_face_diagonal0(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 da
     out += 6;
 }
 
-void encode_face_diagonal1(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 data) {
-    uint64 texture_id = data >> 8;
-    uint64 shadows = data & 0b11111111;
+void encode_face_diagonal1(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int mwx = 1;
-    const int mwy = -1;
-    const int mwz = 0;
-    const int mhx = 0;
-    const int mhy = 0;
-    const int mhz = 1;
+    const int64 mw  = -127;
+    const int64 mh = 16384;
 
-    uint64 bits = 0 | (texture_id & 0b01111'1111) << 19 | 458752;
   // v0
-    uint64 v0 = x | (y << 7) | (h << 14) | bits << 32 | cs0;
+    uint64 v0 = pos_bits | bits | cs0;
     // v1
-    uint64 v1 = (x + mwx) | ((y + mwy) << 7) | ((h + mwz) << 14) | bits << 32 | cs1 | merge_bits_width;
+    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
     // v2
-    uint64 v2 = (x + mwx + mhx) | ((y + mwy + mhy) << 7) | ((h + mwz + mhz) << 14) | bits << 32 | cs2  | merge_bits_width | merge_bits_height;
+    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
     // v0 
-    uint64 v3 = (x + mhx) | ((y + mhy) << 7) | ((h + mhz) << 14) | bits << 32 | cs3  | merge_bits_height;
-
+    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -485,6 +473,7 @@ void encode_face_diagonal1(uint64*& out, uint64 h, uint64 x, uint64 y, uint64 da
         
     out += 6;
 }
+
 
 uint complete(uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
     uint nWater = mesh_water_ptr - mesh_data_water_base;
@@ -494,12 +483,15 @@ uint complete(uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64
     }
     return (nSolid + nWater) * 2;
 }
+constexpr uint64 X_PLUS_1 = 1;
+constexpr uint64 Y_PLUS_1 = (1 << 7);
+constexpr uint64 Z_PLUS_1 = (1 << 14);
+
 
 extern "C"
     __attribute__((export_name("create_mesh")))
     uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_mesh_ptr) {
-    uint dirMWV[8] = {0x1456, 0x2256, 0x2251, 0x2254, 0x2259, 0x1056, 0x225a, 0x2252};
     dir_xy side_dir0;
     dir_xy side_dir1;
     dir_xy corner_dir;
@@ -512,11 +504,9 @@ extern "C"
     array_3d data(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E);
 
     for (uint h = 1; h < CHUNK_SIZE + 1; h++) {
-        uint64 real_h = h - 1;
         for (uint y = 1; y < CHUNK_SIZE + 1; y++) {
-            uint64 real_y = y - 1;
             for (uint x = 1; x < CHUNK_SIZE + 1; x++) {
-                uint64 real_x = x - 1;
+                uint64 pos_bits = (x - 1) | ((y - 1) << 7) | ((h - 1) << 14);
                 uint block_id = data.get_hxy(h, x, y);
                 if (block_id == BLOCK_EMPTY) {
                     continue;
@@ -545,12 +535,13 @@ extern "C"
                             corner_dir.rotate_ccw();
                         }
                     }
-
+                    //0 | (texture_id & 0b01111'1111) << 19 | 0
+                    const uint64 block_texture = block_textures[0];
+                    uint64 bits = block_texture << 51 | (0ull << 48);
                     encode_face_up(face_buffer,
-                                   real_h + 1,
-                                   real_x,
-                                   real_y,
-                                   (block_textures[0] << 8) | (shadows));
+                                   pos_bits + Z_PLUS_1,
+                                   bits,
+                                   shadows);
                 }
 
                 if (is_water) {
@@ -572,11 +563,12 @@ extern "C"
                         corner_dir.rotate_ccw();
                     }
 
+                    const uint64 block_texture = block_textures[5];
+                    uint64 bits = block_texture << 51 | (5ull << 48);
                     encode_face_down(face_buffer,
-                                     real_h,
-                                     real_x,
-                                     real_y + 1,
-                                     (block_textures[5] << 8) | (shadows));
+                                   pos_bits + Y_PLUS_1,
+                                   bits,
+                                   shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y - 1))) {
@@ -593,11 +585,12 @@ extern "C"
                         side_dir1.rotate_ccw();
                         corner_dir.rotate_ccw();
                     }
+                    const uint64 block_texture = block_textures[1];
+                    uint64 bits = block_texture << 51 | (1ull << 48);
                     encode_face_front(face_buffer,
-                                      real_h,
-                                      real_x,
-                                      real_y,
-                                      (block_textures[1] << 8) | shadows);
+                                   pos_bits,
+                                   bits,
+                                   shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x - 1, y))) {
@@ -614,11 +607,12 @@ extern "C"
                         side_dir1.rotate_ccw();
                         corner_dir.rotate_ccw();
                     }
+                    const uint64 block_texture = block_textures[2];
+                    uint64 bits = block_texture << 51 | (2ull << 48);
                     encode_face_left(face_buffer,
-                                     real_h,
-                                     real_x,
-                                     real_y + 1,
-                                     (block_textures[2] << 8) | shadows);
+                                   pos_bits + Y_PLUS_1,
+                                   bits,
+                                   shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y + 1))) {
@@ -635,11 +629,12 @@ extern "C"
                         side_dir1.rotate_ccw();
                         corner_dir.rotate_ccw();
                     }
+                   const uint64 block_texture = block_textures[3];
+                    uint64 bits = block_texture << 51 | (3ull << 48);
                     encode_face_back(face_buffer,
-                                     real_h,
-                                     real_x + 1,
-                                     real_y + 1,
-                                     (block_textures[3] << 8) | shadows);
+                                   pos_bits + X_PLUS_1 + Y_PLUS_1,
+                                   bits,
+                                   shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
@@ -656,11 +651,12 @@ extern "C"
                         side_dir1.rotate_ccw();
                         corner_dir.rotate_ccw();
                     }
+                    const uint64 block_texture = block_textures[4];
+                    uint64 bits = block_texture << 51 | (4ull << 48);
                     encode_face_right(face_buffer,
-                                      real_h,
-                                      real_x + 1,
-                                      real_y,
-                                      (block_textures[4] << 8) | shadows);
+                                   pos_bits + X_PLUS_1,
+                                   bits,
+                                   shadows);
                 }
             }
         }
