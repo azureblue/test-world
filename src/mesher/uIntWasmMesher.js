@@ -5,35 +5,36 @@ export class UIntWasmMesher extends UIntMesher {
 
     #quick = false;
     #mesherWasmFunction;
+    #heapBase;
 
     constructor({ quick = false } = {}) {
         super();
         this.#quick = quick;
         this.#mesherWasmFunction = quick ? UIntWasmMesher.wasmCreateMeshQ : UIntWasmMesher.wasmCreateMesh;
+        this.#heapBase = quick ? UIntWasmMesher._heap_baseQ : UIntWasmMesher._heap_base;
     }
 
     mesh(chunkData) {
         const MAX_FACES = 32 * 32 * 32 * 3;
-        const MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
         const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
-        const input = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base, chunkData.data.length);
+        const input = new Uint32Array(UIntWasmMesher.mem.buffer, this.#heapBase, chunkData.data.length);
         input.set(chunkData.data);
         const len = this.#mesherWasmFunction(
-            UIntWasmMesher._heap_base,
-            UIntWasmMesher._heap_base + input.byteLength,
-            UIntWasmMesher._heap_base + input.byteLength + OUTPUT_SIZE
+            this.#heapBase,
+            this.#heapBase + input.byteLength
         )
-        const output = new Uint32Array(UIntWasmMesher.mem.buffer, UIntWasmMesher._heap_base + input.byteLength, OUTPUT_SIZE / 4);
+        const output = new Uint32Array(UIntWasmMesher.mem.buffer, this.#heapBase + input.byteLength, OUTPUT_SIZE / 4);
         const trimmedOutput = new Uint32Array(len)
         trimmedOutput.set(output.subarray(0, len));
         return trimmedOutput;
     }
 
-    
+
     static wasmCreateMesh;
     static wasmCreateMeshQ;
 
     static async init() {
+        const alignUp = (x, a) => (x + (a - 1)) & ~(a - 1);
 
         const PAGE = 64 * 1024;
         const bytesToPages = (b) => (b + PAGE - 1) >>> 16; // ceil(b/65536)
@@ -60,7 +61,16 @@ export class UIntWasmMesher extends UIntMesher {
 
         // UIntWasmMesher.#outputSize = OUTPUT_SIZE;
 
-        const wasmResult = await WebAssembly.instantiateStreaming(
+        const uIntWasmMesherQResult = await WebAssembly.instantiateStreaming(
+            await fetch(Resources.relativeToRoot("./mesher/uIntWasmMesherQ.wasm")),
+            {
+                env: {
+                    memory: mem
+                }
+            }
+        );
+
+        const uIntWasmMesherResult = await WebAssembly.instantiateStreaming(
             await fetch(Resources.relativeToRoot("./mesher/uIntWasmMesher.wasm")),
             {
                 env: {
@@ -68,10 +78,12 @@ export class UIntWasmMesher extends UIntMesher {
                 }
             }
         );
-        const instance = wasmResult.instance;
-        UIntWasmMesher._heap_base = instance.exports.__heap_base.value;
-        UIntWasmMesher.wasmCreateMesh = instance.exports.create_mesh;
-        UIntWasmMesher.wasmCreateMeshQ = instance.exports.create_mesh_q;
+
+
+        UIntWasmMesher._heap_base = alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
+        UIntWasmMesher._heap_baseQ = alignUp(uIntWasmMesherQResult.instance.exports.__heap_base.value, 16);
+        UIntWasmMesher.wasmCreateMesh = uIntWasmMesherResult.instance.exports.create_mesh;
+        UIntWasmMesher.wasmCreateMeshQ = uIntWasmMesherQResult.instance.exports.create_mesh;
         UIntWasmMesher.mem = mem;
     }
 }
