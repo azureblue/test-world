@@ -269,14 +269,14 @@ export class Direction {
 
     /** @type {Array<Direction>} */
     static directions = [
-        new Direction(Direction.UP, ivec3(0, 1, 0), ivec3(0, 0, 1), 0b000),
-        new Direction(Direction.FRONT, ivec3(0, 0, 1), ivec3(0, -1, 0), 0b001),
-        new Direction(Direction.LEFT, ivec3(-1, 0, 0), ivec3(-1, 0, 0), 0b010),
-        new Direction(Direction.BACK, ivec3(0, 0, -1), ivec3(0, 1, 0), 0b011),
-        new Direction(Direction.RIGHT, ivec3(1, 0, 0), ivec3(1, 0, 0), 0b100),
-        new Direction(Direction.DOWN, ivec3(0, -1, 0), ivec3(0, 0, -1), 0b101),
-        new Direction(Direction.DIAGONAL_0, ivec3(1, 0, 1), ivec3(1, 1, 0), 0b110),
-        new Direction(Direction.DIAGONAL_1, ivec3(1, 0, -1), ivec3(1, -1, 0), 0b111)
+        new Direction(Direction.UP, ivec3(0, 1, 0), ivec3(0, 0, 1), 0b000, "up"),
+        new Direction(Direction.FRONT, ivec3(0, 0, 1), ivec3(0, -1, 0), 0b001, "front"),
+        new Direction(Direction.LEFT, ivec3(-1, 0, 0), ivec3(-1, 0, 0), 0b010, "left"),
+        new Direction(Direction.BACK, ivec3(0, 0, -1), ivec3(0, 1, 0), 0b011, "back"),
+        new Direction(Direction.RIGHT, ivec3(1, 0, 0), ivec3(1, 0, 0), 0b100, "right"),
+        new Direction(Direction.DOWN, ivec3(0, -1, 0), ivec3(0, 0, -1), 0b101, "down"),
+        new Direction(Direction.DIAGONAL_0, ivec3(1, 0, 1), ivec3(1, 1, 0), 0b110, "diagonal0"),
+        new Direction(Direction.DIAGONAL_1, ivec3(1, 0, -1), ivec3(1, -1, 0), 0b111, "diagonal1")
         // new Direction(Direction.DIAGONAL_0, ivec3(1, 0, 1).normalize(), 0b110),
         // new Direction(Direction.DIAGONAL_1, ivec3(1, 0, -1).normalize(), 0b111)
     ];
@@ -294,12 +294,14 @@ export class Direction {
     /**
      * @param {FVec3} worldDir 
      * @param {number} bits 
+     * @param {string} name
      */
-    constructor(id, worldDir, logicDir, bits) {
+    constructor(id, worldDir, logicDir, bits, name) {
         this.id = id;
         this.worldDir = worldDir;
         this.logicDir = logicDir;
         this.bits = bits;
+        this.name = name;
     }
 }
 
