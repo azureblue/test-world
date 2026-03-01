@@ -23,7 +23,7 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
 
     uint64 v0 = pos_bits | bits | cs0;
     uint64 v1 = pos_bits + mw | bits | cs1 | mbw;
-    uint64 v2 = pos_bits + mwh | bits | cs2 | mbw |mbh;
+    uint64 v2 = pos_bits + mwh | bits | cs2 | mbw | mbh;
     uint64 v3 = pos_bits + mh | bits | cs3 | mbh;
 
     if (cs0 + cs2 > cs1 + cs3) {
@@ -114,11 +114,11 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
 
 template <Direction DIR>
 void merge_side_faces(face_buffers& buffer, array_3d& layers, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {
-    constexpr uint dir_i = toUint(DIR);
-    uint layer_start_current = layers.plane_idx(dir_i + current_layer_offset);
-    uint layer_start_top = layers.plane_idx(dir_i + top_layer_offset);
+    constexpr uint dir = toUint(DIR);
+    uint layer_start_current = layers.plane_idx(dir + current_layer_offset);
+    uint layer_start_top = layers.plane_idx(dir + top_layer_offset);
     uint layer_end_idx = layer_start_current + PLANE_SIZE;
-    constexpr uint dir_encode_base_idx = (dir_i << 3);
+    constexpr uint dir_encode_base_idx = (dir << 3);
     constexpr int dir_xx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 0];
     constexpr int dir_xy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 1];
     constexpr int dir_xx_add = DIRECTION_ENCODE[dir_encode_base_idx + 2];
@@ -166,7 +166,6 @@ void merge_side_faces(face_buffers& buffer, array_3d& layers, uint& current_laye
 
 template <Direction DIR>
 void merge_top_down_faces(face_buffers& buffer, array_3d& layers, uint real_h) {
-    constexpr uint dir_i = toUint(DIR);
     uint t_c[CHUNK_SIZE * 2];
 
     for (uint i = 0; i < CHUNK_SIZE * 2; i++) {
@@ -211,8 +210,7 @@ void merge_top_down_faces(face_buffers& buffer, array_3d& layers, uint real_h) {
             if ((top & 0x01FFFFFF) == (cur & 0x01FFFFFF)) {
                 t_c[idx_i] = cur & 0x01FFFFFF | (top_h + 1) << 25;
             } else {
-                uint yy = (y - top_h);
-                merge_encode_face<DIR>(buffer, real_h, i, yy, top_w, top_h, top & 0x1FFFF);
+                merge_encode_face<DIR>(buffer, real_h, i, y - top_h, top_w, top_h, top & 0x1FFFF);
             }
             i += top_w;
         }
