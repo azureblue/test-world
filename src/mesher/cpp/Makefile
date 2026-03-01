@@ -3,6 +3,7 @@ all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm
 ../uIntWasmMesher.wasm: uIntWasmMesher.cpp
 	clang --target=wasm32 \
 	-O3 \
+	-std=c++20 \
 	-ffreestanding -fno-builtin \
 	-fno-exceptions -fno-rtti \
 	-fno-threadsafe-statics \
