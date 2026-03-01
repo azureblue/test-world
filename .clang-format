@@ -4,3 +4,4 @@ UseTab: Never
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: Empty
 ColumnLimit: 0
+BreakAfterAttributes: Always
