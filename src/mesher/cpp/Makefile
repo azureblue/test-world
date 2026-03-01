@@ -18,6 +18,7 @@ all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm
 ../uIntWasmMesherQ.wasm: uIntWasmMesherQ.cpp
 	clang --target=wasm32 \
 	-O3 \
+	-std=c++20 \
 	-ffreestanding -fno-builtin \
 	-fno-exceptions -fno-rtti \
 	-fno-threadsafe-statics \
@@ -29,4 +30,6 @@ all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm
 	-Wl,--no-entry \
 	-Wl,--strip-all \
 	uIntWasmMesherQ.cpp -o ../uIntWasmMesherQ.wasm
-	
+
+clean:
+	rm ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm

@@ -1,15 +1,19 @@
 #include "int.h"
 
-enum Direction : uint {
-    DIRECTION_UP = 0,
-    DIRECTION_FRONT = 1,
-    DIRECTION_LEFT = 2,
-    DIRECTION_BACK = 3,
-    DIRECTION_RIGHT = 4,
-    DIRECTION_DOWN = 5,
-    DIRECTION_DIAGONAL_0 = 6,
-    DIRECTION_DIAGONAL_1 = 7
+enum class Direction : uint {
+    Up = 0,
+    Front = 1,
+    Left = 2,
+    Back = 3,
+    Right = 4,
+    Down = 5,
+    Diagonal0 = 6,
+    Diagonal1 = 7
 };
+
+constexpr uint toUint(Direction dir) {
+    return static_cast<uint>(dir);
+}
 
 constexpr uint CHUNK_SIZE = 32;
 constexpr uint PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
@@ -46,13 +50,6 @@ const uint BLOCKS_TEXTURES[9][6] = {
     {0, 8, 8, 8, 8, 0},
 };
 
-const int DIRECTION_ENCODE[40] = {
-    0, 0, 0, 0, 0, 0, 0, 0,
-    1, 0, 0, 0, 1, 0, 0, 0,
-    0, 1, 0, -1, 0, CHUNK_SIZE - 1, 0, 0,
-    -1, 0, CHUNK_SIZE - 1, 0, -1, CHUNK_SIZE - 1, 0, 0,
-    0, -1, CHUNK_SIZE - 1, 1, 0, 0, 0, 0};
-
 static inline bool is_solid(uint block) {
     return (block & 0x8000'0000) != 0;
 }
@@ -66,13 +63,9 @@ static inline uint decode_block_id(uint id) {
 }
 
 struct dir_xy {
-    int x = 0;
-    int y = 0;
+    int x;
+    int y;
 
-    inline void set(int x, int y) {
-        this->x = x;
-        this->y = y;
-    }
     inline void rotate_ccw() {
         int temp_x = x;
         x = -y;
@@ -91,15 +84,15 @@ struct array_3d {
         this->sy = sy;
     }
 
-    inline uint is_solid_at(uint idx) {
+    inline uint is_solid_at(uint idx) const {
         return (*(this->data + idx)) >> 31;
     }
 
-    inline uint get_xyz(uint x, uint y, uint z) {
+    inline uint get_xyz(uint x, uint y, uint z) const {
         return *(this->data + (z * this->plane_size + y * this->sy + x));
     }
 
-    inline uint get_hxy(uint h, uint x, uint y) {
+    inline uint get_hxy(uint h, uint x, uint y) const {
         return *(this->data + (h * this->plane_size + y * this->sy + x));
     }
 
@@ -111,11 +104,11 @@ struct array_3d {
         *(this->data + (h * this->plane_size + y * this->sy + x)) = value;
     }
 
-    inline uint plane_idx(uint plane) {
+    inline uint plane_idx(uint plane) const {
         return plane * this->plane_size;
     }
 
-    inline uint row_idx(uint plane, uint row) {
+    inline uint row_idx(uint plane, uint row) const {
         return plane * this->plane_size + row * this->sy;
     }
 
@@ -123,7 +116,7 @@ struct array_3d {
         *(this->data + idx) = value;
     }
 
-    inline uint get_idx(uint idx) {
+    inline uint get_idx(uint idx) const {
         return *(this->data + idx);
     }
 
@@ -136,73 +129,46 @@ struct array_3d {
     }
 };
 
+constexpr uint64 X_PLUS_1 = 1;
+constexpr uint64 Y_PLUS_1 = (1 << 7);
+constexpr uint64 Z_PLUS_1 = (1 << 14);
+
 constexpr uint64 merge_bits_width = 1ull << 32;
 constexpr uint64 merge_bits_height = 1ull << 39;
 constexpr uint64 merge_bits_width_height = merge_bits_width | merge_bits_height;
 
-consteval int64 merge_vector_w_bits(Direction dir) {
-    return (MERGE_VECTOR_W[dir][0] << 0) | (MERGE_VECTOR_W[dir][1] << 7) | (MERGE_VECTOR_W[dir][2] << 14);
+consteval uint64 merge_vector_w_bits(Direction dir) {
+    return (static_cast<uint64>(MERGE_VECTOR_W[toUint(dir)][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[toUint(dir)][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_W[toUint(dir)][2]) << 14);
 };
 
-consteval int64 merge_vector_h_bits(Direction dir) {
-    return (MERGE_VECTOR_H[dir][0] << 0) | (MERGE_VECTOR_H[dir][1] << 7) | (MERGE_VECTOR_H[dir][2] << 14);
+consteval uint64 merge_vector_h_bits(Direction dir) {
+    return (static_cast<uint64>(MERGE_VECTOR_H[toUint(dir)][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[toUint(dir)][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_H[toUint(dir)][2]) << 14);
+};
+
+consteval uint64 merge_vector_wh_bits(Direction dir) {
+    return merge_vector_w_bits(dir) + merge_vector_h_bits(dir);
 };
 
 consteval uint64 vertex_offset_bits(Direction dir) {
-    return (VERTEX_OFFSETS[dir][0] << 0) | (VERTEX_OFFSETS[dir][1] << 7) | (VERTEX_OFFSETS[dir][2] << 14);
+    return (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][1]) << 7) + (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][2]) << 14);
 };
 
-template<Direction dir>
-__attribute__((always_inline)) static inline
-void encode_face(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
+template <Direction dir>
+__attribute__((always_inline)) static inline void encode_face(uint64* __restrict & out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    const int64 mw  = merge_vector_w_bits(dir);
-    const int64 mh = merge_vector_h_bits(dir);
+    constexpr uint64 mw = merge_vector_w_bits(dir);
+    constexpr uint64 mh = merge_vector_h_bits(dir);
+    constexpr uint64 mwh = merge_vector_wh_bits(dir);
 
     uint64 v0 = pos_bits | bits | cs0;
     uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }        
-    out += 6;
-}
+    uint64 v2 = pos_bits + mwh | bits | cs2 | merge_bits_width_height;
+    uint64 v3 = pos_bits + mh | bits | cs3 | merge_bits_height;
 
-void encode_face_up(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = 1;
-    const int64 mh = 128;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
     if (cs0 + cs2 > cs1 + cs3) {
         out[0] = v0;
         out[1] = v1;
@@ -218,262 +184,8 @@ void encode_face_up(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) 
         out[4] = v3;
         out[5] = v0;
     }
-        
     out += 6;
 }
-
-void encode_face_front(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = 1;
-    const int64 mh = 16384;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }
-        
-    out += 6;
-}
-
-void encode_face_left(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = -128;
-    const int64 mh = 16384;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }
-        
-    out += 6;
-}
-
-void encode_face_back(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = -1;
-    const int64 mh = 16384;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }
-        
-    out += 6;
-}
-
-void encode_face_right(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = 128;
-    const int64 mh = 16384;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }
-        
-    out += 6;
-}
-
-void encode_face_down(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = 1;
-    const int64 mh = -128;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }
-        
-    out += 6;
-}
-
-void encode_face_diagonal0(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = 129;
-    const int64 mh = 16384;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }
-        
-    out += 6;
-}
-
-void encode_face_diagonal1(uint64*& out, uint64 pos_bits, uint64 bits, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
-
-    const int64 mw  = -127;
-    const int64 mh = 16384;
-
-  // v0
-    uint64 v0 = pos_bits | bits | cs0;
-    // v1
-    uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
-    // v2
-    uint64 v2 = pos_bits + mw + mh | bits  | cs2  | merge_bits_width | merge_bits_height;
-    // v0 
-    uint64 v3 = pos_bits + mh | bits  | cs3  | merge_bits_height;
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    }
-        
-    out += 6;
-}
-
 
 uint complete(uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
     uint nWater = mesh_water_ptr - mesh_data_water_base;
@@ -483,21 +195,74 @@ uint complete(uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64
     }
     return (nSolid + nWater) * 2;
 }
-constexpr uint64 X_PLUS_1 = 1;
-constexpr uint64 Y_PLUS_1 = (1 << 7);
-constexpr uint64 Z_PLUS_1 = (1 << 14);
 
+template <Direction dir>
+struct ao_access;
+
+template <>
+struct ao_access<Direction::Up> {
+    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+        return data.get_hxy((h + 1), (x + d_xy.x), (y + d_xy.y));
+    }
+};
+
+template <>
+struct ao_access<Direction::Down> {
+    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+        return data.get_hxy((h - 1), (x + d_xy.x), (y + d_xy.y));
+    }
+};
+
+template <>
+struct ao_access<Direction::Front> {
+    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+        return data.get_hxy((h + d_xy.y), (x + d_xy.x), (y - 1));
+    }
+};
+
+template <>
+struct ao_access<Direction::Left> {
+    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+        return data.get_hxy((h + d_xy.y), (x - 1), (y - d_xy.x));
+    }
+};
+
+template <>
+struct ao_access<Direction::Back> {
+    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+        return data.get_hxy((h + d_xy.y), (x - d_xy.x), (y + 1));
+    }
+};
+
+template <>
+struct ao_access<Direction::Right> {
+    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+        return data.get_hxy((h + d_xy.y), (x + 1), (y + d_xy.x));
+    }
+};
+
+template <Direction dir>
+__attribute__((always_inline)) static inline uint compute_ao_shadows(const array_3d& data, uint h, uint x, uint y) {
+    dir_xy s_d0{-1, 0};
+    dir_xy s_d1{0, -1};
+    dir_xy c_d{-1, -1};
+    uint shadows = 0;
+    for (uint v = 0; v < 4; v++) {
+        uint s0 = is_solid_int(ao_access<dir>::get(data, s_d0, h, x, y));
+        uint s1 = is_solid_int(ao_access<dir>::get(data, s_d1, h, x, y));
+        uint c = is_solid_int(ao_access<dir>::get(data, c_d, h, x, y));
+        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+        s_d0.rotate_ccw();
+        s_d1.rotate_ccw();
+        c_d.rotate_ccw();
+    }
+    return shadows;
+}
 
 extern "C"
     __attribute__((export_name("create_mesh")))
     uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_mesh_ptr) {
-    dir_xy side_dir0;
-    dir_xy side_dir1;
-    dir_xy corner_dir;
-    // out_mesh_ptr = (uint64*)__builtin_assume_aligned(out_mesh_ptr, 16);
-    // in_chunk_data_ptr = (uint*)__builtin_assume_aligned(in_chunk_data_ptr, 4);
-
     uint64* mesh_solid_ptr = out_mesh_ptr;
     uint64* mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64;
 
@@ -520,28 +285,13 @@ extern "C"
                     if (is_water && above == BLOCK_WATER) {
                         continue;
                     }
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
                     uint shadows = 0;
                     if (!is_water) {
-                        for (uint v = 0; v < 4; v++) {
-                            uint s0 = is_solid_int(data.get_hxy((h + 1), (x + side_dir0.x), (y + side_dir0.y)));
-                            uint s1 = is_solid_int(data.get_hxy((h + 1), (x + side_dir1.x), (y + side_dir1.y)));
-                            uint c = is_solid_int(data.get_hxy((h + 1), (x + corner_dir.x), (y + corner_dir.y)));
-                            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                            side_dir0.rotate_ccw();
-                            side_dir1.rotate_ccw();
-                            corner_dir.rotate_ccw();
-                        }
+                        shadows = compute_ao_shadows<Direction::Up>(data, h, x, y);
                     }
-                    //0 | (texture_id & 0b01111'1111) << 19 | 0
                     const uint64 block_texture = block_textures[0];
                     uint64 bits = block_texture << 51 | (0ull << 48);
-                    encode_face_up(face_buffer,
-                                   pos_bits + Z_PLUS_1,
-                                   bits,
-                                   shadows);
+                    encode_face<Direction::Up>(face_buffer, pos_bits + Z_PLUS_1, bits, shadows);
                 }
 
                 if (is_water) {
@@ -549,114 +299,38 @@ extern "C"
                 }
 
                 if (!is_solid(data.get_hxy(h - 1, x, y))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
-                    uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h - 1), (x + side_dir0.x), (y - side_dir0.y)));
-                        uint s1 = is_solid_int(data.get_hxy((h - 1), (x + side_dir1.x), (y - side_dir1.y)));
-                        uint c = is_solid_int(data.get_hxy((h - 1), (x + corner_dir.x), (y - corner_dir.y)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
-
+                    uint shadows = compute_ao_shadows<Direction::Down>(data, h, x, y);
                     const uint64 block_texture = block_textures[5];
                     uint64 bits = block_texture << 51 | (5ull << 48);
-                    encode_face_down(face_buffer,
-                                   pos_bits + Y_PLUS_1,
-                                   bits,
-                                   shadows);
+                    encode_face<Direction::Down>(face_buffer, pos_bits + Y_PLUS_1, bits, shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y - 1))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
-                    uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + side_dir0.x), (y - 1)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + side_dir1.x), (y - 1)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + corner_dir.x), (y - 1)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    uint shadows = compute_ao_shadows<Direction::Front>(data, h, x, y);
                     const uint64 block_texture = block_textures[1];
                     uint64 bits = block_texture << 51 | (1ull << 48);
-                    encode_face_front(face_buffer,
-                                   pos_bits,
-                                   bits,
-                                   shadows);
+                    encode_face<Direction::Front>(face_buffer, pos_bits, bits, shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x - 1, y))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
-                    uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - 1), (y - side_dir0.x)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - 1), (y - side_dir1.x)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - 1), (y - corner_dir.x)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    uint shadows = compute_ao_shadows<Direction::Left>(data, h, x, y);
                     const uint64 block_texture = block_textures[2];
                     uint64 bits = block_texture << 51 | (2ull << 48);
-                    encode_face_left(face_buffer,
-                                   pos_bits + Y_PLUS_1,
-                                   bits,
-                                   shadows);
+                    encode_face<Direction::Left>(face_buffer, pos_bits + Y_PLUS_1, bits, shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y + 1))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
-                    uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x - side_dir0.x), (y + 1)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x - side_dir1.x), (y + 1)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x - corner_dir.x), (y + 1)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
-                   const uint64 block_texture = block_textures[3];
+                    uint shadows = compute_ao_shadows<Direction::Back>(data, h, x, y);
+                    const uint64 block_texture = block_textures[3];
                     uint64 bits = block_texture << 51 | (3ull << 48);
-                    encode_face_back(face_buffer,
-                                   pos_bits + X_PLUS_1 + Y_PLUS_1,
-                                   bits,
-                                   shadows);
+                    encode_face<Direction::Back>(face_buffer, pos_bits + X_PLUS_1 + Y_PLUS_1, bits, shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
-                    side_dir0.set(-1, 0);
-                    side_dir1.set(0, -1);
-                    corner_dir.set(-1, -1);
-                    uint shadows = 0;
-                    for (uint v = 0; v < 4; v++) {
-                        uint s0 = is_solid_int(data.get_hxy((h + side_dir0.y), (x + 1), (y + side_dir0.x)));
-                        uint s1 = is_solid_int(data.get_hxy((h + side_dir1.y), (x + 1), (y + side_dir1.x)));
-                        uint c = is_solid_int(data.get_hxy((h + corner_dir.y), (x + 1), (y + corner_dir.x)));
-                        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-                        side_dir0.rotate_ccw();
-                        side_dir1.rotate_ccw();
-                        corner_dir.rotate_ccw();
-                    }
+                    uint shadows = compute_ao_shadows<Direction::Right>(data, h, x, y);
                     const uint64 block_texture = block_textures[4];
                     uint64 bits = block_texture << 51 | (4ull << 48);
-                    encode_face_right(face_buffer,
-                                   pos_bits + X_PLUS_1,
-                                   bits,
-                                   shadows);
+                    encode_face<Direction::Right>(face_buffer, pos_bits + X_PLUS_1, bits, shadows);
                 }
             }
         }
