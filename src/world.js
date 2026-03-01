@@ -2,8 +2,9 @@ import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, Chun
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
 import { Logger } from "./logging.js";
 import { UIntMesh } from "./mesher/mesher.js";
-import { UIntChunkMesherQ } from "./mesher/uIntMesher.js";
+import { UIntWasmMesher } from "./mesher/uIntWasmMesher.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
+await UIntWasmMesher.init();
 const logger = new Logger("World");
 
 const CHUNK_RENDER_DIST = 6;
@@ -101,7 +102,7 @@ export class World {
     #pos = fvec3();
     #chunkPos = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
     #chunkPosChanged = false;
-    #quickMesher = new UIntChunkMesherQ();
+    #quickMesher = new UIntWasmMesher({ quick: true });
 
     /**@type {Array<Vec3>} */
     #rangeDeltas;
@@ -467,7 +468,7 @@ export class World {
                 return entry.chunk.data;
             }, cx, cy, cz);
         const beforeMesh = performance.now();
-        const mesh = this.#quickMesher.createMeshes(entry.position, chunkDataExtended);
+        const mesh = this.#quickMesher.createMesh(entry.position, chunkDataExtended);
         entry.chunk.mesh?.dispose();
         const uintMesh = UIntMesh.load(mesh.input, mesh.mTranslation);
         entry.chunk.mesh = uintMesh;
