@@ -6,24 +6,26 @@ export class UIntWasmMesher extends UIntMesher {
     #quick = false;
     #mesherWasmFunction;
     #heapBase;
+    #mem;
 
     constructor({ quick = false } = {}) {
         super();
         this.#quick = quick;
         this.#mesherWasmFunction = quick ? UIntWasmMesher.wasmCreateMeshQ : UIntWasmMesher.wasmCreateMesh;
         this.#heapBase = quick ? UIntWasmMesher._heap_baseQ : UIntWasmMesher._heap_base;
+        this.#mem = quick ? UIntWasmMesher.memQ : UIntWasmMesher.mem;
     }
 
     mesh(chunkData) {
         const MAX_FACES = 32 * 32 * 32 * 3;
         const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
-        const input = new Uint32Array(UIntWasmMesher.mem.buffer, this.#heapBase, chunkData.data.length);
+        const input = new Uint32Array(this.#mem.buffer, this.#heapBase, chunkData.data.length);
         input.set(chunkData.data);
         const len = this.#mesherWasmFunction(
             this.#heapBase,
             this.#heapBase + input.byteLength
         )
-        const output = new Uint32Array(UIntWasmMesher.mem.buffer, this.#heapBase + input.byteLength, OUTPUT_SIZE / 4);
+        const output = new Uint32Array(this.#mem.buffer, this.#heapBase + input.byteLength, OUTPUT_SIZE / 4);
         const trimmedOutput = new Uint32Array(len)
         trimmedOutput.set(output.subarray(0, len));
         return trimmedOutput;
@@ -59,13 +61,18 @@ export class UIntWasmMesher extends UIntMesher {
             maximum: initialPages,
         });
 
+        const memQ = new WebAssembly.Memory({
+            initial: initialPages,
+            maximum: initialPages,
+        });
+
         // UIntWasmMesher.#outputSize = OUTPUT_SIZE;
 
         const uIntWasmMesherQResult = await WebAssembly.instantiateStreaming(
             await fetch(Resources.relativeToRoot("./mesher/uIntWasmMesherQ.wasm")),
             {
                 env: {
-                    memory: mem
+                    memory: memQ
                 }
             }
         );
@@ -85,5 +92,6 @@ export class UIntWasmMesher extends UIntMesher {
         UIntWasmMesher.wasmCreateMesh = uIntWasmMesherResult.instance.exports.create_mesh;
         UIntWasmMesher.wasmCreateMeshQ = uIntWasmMesherQResult.instance.exports.create_mesh;
         UIntWasmMesher.mem = mem;
+        UIntWasmMesher.memQ = memQ;
     }
 }
