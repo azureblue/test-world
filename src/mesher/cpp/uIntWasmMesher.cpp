@@ -8,15 +8,15 @@ constexpr int DIRECTION_ENCODE[40] = {
     0, -1, CHUNK_SIZE - 1, 1, 0, 0, 0, 0};
 
 constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
-template <Direction dir>
+template <Direction DIR>
 __attribute__((always_inline)) static inline void encode_face(uint64* __restrict& out, uint64 pos_bits, uint64 w, uint64 h, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    uint64 mw = merge_vector_w_bits(dir) * w;
-    uint64 mh = merge_vector_h_bits(dir) * h;
+    uint64 mw = merge_vector_w_bits(DIR) * w;
+    uint64 mh = merge_vector_h_bits(DIR) * h;
     uint64 mwh = mw + mh;
     uint64 mbw = merge_bits_width * w;
     uint64 mbh = merge_bits_height * h;
@@ -27,19 +27,19 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     uint64 v3 = pos_bits + mh | bits | cs3 | mbh;
 
     if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
         out[0] = v1;
         out[1] = v2;
         out[2] = v3;
         out[3] = v1;
         out[4] = v3;
         out[5] = v0;
+    } else {
+        out[0] = v0;
+        out[1] = v1;
+        out[2] = v2;
+        out[3] = v0;
+        out[4] = v2;
+        out[5] = v3;
     }
     out += 6;
 }
@@ -83,7 +83,7 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
 template <>
 inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     uint x = layer_x;
-    uint y = layer_y;    
+    uint y = layer_y;
     uint h = layer_h + 1;
     uint64 pos_bits = (h << 14) | (y << 7) | x;
     uint64 texture_id = data_texture_shadows >> 8;
@@ -99,7 +99,7 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
 template <>
 inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     uint x = layer_x;
-    uint y = (CHUNK_SIZE - 1) - layer_y + 1;    
+    uint y = (CHUNK_SIZE - 1) - layer_y + 1;
     uint h = layer_h;
     uint64 pos_bits = (h << 14) | (y << 7) | x;
     uint64 texture_id = data_texture_shadows >> 8;
@@ -176,7 +176,7 @@ void merge_top_down_faces(face_buffers& buffer, array_3d& layers, uint real_h) {
     for (uint y = 0; y < CHUNK_SIZE; y++) {
         current_row_idx = (y & 1) * CHUNK_SIZE;
         top_row_idx = (CHUNK_SIZE - current_row_idx);
-        uint row_idx = layers.row_idx(dir_i, y);
+        uint row_idx = layers.row_idx(toUint(DIR), y);
         for (uint i = 0; i < CHUNK_SIZE; i++) {
             t_c[(current_row_idx + i)] = layers.get_idx(row_idx + i);
         }
@@ -266,7 +266,6 @@ extern "C"
         .mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64,
     };
 
-
     array_3d data(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E);
     uint layers_data[CHUNK_SIZE * CHUNK_SIZE * 12];
     array_3d layers(layers_data, CHUNK_SIZE, CHUNK_SIZE, 12);
@@ -348,13 +347,12 @@ extern "C"
             }
         }
 
+        merge_top_down_faces<Direction::Up>(buffers, layers, real_h);
+        merge_top_down_faces<Direction::Down>(buffers, layers, real_h);
         merge_side_faces<Direction::Front>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
         merge_side_faces<Direction::Left>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
         merge_side_faces<Direction::Back>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
         merge_side_faces<Direction::Right>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
-
-        merge_top_down_faces<Direction::Up>(buffers, layers, real_h);
-        merge_top_down_faces<Direction::Down>(buffers, layers, real_h);
     }
 
     merge_side_faces_finish<Direction::Front>(buffers, layers, current_layer_offset);

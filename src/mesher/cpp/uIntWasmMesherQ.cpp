@@ -1,15 +1,15 @@
 #include "common.hpp"
 
-template <Direction dir>
+template <Direction DIR>
 __attribute__((always_inline)) static inline void encode_face(uint64* __restrict & out, uint64 pos_bits, uint64 bits, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
     uint64 cs1 = (shadows << 57) & 0x1800000000000000;
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    constexpr uint64 mw = merge_vector_w_bits(dir);
-    constexpr uint64 mh = merge_vector_h_bits(dir);
-    constexpr uint64 mwh = merge_vector_wh_bits(dir);
+    constexpr uint64 mw = merge_vector_w_bits(DIR);
+    constexpr uint64 mh = merge_vector_h_bits(DIR);
+    constexpr uint64 mwh = merge_vector_wh_bits(DIR);
 
     uint64 v0 = pos_bits | bits | cs0;
     uint64 v1 = pos_bits + mw | bits | cs1 | merge_bits_width;
@@ -17,19 +17,19 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     uint64 v3 = pos_bits + mh | bits | cs3 | merge_bits_height;
 
     if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    } else {
         out[0] = v1;
         out[1] = v2;
         out[2] = v3;
         out[3] = v1;
         out[4] = v3;
         out[5] = v0;
+    } else {
+        out[0] = v0;
+        out[1] = v1;
+        out[2] = v2;
+        out[3] = v0;
+        out[4] = v2;
+        out[5] = v3;
     }
     out += 6;
 }

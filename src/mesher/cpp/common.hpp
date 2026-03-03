@@ -43,7 +43,6 @@ constexpr uint WINDING[4][6] = {{0, 1, 2, 0, 2, 3}, {3, 2, 0, 2, 1, 0}, {1, 2, 3
 constexpr uint MERGE_MASKS_W[4] = {0, 1, 1, 0};
 constexpr uint MERGE_MASKS_H[4] = {0, 0, 1, 1};
 
-
 inline constexpr uint BLOCKS_TEXTURES[9][6] = {
     {0, 0, 0, 0, 0, 0},
     {1, 1, 1, 1, 1, 1},
@@ -161,62 +160,49 @@ consteval uint64 vertex_offset_bits(Direction dir) {
     return (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][1]) << 7) + (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][2]) << 14);
 };
 
-
 template <Direction dir>
-struct ao_access;
+__attribute__((always_inline)) static inline uint ao_get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y);
 
 template <>
-struct ao_access<Direction::Up> {
-    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
-        return data.get_hxy((h + 1), (x + d_xy.x), (y + d_xy.y));
-    }
-};
+__attribute__((always_inline)) inline uint ao_get<Direction::Up>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+    return data.get_hxy((h + 1), (x + d_xy.x), (y + d_xy.y));
+}
 
 template <>
-struct ao_access<Direction::Down> {
-    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
-        return data.get_hxy((h - 1), (x + d_xy.x), (y + d_xy.y));
-    }
-};
+__attribute__((always_inline)) inline uint ao_get<Direction::Down>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+    return data.get_hxy((h - 1), (x + d_xy.x), (y + d_xy.y));
+}
 
 template <>
-struct ao_access<Direction::Front> {
-    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
-        return data.get_hxy((h + d_xy.y), (x + d_xy.x), (y - 1));
-    }
-};
+__attribute__((always_inline)) inline uint ao_get<Direction::Front>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+    return data.get_hxy((h + d_xy.y), (x + d_xy.x), (y - 1));
+}
 
 template <>
-struct ao_access<Direction::Left> {
-    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
-        return data.get_hxy((h + d_xy.y), (x - 1), (y - d_xy.x));
-    }
-};
+__attribute__((always_inline)) inline uint ao_get<Direction::Left>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+    return data.get_hxy((h + d_xy.y), (x - 1), (y - d_xy.x));
+}
 
 template <>
-struct ao_access<Direction::Back> {
-    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
-        return data.get_hxy((h + d_xy.y), (x - d_xy.x), (y + 1));
-    }
-};
+__attribute__((always_inline)) inline uint ao_get<Direction::Back>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+    return data.get_hxy((h + d_xy.y), (x - d_xy.x), (y + 1));
+}
 
 template <>
-struct ao_access<Direction::Right> {
-    __attribute__((always_inline)) static inline uint get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
-        return data.get_hxy((h + d_xy.y), (x + 1), (y + d_xy.x));
-    }
-};
+__attribute__((always_inline)) inline uint ao_get<Direction::Right>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+    return data.get_hxy((h + d_xy.y), (x + 1), (y + d_xy.x));
+}
 
-template <Direction dir>
+template <Direction DIR>
 __attribute__((always_inline)) static inline uint compute_ao_shadows(const array_3d& data, uint h, uint x, uint y) {
     dir_xy s_d0{-1, 0};
     dir_xy s_d1{0, -1};
     dir_xy c_d{-1, -1};
-    uint shadows = 0;
+    uint shadows = 0;    
     for (uint v = 0; v < 4; v++) {
-        uint s0 = is_solid_int(ao_access<dir>::get(data, s_d0, h, x, y));
-        uint s1 = is_solid_int(ao_access<dir>::get(data, s_d1, h, x, y));
-        uint c = is_solid_int(ao_access<dir>::get(data, c_d, h, x, y));
+        uint s0 = is_solid_int(ao_get<DIR>(data, s_d0, h, x, y));
+        uint s1 = is_solid_int(ao_get<DIR>(data, s_d1, h, x, y));
+        uint c = is_solid_int(ao_get<DIR>(data, c_d, h, x, y));
         shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
         s_d0.rotate_ccw();
         s_d1.rotate_ccw();
