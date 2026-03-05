@@ -232,6 +232,12 @@ export class IVec3 {
         this.data[2] = z;
     }
 
+    set(x, y, z) {
+        this.data[0] = x;
+        this.data[1] = y;
+        this.data[2] = z;
+    }
+
     get x() {
         return this.data[0];
     }
@@ -365,6 +371,12 @@ export class DirXY {
 
 export class Vec3 {
     constructor(x, y, z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+
+    set(x, y, z) {
         this.x = x;
         this.y = y;
         this.z = z;
