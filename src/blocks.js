@@ -63,7 +63,7 @@ const BLOCKS = [
     new Block(5, "block_rock", [5, 5, 5, 5, 5, 5], true),
     new Block(6, "block_water", [6, 6, 6, 6, 6, 6], false),
     new Block(7, "block_sand", [7, 7, 7, 7, 7, 7], true),
-    new Block(8, "grass_short", [0, 8, 8, 8, 8, 0], true)
+    new Block(8, "block_grass_short", [0, 8, 8, 8, 8, 0], true)
 ]
 Object.freeze(BLOCKS);
 
