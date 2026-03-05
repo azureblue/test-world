@@ -418,9 +418,9 @@ export class ChunkManager {
         const meshTime = perfDiff(now);
         this.#avgTime.add(meshTime);
         if (meshData.input.length > 0) {
-            Logger.log(() => `m: ${meshTime.toFixed(1)}, s: ${meshData.input.length}`);
+            // Logger.log(() => `m: ${meshTime.toFixed(1)}, s: ${meshData.input.length}`);
             // console.log(`data:${meshData.input.length}, average mesh time: ${this.#avgTime.average().toFixed(0)} ms`);
-            Logger.log(() => `${this.#avgTime.average().toFixed(4)}`);
+            // Logger.log(() => `${this.#avgTime.average().toFixed(4)}`);
         }
 
 
