@@ -11,26 +11,6 @@ const CHUNK_RENDER_DIST = 6;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * 4;
 
-
-export class BlockLocation {
-    constructor() {
-        this.chunkPos = vec3();
-        this.blockInChunkPos = vec3();
-    }
-
-    realX() {
-        return this.chunkPos.x * CHUNK_SIZE + this.blockInChunkPos.x;
-    }
-
-    realY() {
-        return this.chunkPos.y * CHUNK_SIZE + this.blockInChunkPos.z;
-    }
-
-    realZ() {
-        return this.chunkPos.z * CHUNK_SIZE + this.blockInChunkPos.y;
-    }
-}
-
 class ChunkEntry {
     /**@type {Vec3} */
     position;
@@ -91,8 +71,6 @@ class ChunkLoadPromise {
         });
     }
 }
-
-const tmpBlockLocation = new BlockLocation();
 
 export class World {
     #frame = 0;
@@ -250,13 +228,16 @@ export class World {
         return true;
     }
 
-    moveTo(x, y, z) {
+    /**
+     * World coordinates, not chunk coordinates
+     */
+    moveToWorldPos(x, y, z) {
         this.#pos.x = x;
         this.#pos.y = y;
         this.#pos.z = z;
         const cx = Math.floor(x) >> CHUNK_SIZE_BIT_LEN;
-        const cy = (-Math.ceil(y)) >> CHUNK_SIZE_BIT_LEN;
-        const cz = Math.floor(z) >> CHUNK_SIZE_BIT_LEN;
+        const cy = Math.floor(-z - 1) >> CHUNK_SIZE_BIT_LEN;
+        const cz = Math.floor(y) >> CHUNK_SIZE_BIT_LEN;
         this.#chunkPosChanged = (this.#chunkPos.x !== cx || this.#chunkPos.y !== cy || this.#chunkPos.z !== cz);
 
         this.#chunkPos.x = cx;
@@ -405,7 +386,7 @@ export class World {
         let t = 0;
 
         while (t <= maxDist) {
-            const block = this.blockAtWorldIPos(ivec3(x, y, z));
+            const block = this.blockWorldAt(x, y, z);
             if (block !== 0) {
                 return { hit: true, x, y, z, block };
             }
@@ -445,7 +426,7 @@ export class World {
     removeBlock(pos) {
         performance.mark("removeBlockStart");
         const start = performance.now();
-        
+
         const cx = pos.x >> CHUNK_SIZE_BIT_LEN;
         const cy = pos.z >> CHUNK_SIZE_BIT_LEN;
         const cz = pos.y >> CHUNK_SIZE_BIT_LEN;
@@ -457,7 +438,7 @@ export class World {
             return;
 
         entry.chunk.data.setHXY(bh, bx, by, 0);
-        
+
         const chunkDataExtended = ChunkDataExtended.load(
             (cx, cy, cz) => {
                 const key = pos3ToKey(cx, cy, cz);
@@ -475,21 +456,19 @@ export class World {
         entry.dirty = true;
         const end = performance.now();
         console.log(`before mesh: ${(beforeMesh - start).toFixed(0)} ms, mesh time: ${(end - beforeMesh).toFixed(0)} ms`);
-
-        
     }
 
-    /**
-     * @param {IVec3} worldIPos 
-     */
-    blockAtWorldIPos(worldIPos) {
-        const pos = this.switchBlockPos(worldIPos);
-        const cx = pos.x >> CHUNK_SIZE_BIT_LEN;
-        const cy = pos.z >> CHUNK_SIZE_BIT_LEN;
-        const cz = pos.y >> CHUNK_SIZE_BIT_LEN;
-        const bx = pos.x & 0x1F;
-        const by = pos.z & 0x1F;
-        const bh = pos.y & 0x1F;
+    blockWorldAt(iwx, iwy, iwz) {        
+        return this.blockAt(iwx, -iwz - 1, iwy);
+    }
+     
+    blockAt(ix, iy, iz) {        
+        const cx = ix >> CHUNK_SIZE_BIT_LEN;
+        const cy = iy >> CHUNK_SIZE_BIT_LEN;
+        const cz = iz >> CHUNK_SIZE_BIT_LEN;
+        const bx = ix & 0x1F;
+        const by = iy & 0x1F;
+        const bh = iz & 0x1F;
 
         const entry = this.#chunks.get(pos3ToKey(cx, cy, cz));
         if (entry === undefined || !entry.loaded)
@@ -497,38 +476,106 @@ export class World {
 
         return entry.chunk.data.getHXY(bh, bx, by);
     }
-
-    /**
-     * @param {BlockLocation} blockLocation 
-     * @param {FVec3} pos 
-     */
-    blockLocation(blockLocation, pos) {
-        const cx = Math.floor(pos.x) >> CHUNK_SIZE_BIT_LEN;
-        const cy = (-Math.ceil(pos.z)) >> CHUNK_SIZE_BIT_LEN;
-        const cz = Math.floor(pos.y) >> CHUNK_SIZE_BIT_LEN;
-        const bx = Math.floor(pos.x) & CHUNK_SIZE_MASK;
-        const by = (pos.z <= 0 ? (Math.floor(-pos.z) % CHUNK_SIZE) : CHUNK_SIZE - 1 - (Math.floor(pos.z) % CHUNK_SIZE)) | 0
-        const bh = Math.floor(pos.y) & CHUNK_SIZE_MASK;
-        blockLocation.chunkPos.x = cx;
-        blockLocation.chunkPos.y = cy;
-        blockLocation.chunkPos.z = cz;
-        blockLocation.blockInChunkPos.x = bx;
-        blockLocation.blockInChunkPos.y = by;
-        blockLocation.blockInChunkPos.z = bh;
-    }
-
-    /**
- * @param {FVec3} pos 
- */
-    blockAtPos(pos) {
-        if (pos.y < 0)
-            return 0;
-        return this.blockAtWorldIPos(new IVec3(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z)));
-        // this.blockLocation(tmpBlockLocation, pos);
-        // const chunkPos = tmpBlockLocation.chunkPos;
-        // const blockPos = tmpBlockLocation.blockInChunkPos;
-        // const chunk = this.#chunks.get(posToKey(chunkPos.x, chunkPos.y)).chunk;
-        // return chunk.data.get(blockPos.y, blockPos.x, blockPos.z);
-    }
 }
 
+export class Position {
+    #x; #y; #z;
+
+    constructor(x = 0, y = 0, z = 0, world = false) {
+        if (world) {
+            this.setWorld(x, y, z);
+        } else {
+            this.set(x, y, z);
+        }
+    }
+
+    set(x, y, z) {
+        this.#x = x;
+        this.#y = y;
+        this.#z = z;
+    }
+
+    setWorld(x, y, z) {
+        this.set(x, -z - 1, y);
+    }
+
+    get cx() {
+        return this.#x >> CHUNK_SIZE_BIT_LEN;
+    }
+
+    get cz() {
+        return this.#z >> CHUNK_SIZE_BIT_LEN;
+    }
+
+    get cy() {
+        return this.#y >> CHUNK_SIZE_BIT_LEN;
+    }
+
+    get bx() {
+        return this.#x & CHUNK_SIZE_MASK;
+    }
+
+    get bz() {
+        return this.#z & CHUNK_SIZE_MASK;
+    }
+
+    get by() {
+        return this.#y & CHUNK_SIZE_MASK;
+    }
+
+    get x() {
+        return this.#x;
+    }
+
+    get y() {
+        return this.#y;
+    }
+
+    get z() {
+        return this.#z;
+    }
+
+    get ix() {
+        return Math.floor(this.#x);
+    }
+
+    get iy() {
+        return Math.floor(this.#y);
+    }
+
+    get iz() {
+        return Math.floor(this.#z);
+    }
+
+    get wx() {
+        return this.#x;
+    }
+
+    get wy() {
+        return this.#z;
+    }
+
+    get wz() {
+        return -this.#y - 1;
+    }
+
+    get iwx() {
+        return Math.floor(this.#x);
+    }
+
+    get iwy() {
+        return Math.floor(this.#z);
+    }
+
+    get iwz() {
+        return Math.floor(-this.#y - 1);
+    }
+
+    static from(x, y, z) {
+        return new Position(x, y, z, false);
+    }
+
+    static fromWorld(x, y, z) {
+        return new Position(x, y, z, true);
+    }
+}

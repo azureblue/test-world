@@ -1,12 +1,13 @@
+import { getBlockById } from "./blocks.js";
 import { Camera, FrustumCuller } from "./camera.js";
-import { Projection, FVec3, mat4, fvec3, vec3 } from "./geom.js";
+import { FVec3, mat4, Projection, vec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { KeyboardInput, MouseInput } from "./input.js";
 import { UIntMesh } from "./mesher/mesher.js";
 import { FPSCounter } from "./perf.js";
 import { TextureArray } from "./textures.js";
 import { Replacer, Resources, writeVoxelWireframe } from "./utils.js";
-import { BlockLocation, World } from "./world.js";
+import { Position, World } from "./world.js";
 
 const VIEW_DISTANCE_SQ = (8 * 32) ** 2;
 // const VIEW_DISTANCE_SQ = 409600.0;
@@ -106,17 +107,17 @@ export async function start() {
 
     const mProjection = mat4();
     const mView = mat4();
-    
+
     projection.apply(mProjection);
     const mProjectionView = mat4();
 
-    
+
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
 
     const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
 
-    world.moveTo(0, 100, -0);
-    world.update();
+    // world.moveTo(0, 100, -0);
+    // world.update();
 
     const currentChunk = await world.getCurrentChunk();
     // const peek = currentChunk.peek(0, 0);
@@ -127,17 +128,18 @@ export async function start() {
     const cameraSpeed = 0.5;
 
     let pause = false;
-    
-    const mouseInput = new MouseInput(canvas, true);    
-    const keyboardInput = new KeyboardInput(document.body, 
+
+    const mouseInput = new MouseInput(canvas, true);
+    const keyboardInput = new KeyboardInput(document.body,
         [" ", "w", "a", "s", "d", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Control"], {
-            " ": (pressed) => pressed && (pause = !pause)
-            
-        }
-    ); 
+        " ": (pressed) => pressed && (pause = !pause)
+
+    }
+    );
 
     const fpsCounter = new FPSCounter();
-    const blockLocation = new BlockLocation();
+    const pos = new Position();
+    const lookAtPosition = new Position();
     const chunkVisibleExtra = Symbol('chunkVisibleExtra');
     let raycastBlock = null;
     mouseInput.onMouseDown(() => {
@@ -149,7 +151,7 @@ export async function start() {
             world.removeBlock(logicPos);
         }
     });
-    
+
     function draw() {
         if (pause) {
             requestAnimationFrame(draw);
@@ -172,7 +174,7 @@ export async function start() {
 
         camera.calculateViewMatrix(mView);
         mProjection.mulOut(mView, mProjectionView);
-       
+
 
         chunk0Program.use()
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -180,7 +182,7 @@ export async function start() {
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.projection_view.offset, mProjectionView._values, 0);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.pos.offset, camera.position._values, 0);
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-        world.moveTo(camera.position.x, camera.position.z, camera.position.y);
+        world.moveToWorldPos(camera.position.x, camera.position.y, camera.position.z);
 
         frustumCuller.updatePlanes();
         let allChunks = 0;
@@ -203,12 +205,13 @@ export async function start() {
         });
         gl.bindVertexArray(null);
 
-        const pos = camera.position;
-        const dir = camera.direction;
-        raycastBlock = world.raycasti(pos, dir, 5);
+        const camDir = camera.direction;
+        const camPos = camera.position;
+        pos.setWorld(camPos.x, camPos.y, camPos.z);
+        raycastBlock = world.raycasti(camPos, camDir, 5);
         if (raycastBlock !== null) {
             // gl.disable(gl.DEPTH_TEST);
-            world.blockAtWorldIPos(fvec3(raycastBlock.x, raycastBlock.y, raycastBlock.z));
+            // world.blockWorldAt(raycastBlock.x, raycastBlock.y, raycastBlock.z);
             // console.log(out.value);
             gl.useProgram(blockHighlightProgram.program);
             gl.bindBuffer(gl.ARRAY_BUFFER, bhBuffer);
@@ -221,20 +224,19 @@ export async function start() {
 
 
         if (fpsCounter.getCurrentFrame() % 5 === 0) {
-            world.blockLocation(blockLocation, camera.position);
-            const block = world.blockAtPos(camera.position);
+            const block = world.blockAt(pos.ix, pos.iy, pos.iz);
 
-            statsDiv.textContent = 
-                `position ${pos.x.toFixed(1)}x ${pos.z.toFixed(1)}z ${pos.y.toFixed(1)}y ` +
-                `direction ${dir.x.toFixed(1)}x ${dir.z.toFixed(1)}z ${dir.y.toFixed(1)}y ` +
-                `camera ${camera.pitch.toFixed(1)}p ${camera.yaw.toFixed(1)}y ` +
+            statsDiv.textContent =
+                `world pos ${pos.wx.toFixed(1)}x ${pos.wz.toFixed(1)}z ${pos.wy.toFixed(1)}y ` +
+                `dir ${camDir.x.toFixed(1)}x ${camDir.z.toFixed(1)}z ${camDir.y.toFixed(1)}y ` +
+                `cam ${camera.pitch.toFixed(1)}p ${camera.yaw.toFixed(1)}y ` +
                 `fps ${fpsCounter.fps()} ` +
                 `chunks ${chunksDrawn}/${allChunks}/${world.chunksInView} ` +
-                `chunk x:${blockLocation.chunkPos.x} y:${blockLocation.chunkPos.y} z:${blockLocation.chunkPos.z} ` +
-                `pos x:${blockLocation.blockInChunkPos.x} y:${blockLocation.blockInChunkPos.y} z:${blockLocation.blockInChunkPos.z} ` +
-                `real pos x:${blockLocation.realX()} y:${blockLocation.realY()} z:${blockLocation.realZ()}` +
-                `block ${block} ` +
-                `${raycastBlock === null ? "" : "looking at " + raycastBlock.block + " at " + raycastBlock.x + " " + raycastBlock.y + " " + raycastBlock.z}`;
+                `pos x:${pos.ix} y:${pos.iy} z:${pos.iz} ` +
+                `chunk x:${pos.cx} y:${pos.cy} z:${pos.cz} ` +
+                `local x:${pos.bx} y:${pos.by} z:${pos.bz} ` +
+                `${getBlockById(block).name} ` +
+                `${raycastBlock === null ? "" : "looking at " + getBlockById(raycastBlock.block).name + " at " + raycastBlock.x + " " + raycastBlock.y + " " + raycastBlock.z}`;
         }
         requestAnimationFrame(draw);
         fpsCounter.frame();
