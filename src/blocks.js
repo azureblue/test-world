@@ -23,6 +23,10 @@ export class Block {
         return this.#isSolid;
     }
 
+    get name() {
+        return this.#name;
+    }
+
     get renderable() {
 
     }
@@ -51,7 +55,7 @@ const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
 const BLOCK_WATER = BLOCK_IDS.WATER;
 
 const BLOCKS = [
-    null,
+    new Block(0, "empty", [0, 0, 0, 0, 0, 0], false),
     new Block(1, "block_dirt", [1, 1, 1, 1, 1, 1], true),
     new Block(2, "block_dirtgrass", [3, 2, 2, 2, 2, 1], true),
     new Block(3, "block_grass", [3, 3, 3, 3, 3, 3], true),
