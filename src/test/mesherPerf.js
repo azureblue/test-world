@@ -1,10 +1,22 @@
 import { ChunkData, ChunkDataExtended } from "../chunk.js";
 import { GeneratorPatterns } from "../gen/generator.js";
 import { ivec3 } from "../geom.js";
-import { UIntChunkMesher1, UIntChunkMesherQ } from "../mesher/uIntMesher.js";
 import { UIntWasmMesher } from "../mesher/uIntWasmMesher.js";
 import { Arrays, Float32Buffer } from "../utils.js";
+async function sha1String(arr) {
+    const view = new Uint8Array(
+        arr.buffer,
+        arr.byteOffset,
+        arr.byteLength
+    );
 
+    const hashBuffer = await crypto.subtle.digest("SHA-1", view);
+    const bytes = new Uint8Array(hashBuffer);
+
+    return Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+}
 export async function main() {
     await UIntWasmMesher.init();
 
@@ -34,7 +46,7 @@ export async function main() {
             let sum = 0;
             const reps = 100;
             for (let j = 0; j < reps; j++) {
-                mesher.createMeshes(ivec3(), chunkData);
+                mesher.createMesh(ivec3(), chunkData);
                 const lastMeshTime = mesher.lastMeshTime();
                 times.put(lastMeshTime);
                 sum += lastMeshTime;
@@ -56,7 +68,10 @@ export async function main() {
     console.log(`total test avg: ${(totalTotalSum / totalTotalCount).toFixed(2)} ms`);
     for (let i = 0; i < keys.length; i++) {
         const chunkData = chunkDataE[keys[i]];
-        const meshData = mesher.createMeshes(ivec3(), chunkData);
-         console.log(`${keys[i].padEnd(13)} : mesh size ${meshData.input.length}`);
+        const meshData = mesher.createMesh(ivec3(), chunkData);
+        const hash = await sha1String(meshData.input);
+        console.log(`${keys[i].padEnd(13)} : mesh size ${meshData.input.length.toString().padEnd(7)} ${hash.substring(0, 8)}`);
+        
+        
     }
 }
