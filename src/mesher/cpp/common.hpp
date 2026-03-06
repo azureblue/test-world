@@ -1,7 +1,7 @@
 #pragma once
 #include "int.h"
 
-enum class Direction : uint {
+enum Direction : uint {
     Up = 0,
     Front = 1,
     Left = 2,
@@ -11,10 +11,6 @@ enum class Direction : uint {
     Diagonal0 = 6,
     Diagonal1 = 7
 };
-
-constexpr uint toUint(Direction dir) {
-    return static_cast<uint>(dir);
-}
 
 constexpr uint CHUNK_SIZE = 32;
 constexpr uint PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
@@ -57,11 +53,27 @@ inline constexpr uint BLOCKS_TEXTURES[9][6] = {
 
 constexpr uint WATER_TEXTURE = BLOCKS_TEXTURES[BLOCK_WATER][0];
 
-static inline bool is_solid(uint block) {
-    return (block & 0x8000'0000) != 0;
+__attribute__((always_inline)) static inline uint64 encode_pos_bits(uint h, uint x, uint y) {
+    return h << 14 | y << 7 | x;
 }
 
-static inline uint is_solid_int(uint block) {
+__attribute__((always_inline)) static inline uint64 encode_tex_bits(uint tex_id) {
+    return static_cast<uint64>(tex_id) << 51;
+}
+
+__attribute__((always_inline)) constexpr uint64 encode_dir_bits(Direction dir) {
+    return static_cast<uint64>(dir) << 48;
+}
+
+__attribute__((always_inline)) static inline uint64 encode_dir_tex_bits(Direction dir, const uint (&block_textures)[6]) {
+    return encode_dir_bits(dir) | encode_tex_bits(block_textures[dir]);
+}
+
+static inline bool is_solid(uint block) {
+    return (block & 0x8000'0000u) != 0;
+}
+
+static inline uint is_solid_01(uint block) {
     return block >> 31;
 }
 
@@ -136,20 +148,20 @@ struct array_3d {
     }
 };
 
-constexpr uint64 X_PLUS_1 = 1;
-constexpr uint64 Y_PLUS_1 = (1 << 7);
-constexpr uint64 Z_PLUS_1 = (1 << 14);
+constexpr uint64 POS_BITS_PLUS_1X = 1;
+constexpr uint64 POS_BITS_PLUS_1Y = (1 << 7);
+constexpr uint64 POS_BITS_PLUS_1Z = (1 << 14);
 
-constexpr uint64 merge_bits_width = 1ull << 32;
-constexpr uint64 merge_bits_height = 1ull << 39;
-constexpr uint64 merge_bits_width_height = merge_bits_width | merge_bits_height;
+constexpr uint64 MERGE_BITS_WIDTH = 1ull << 32;
+constexpr uint64 MERGE_BITS_HEIGHT = 1ull << 39;
+constexpr uint64 MERGE_BITS_WIDTH_HEIGHT = MERGE_BITS_WIDTH | MERGE_BITS_HEIGHT;
 
 consteval uint64 merge_vector_w_bits(Direction dir) {
-    return (static_cast<uint64>(MERGE_VECTOR_W[toUint(dir)][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[toUint(dir)][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_W[toUint(dir)][2]) << 14);
+    return (static_cast<uint64>(MERGE_VECTOR_W[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[dir][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_W[dir][2]) << 14);
 };
 
 consteval uint64 merge_vector_h_bits(Direction dir) {
-    return (static_cast<uint64>(MERGE_VECTOR_H[toUint(dir)][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[toUint(dir)][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_H[toUint(dir)][2]) << 14);
+    return (static_cast<uint64>(MERGE_VECTOR_H[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[dir][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_H[dir][2]) << 14);
 };
 
 consteval uint64 merge_vector_wh_bits(Direction dir) {
@@ -157,7 +169,7 @@ consteval uint64 merge_vector_wh_bits(Direction dir) {
 };
 
 consteval uint64 vertex_offset_bits(Direction dir) {
-    return (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][1]) << 7) + (static_cast<uint64>(VERTEX_OFFSETS[toUint(dir)][2]) << 14);
+    return (static_cast<uint64>(VERTEX_OFFSETS[dir][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[dir][1]) << 7) + (static_cast<uint64>(VERTEX_OFFSETS[dir][2]) << 14);
 };
 
 template <Direction dir>
@@ -198,11 +210,11 @@ __attribute__((always_inline)) static inline uint compute_ao_shadows(const array
     dir_xy s_d0{-1, 0};
     dir_xy s_d1{0, -1};
     dir_xy c_d{-1, -1};
-    uint shadows = 0;    
+    uint shadows = 0;
     for (uint v = 0; v < 4; v++) {
-        uint s0 = is_solid_int(ao_get<DIR>(data, s_d0, h, x, y));
-        uint s1 = is_solid_int(ao_get<DIR>(data, s_d1, h, x, y));
-        uint c = is_solid_int(ao_get<DIR>(data, c_d, h, x, y));
+        uint s0 = is_solid_01(ao_get<DIR>(data, s_d0, h, x, y));
+        uint s1 = is_solid_01(ao_get<DIR>(data, s_d1, h, x, y));
+        uint c = is_solid_01(ao_get<DIR>(data, c_d, h, x, y));
         shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
         s_d0.rotate_ccw();
         s_d1.rotate_ccw();
