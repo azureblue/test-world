@@ -11,7 +11,6 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     constexpr uint64 mh = merge_vector_h_bits(DIR);
     constexpr uint64 mwh = merge_vector_wh_bits(DIR);
 
-
     uint64 v0 = bits | cs0;
     uint64 v1 = bits + mw | cs1 | MERGE_BITS_WIDTH;
     uint64 v2 = bits + mwh | cs2 | MERGE_BITS_WIDTH_HEIGHT;
@@ -51,7 +50,7 @@ extern "C"
     uint64* mesh_solid_ptr = out_mesh_ptr;
     uint64* mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64;
 
-    array_3d data(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E);
+    array_3d<CHUNK_SIZE_E> data(in_chunk_data_ptr);
 
     for (uint h = 1; h < CHUNK_SIZE + 1; h++) {
         for (uint y = 1; y < CHUNK_SIZE + 1; y++) {

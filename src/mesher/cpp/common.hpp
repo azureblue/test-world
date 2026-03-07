@@ -15,8 +15,8 @@ enum Direction : uint {
 constexpr uint CHUNK_SIZE = 32;
 constexpr uint PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
 constexpr uint CHUNK_SIZE_E = CHUNK_SIZE + 2;
-constexpr uint MAX_VISIBLE_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint PLANE_SIZE_E = CHUNK_SIZE_E * CHUNK_SIZE_E;
+constexpr uint MAX_VISIBLE_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
 constexpr uint MAX_OUTPUT_UINTS64 = MAX_FACES * 6;
@@ -28,7 +28,6 @@ constexpr uint X = 0;
 constexpr uint Y = 1;
 constexpr uint Z = 2;
 
-constexpr uint UP = 0;
 constexpr uint BLOCK_WATER = 6;
 constexpr uint BLOCK_EMPTY = 0;
 
@@ -92,58 +91,64 @@ struct dir_xy {
     }
 };
 
+template <uint SIZE_XY>
 struct array_3d {
     uint* __restrict data;
-    uint plane_size;
-    uint sy;
+    constexpr static const uint plane_size = SIZE_XY * SIZE_XY;
+    constexpr static const uint sy = SIZE_XY;
 
-    array_3d(uint* data, uint sx, uint sy, uint sz) {
-        this->data = data;
-        this->plane_size = sx * sy;
-        this->sy = sy;
+    array_3d(uint* __restrict data): data(data) {
     }
 
     inline uint is_solid_at(uint idx) const {
-        return (*(this->data + idx)) >> 31;
+        return data[idx] >> 31;
     }
 
     inline uint get_xyz(uint x, uint y, uint z) const {
-        return *(this->data + (z * this->plane_size + y * this->sy + x));
+        return data[z * plane_size + y * sy + x];
     }
 
     inline uint get_hxy(uint h, uint x, uint y) const {
-        return *(this->data + (h * this->plane_size + y * this->sy + x));
+        return data[h * plane_size + y * sy + x];
     }
 
     inline void set_xyz(uint x, uint y, uint z, uint value) {
-        *(this->data + (z * this->plane_size + y * this->sy + x)) = value;
+        data[z * plane_size + y * sy + x] = value;
     }
 
     inline void set_hxy(uint h, uint x, uint y, uint value) {
-        *(this->data + (h * this->plane_size + y * this->sy + x)) = value;
+        data[h * plane_size + y * sy + x] = value;
+    }
+
+    inline uint* get_plane(uint plane) const {
+        return &data[plane * plane_size];
     }
 
     inline uint plane_idx(uint plane) const {
-        return plane * this->plane_size;
+        return plane * plane_size;
     }
 
     inline uint row_idx(uint plane, uint row) const {
-        return plane * this->plane_size + row * this->sy;
+        return plane * plane_size + row * sy;
     }
 
     inline void set_idx(uint idx, uint value) {
-        *(this->data + idx) = value;
+        data[idx] = value;
     }
 
     inline uint get_idx(uint idx) const {
-        return *(this->data + idx);
+        return data[idx];
+    }
+
+    inline uint * __restrict get_ptr_hxy(uint h, uint x, uint y) const {
+        return &data[h * plane_size + y * sy + x];
     }
 
     inline void fill_planes(uint from, uint n, uint value) {
-        uint start = from * this->plane_size;
-        uint end = (from + n) * this->plane_size;
+        uint start = from * plane_size;
+        uint end = (from + n) * plane_size;
         for (uint i = start; i < end; i++) {
-            *(this->data + i) = value;
+            data[i] = value;
         }
     }
 };
@@ -173,40 +178,40 @@ consteval uint64 vertex_offset_bits(Direction dir) {
 };
 
 template <Direction dir>
-__attribute__((always_inline)) static inline uint ao_get(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y);
+__attribute__((always_inline)) static inline uint ao_get(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y);
 
 template <>
-__attribute__((always_inline)) inline uint ao_get<Direction::Up>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+__attribute__((always_inline)) inline uint ao_get<Direction::Up>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + 1), (x + d_xy.x), (y + d_xy.y));
 }
 
 template <>
-__attribute__((always_inline)) inline uint ao_get<Direction::Down>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+__attribute__((always_inline)) inline uint ao_get<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h - 1), (x + d_xy.x), (y + d_xy.y));
 }
 
 template <>
-__attribute__((always_inline)) inline uint ao_get<Direction::Front>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+__attribute__((always_inline)) inline uint ao_get<Direction::Front>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x + d_xy.x), (y - 1));
 }
 
 template <>
-__attribute__((always_inline)) inline uint ao_get<Direction::Left>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+__attribute__((always_inline)) inline uint ao_get<Direction::Left>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x - 1), (y - d_xy.x));
 }
 
 template <>
-__attribute__((always_inline)) inline uint ao_get<Direction::Back>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+__attribute__((always_inline)) inline uint ao_get<Direction::Back>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x - d_xy.x), (y + 1));
 }
 
 template <>
-__attribute__((always_inline)) inline uint ao_get<Direction::Right>(const array_3d& data, const dir_xy& d_xy, uint h, uint x, uint y) {
+__attribute__((always_inline)) inline uint ao_get<Direction::Right>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x + 1), (y + d_xy.x));
 }
 
 template <Direction DIR>
-__attribute__((always_inline)) static inline uint compute_ao_shadows(const array_3d& data, uint h, uint x, uint y) {
+__attribute__((always_inline)) static inline uint compute_ao_shadows(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
     dir_xy s_d0{-1, 0};
     dir_xy s_d1{0, -1};
     dir_xy c_d{-1, -1};
@@ -222,3 +227,132 @@ __attribute__((always_inline)) static inline uint compute_ao_shadows(const array
     }
     return shadows;
 }
+
+// template <Direction DIR>
+// __attribute__((always_inline)) static inline uint compute_ao_shadows(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y);
+
+// template <>
+// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Up>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
+//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
+//     int shadows = 0;
+
+//     c02 = is_solid_01(base[1121]);
+//     c01 = c10 = is_solid_01(base[1122]);
+//     c12 = is_solid_01(base[1123]);
+//     c00 = c31 = is_solid_01(base[1155]);
+//     c11 = c20 = is_solid_01(base[1157]);
+//     c32 = is_solid_01(base[1189]);
+//     c21 = c30 = is_solid_01(base[1190]);
+//     c22 = is_solid_01(base[1191]);
+//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
+//     return shadows;
+// }
+
+// template <>
+// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Front>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
+//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
+//     int shadows = 0;
+
+//     c02 = is_solid_01(base[-1191]);
+//     c01 = c10 = is_solid_01(base[-1190]);
+//     c12 = is_solid_01(base[-1189]);
+//     c00 = c31 = is_solid_01(base[-35]);
+//     c11 = c20 = is_solid_01(base[-33]);
+//     c32 = is_solid_01(base[1121]);
+//     c21 = c30 = is_solid_01(base[1122]);
+//     c22 = is_solid_01(base[1123]);
+//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
+//     return shadows;
+// }
+
+// template <>
+// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Left>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
+//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
+//     int shadows = 0;
+
+//     c12 = is_solid_01(base[-1191]);
+//     c01 = c10 = is_solid_01(base[-1157]);
+//     c02 = is_solid_01(base[-1123]);
+//     c11 = c20 = is_solid_01(base[-35]);
+//     c00 = c31 = is_solid_01(base[33]);
+//     c22 = is_solid_01(base[1121]);
+//     c21 = c30 = is_solid_01(base[1155]);
+//     c32 = is_solid_01(base[1189]);
+//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
+//     return shadows;
+// }
+
+// template <>
+// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Back>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
+//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
+//     int shadows = 0;
+
+//     c12 = is_solid_01(base[-1123]);
+//     c01 = c10 = is_solid_01(base[-1122]);
+//     c02 = is_solid_01(base[-1121]);
+//     c11 = c20 = is_solid_01(base[33]);
+//     c00 = c31 = is_solid_01(base[35]);
+//     c22 = is_solid_01(base[1189]);
+//     c21 = c30 = is_solid_01(base[1190]);
+//     c32 = is_solid_01(base[1191]);
+//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
+//     return shadows;
+// }
+
+// template <>
+// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Right>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
+//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
+//     int shadows = 0;
+
+//     c02 = is_solid_01(base[-1189]);
+//     c01 = c10 = is_solid_01(base[-1155]);
+//     c12 = is_solid_01(base[-1121]);
+//     c00 = c31 = is_solid_01(base[-33]);
+//     c11 = c20 = is_solid_01(base[35]);
+//     c32 = is_solid_01(base[1123]);
+//     c21 = c30 = is_solid_01(base[1157]);
+//     c22 = is_solid_01(base[1191]);
+//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
+//     return shadows;
+// }
+
+// template <>
+// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
+//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
+//     int shadows = 0;
+
+//     c32 = is_solid_01(base[-1191]);
+//     c21 = c30 = is_solid_01(base[-1190]);
+//     c22 = is_solid_01(base[-1189]);
+//     c00 = c31 = is_solid_01(base[-1157]);
+//     c11 = c20 = is_solid_01(base[-1155]);
+//     c02 = is_solid_01(base[-1123]);
+//     c01 = c10 = is_solid_01(base[-1122]);
+//     c12 = is_solid_01(base[-1121]);
+//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
+//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
+//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
+//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
+//     return shadows;
+// }

@@ -110,7 +110,7 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
 }
 
 template <Direction DIR>
-void merge_side_faces(face_buffers& buffer, array_3d& layers, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {    
+void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {    
     uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
     uint layer_start_top = layers.plane_idx(DIR + top_layer_offset);
     uint layer_end_idx = layer_start_current + PLANE_SIZE;
@@ -161,7 +161,7 @@ void merge_side_faces(face_buffers& buffer, array_3d& layers, uint& current_laye
 }
 
 template <Direction DIR>
-void merge_top_down_faces(face_buffers& buffer, array_3d& layers, uint real_h) {
+void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint real_h) {
     uint t_c[CHUNK_SIZE * 2];
 
     for (uint i = 0; i < CHUNK_SIZE * 2; i++) {
@@ -227,7 +227,7 @@ void merge_top_down_faces(face_buffers& buffer, array_3d& layers, uint real_h) {
 }
 
 template <Direction DIR>
-void merge_side_faces_finish(face_buffers& buffer, array_3d& layers, uint& current_layer_offset) {    
+void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset) {    
     const uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
     constexpr uint dir_encode_base_idx = (DIR << 3);
     constexpr int dir_xx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 0];
@@ -261,9 +261,9 @@ extern "C"
         .mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64,
     };
 
-    array_3d data(in_chunk_data_ptr, CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E);
+    array_3d<CHUNK_SIZE_E> data(in_chunk_data_ptr);
     uint layers_data[CHUNK_SIZE * CHUNK_SIZE * 12];
-    array_3d layers(layers_data, CHUNK_SIZE, CHUNK_SIZE, 12);
+    array_3d<CHUNK_SIZE> layers(layers_data);
     layers.fill_planes(6, 5, 0);
 
     uint current_layer_offset = 0;
