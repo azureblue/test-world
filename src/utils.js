@@ -340,12 +340,38 @@ export class Array3D {
         }
     }
 
+    
     setHXY(h, x, y, v) {
         this.data[this.#planeSize * h + y * this.#size + x] = v;
     }
 
+    setBitHXYChecked(h, x, y, bit, v01) {
+        if (h < 0 || h >= this.#height || x < 0 || x >= this.#size || y < 0 || y >= this.#size) {
+            return
+        }
+        this.setBitHXY(h, x, y, bit, v01);
+    }
+
+    setBitHXY(h, x, y, bit, v01) {
+        this.setBitXYZ(x, y, h, bit, v01);
+    }
+
+    setBitXYZ(x, y, z, bit, v01) {
+        const idx = this.#planeSize * z + y * this.#size + x;
+        this.data[idx] ^= (-v01 ^ this.data[idx]) & (1 << bit);
+    }
+
+    getBitHXY(h, x, y, bit) {
+        this.getBitXYZ(x, y, h, bit);
+    }
+
+    getBitXYZ(x, y, z, bit) {
+        const idx = this.#planeSize * z + y * this.#size + x;
+        return (this.data[idx] >>> bit) & 1;
+    }
+
     setXYZ(x, y, z, v) {
-        this.data[this.#planeSize * z + y * this.#size + x] = v;
+        this.setHXY(z, x, y, v);
     }
 
     getHXY(h, x, y) {
@@ -353,7 +379,7 @@ export class Array3D {
     }
 
     getXYZ(x, y, z) {
-        return this.data[this.#planeSize * z + y * this.#size + x];
+        return this.getHXY(z, x, y);
     }
 
     fill(v) {

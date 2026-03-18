@@ -27,6 +27,7 @@ all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm
 	-nostdlib -nostdinc++ \
 	-Wl,--import-memory \
 	-Wl,--export=create_mesh \
+	-Wl,--export=create_mesh_2 \
 	-Wl,--export=__heap_base \
 	-Wl,--no-entry \
 	-Wl,--strip-all \

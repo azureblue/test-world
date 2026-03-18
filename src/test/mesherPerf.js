@@ -1,7 +1,7 @@
 import { ChunkData, ChunkDataExtended } from "../chunk.js";
 import { GeneratorPatterns } from "../gen/generator.js";
 import { ivec3 } from "../geom.js";
-import { UIntWasmMesher } from "../mesher/uIntWasmMesher.js";
+import { UIntWasmMesher, UIntWasmMesher2 } from "../mesher/uIntWasmMesher.js";
 import { Arrays, Float32Buffer } from "../utils.js";
 async function sha1String(arr) {
     const view = new Uint8Array(
@@ -20,15 +20,15 @@ async function sha1String(arr) {
 export async function main() {
     await UIntWasmMesher.init();
 
-    const mesher = new UIntWasmMesher({ quick: false });
+    const mesher = new UIntWasmMesher2({ quick: true });
     let chunkDataE = {
-        fullChecker: ChunkDataExtended.fromChunkData(GeneratorPatterns.fullChecker(new ChunkData())),
-        doubleChecker: ChunkDataExtended.fromChunkData(GeneratorPatterns.doubleChecker(new ChunkData())),
-        fullSolid: ChunkDataExtended.fromChunkData(GeneratorPatterns.fullSolid(new ChunkData())),
-        hStripes: ChunkDataExtended.fromChunkData(GeneratorPatterns.horizontalStripes(new ChunkData())),
-        vStripesY: ChunkDataExtended.fromChunkData(GeneratorPatterns.verticalStripesY(new ChunkData())),
-        vStripesX: ChunkDataExtended.fromChunkData(GeneratorPatterns.verticalStripesX(new ChunkData())),
-        border: ChunkDataExtended.fromChunkData(GeneratorPatterns.border(new ChunkData()))
+        fullChecker: GeneratorPatterns.fullChecker(new ChunkData()),
+        doubleChecker: GeneratorPatterns.doubleChecker(new ChunkData()),
+        fullSolid: GeneratorPatterns.fullSolid(new ChunkData()),
+        hStripes: GeneratorPatterns.horizontalStripes(new ChunkData()),
+        vStripesY: GeneratorPatterns.verticalStripesY(new ChunkData()),
+        vStripesX: GeneratorPatterns.verticalStripesX(new ChunkData()),
+        border: GeneratorPatterns.border(new ChunkData())
     };
     const keys = Object.keys(chunkDataE);
     const times = new Float32Buffer(200);

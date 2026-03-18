@@ -1,15 +1,17 @@
-import { Dir27, fvec3, FVec3, IVec3 } from "./geom.js";
-import { Logger } from "./logging.js";
+import { isSolidInt } from "./blocks.js";
+import { Dir27, DIR27_IDXS, fvec3, FVec3, IVec3 } from "./geom.js";
 import { ChunkMesher } from "./mesher/mesher.js";
 import { Array3D, MovingAverage, perfDiff } from "./utils.js";
 
 export const CHUNK_SIZE_BIT_LEN = 5 | 0;
 export const CHUNK_SIZE = 32 | 0;
+export const PLANE_SIZE = (CHUNK_SIZE * CHUNK_SIZE) | 0;
 export const CHUNK_SIZE_E = CHUNK_SIZE + 2 | 0;
-export const CHUNK_H = 32 | 0;
 export const TEX_ID_BIT_LEN = 9 | 0;
 
 export const CHUNK_SIZE_MASK = (CHUNK_SIZE - 1) | 0;
+
+const DIR27_RAW_OFFSETS = new Int32Array([-1057, -1056, -1055, -1025, -1024, -1023, -993, -992, -991, -33, -32, -31, -1, 0, 1, 31, 32, 33, 991, 992, 993, 1023, 1024, 1025, 1055, 1056, 1057]);
 
 export function posToKey3(cx, cy, cz) {
     return `${cx},${cy},${cz}`;
@@ -18,6 +20,7 @@ export function posToKey3(cx, cy, cz) {
 export class ChunkData extends Array3D {
 
     #bounds = null;
+    adjData = new Array3D(CHUNK_SIZE, CHUNK_SIZE);
     #boundsValid = false;
 
     /**
@@ -37,6 +40,234 @@ export class ChunkData extends Array3D {
             return BLOCK_CHUNK_EDGE;
         return this.getHXY(h, x, y);
     }
+
+    setHXY(h, x, y, v) {
+        super.setHXY(h, x, y, v);
+        // this.setVoxelUpdateBitsXYZ(x, y, h, v);
+    }
+
+    setVoxelHXY(h, x, y, v) {
+        this.setHXY(h, x, y, v);
+        this.setVoxelUpdateBitsXYZ(x, y, h, v);
+    }
+
+    #updateAdjInside() {
+        const data = this.data;
+        const adjData = this.adjData.data;
+        for (let h = 1; h < CHUNK_SIZE - 1; h++)
+            for (let y = 1; y < CHUNK_SIZE - 1; y++)
+                for (let x = 1; x < CHUNK_SIZE - 1; x++) {
+                    const idx = h * PLANE_SIZE + y * CHUNK_SIZE + x;
+                    let bits = 0;
+                    for (let dir27 = 0; dir27 < 27; dir27++) {
+                        const idxOffset = DIR27_RAW_OFFSETS[dir27];
+                        bits |= isSolidInt(data[idx + idxOffset]) << dir27;
+                    }
+                    adjData[idx] = bits;
+                }
+    }
+
+    #updateAdjBorder(dir27Idxs, x, y, z) {
+        const data = this.data;
+        const adjData = this.adjData.data;
+        let bits = 0;
+        const len = dir27Idxs.length;
+        const idx = z * PLANE_SIZE + y * CHUNK_SIZE + x;
+        for (let i = 0; i < len; i++) {
+            const dir27 = dir27Idxs[i];
+            const idxOffset = DIR27_RAW_OFFSETS[dir27];
+            bits |= isSolidInt(data[idx + idxOffset]) << dir27;
+        }
+        adjData[idx] = bits;
+    }
+
+    updateAdjBitsInside() {
+        const E = CHUNK_SIZE - 1;
+        this.#updateAdjInside();
+
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            for (let x = 0; x < CHUNK_SIZE; x++)
+                this.#updateAdjBorder(DIR27_IDXS[4], x, y, 0);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            for (let x = 0; x < CHUNK_SIZE; x++)
+                this.#updateAdjBorder(DIR27_IDXS[10], x, 0, z);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                this.#updateAdjBorder(DIR27_IDXS[12], 0, y, z);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            for (let y = 0; y < CHUNK_SIZE; y++)
+                this.#updateAdjBorder(DIR27_IDXS[14], E, y, z);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            for (let x = 0; x < CHUNK_SIZE; x++)
+                this.#updateAdjBorder(DIR27_IDXS[16], x, E, z);
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            for (let x = 0; x < CHUNK_SIZE; x++)
+                this.#updateAdjBorder(DIR27_IDXS[22], x, y, E);
+        for (let x = 0; x < CHUNK_SIZE; x++)
+            this.#updateAdjBorder(DIR27_IDXS[1], x, 0, 0);
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            this.#updateAdjBorder(DIR27_IDXS[3], 0, y, 0);
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            this.#updateAdjBorder(DIR27_IDXS[5], E, y, 0);
+        for (let x = 0; x < CHUNK_SIZE; x++)
+            this.#updateAdjBorder(DIR27_IDXS[7], x, E, 0);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            this.#updateAdjBorder(DIR27_IDXS[9], 0, 0, z);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            this.#updateAdjBorder(DIR27_IDXS[11], E, 0, z);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            this.#updateAdjBorder(DIR27_IDXS[15], 0, E, z);
+        for (let z = 0; z < CHUNK_SIZE; z++)
+            this.#updateAdjBorder(DIR27_IDXS[17], E, E, z);
+        for (let x = 0; x < CHUNK_SIZE; x++)
+            this.#updateAdjBorder(DIR27_IDXS[19], x, 0, E);
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            this.#updateAdjBorder(DIR27_IDXS[21], 0, y, E);
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            this.#updateAdjBorder(DIR27_IDXS[23], E, y, E);
+        for (let x = 0; x < CHUNK_SIZE; x++)
+            this.#updateAdjBorder(DIR27_IDXS[25], x, E, E);
+        this.#updateAdjBorder(DIR27_IDXS[0], 0, 0, 0);
+        this.#updateAdjBorder(DIR27_IDXS[2], E, 0, 0);
+        this.#updateAdjBorder(DIR27_IDXS[6], 0, E, 0);
+        this.#updateAdjBorder(DIR27_IDXS[8], E, E, 0);
+        this.#updateAdjBorder(DIR27_IDXS[18], 0, 0, E);
+        this.#updateAdjBorder(DIR27_IDXS[20], E, 0, E);
+        this.#updateAdjBorder(DIR27_IDXS[24], 0, E, E);
+        this.#updateAdjBorder(DIR27_IDXS[26], E, E, E);
+    }
+
+    setVoxelUpdateBitsXYZ(x, y, z, v) {
+        const bit = isSolidInt(v);
+        for (let dir27 = 0; dir27 < 27; dir27++) {
+            const dirOffset = Dir27[dir27];
+            const adjH = z + dirOffset.z;
+            const adjX = x + dirOffset.x;
+            const adjY = y + dirOffset.y;
+
+            this.adjData.setBitHXYChecked(adjH, adjX, adjY, 27 - dir27 - 1, bit);
+        }
+        this.#boundsValid = false;
+    }
+
+
+    /**
+     * @param {number} dir27
+     * @param {ChunkData} chunkData
+     */
+    updateAdjData(dir27, chunkData) {
+        const E = CHUNK_SIZE - 1;
+        const dirOffset = Dir27[dir27];
+        const opDirOffset = Dir27[26 - dir27];
+
+        switch (dir27) {
+            case 0:
+            case 2:
+            case 6:
+            case 8:
+            case 18:
+            case 20:
+            case 24:
+            case 26:
+                const dx = ((dirOffset.x + 1) >> 1) * 31;
+                const dy = ((dirOffset.y + 1) >> 1) * 31;
+                const dz = ((dirOffset.z + 1) >> 1) * 31;
+                const sx = ((opDirOffset.x + 1) >> 1) * 31;
+                const sy = ((opDirOffset.y + 1) >> 1) * 31;
+                const sz = ((opDirOffset.z + 1) >> 1) * 31;
+                this.adjData.setBitXYZ(dx, dy, dz, dir27, isSolidInt(chunkData.getXYZ(sx, sy, sz)));
+                break;
+
+            case 4:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setVoxelUpdateBitsXYZ(x, y, -1, chunkData.getXYZ(x, y, E));
+                break;
+            case 10:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setVoxelUpdateBitsXYZ(x, -1, z, chunkData.getXYZ(x, E, z));
+                break;
+            case 12:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let y = 0; y < CHUNK_SIZE; y++)
+                        this.setVoxelUpdateBitsXYZ(-1, y, z, chunkData.getXYZ(E, y, z));
+                break;
+            case 14:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let y = 0; y < CHUNK_SIZE; y++)
+                        this.setVoxelUpdateBitsXYZ(E + 1, y, z, chunkData.getXYZ(0, y, z));
+                break;
+            case 16:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setVoxelUpdateBitsXYZ(x, E + 1, z, chunkData.getXYZ(x, 0, z));
+                break;
+            case 22:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    for (let x = 0; x < CHUNK_SIZE; x++)
+                        this.setVoxelUpdateBitsXYZ(x, y, E + 1, chunkData.getXYZ(x, y, 0));
+                break;
+            case 1:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setVoxelUpdateBitsXYZ(x, -1, -1, chunkData.getXYZ(x, E, E));
+                break;
+
+            case 3:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setVoxelUpdateBitsXYZ(-1, y, -1, chunkData.getXYZ(E, y, E));
+                break;
+
+            case 5:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setVoxelUpdateBitsXYZ(E + 1, y, -1, chunkData.getXYZ(0, y, E));
+                break;
+            case 7:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setVoxelUpdateBitsXYZ(x, E + 1, -1, chunkData.getXYZ(x, 0, E));
+                break;
+
+            case 9:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setVoxelUpdateBitsXYZ(-1, -1, z, chunkData.getXYZ(E, E, z));
+                break;
+            case 11:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setVoxelUpdateBitsXYZ(E + 1, -1, z, chunkData.getXYZ(0, E, z));
+                break;
+
+            case 15:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setVoxelUpdateBitsXYZ(-1, E + 1, z, chunkData.getXYZ(E, 0, z));
+                break;
+
+            case 17:
+                for (let z = 0; z < CHUNK_SIZE; z++)
+                    this.setVoxelUpdateBitsXYZ(E + 1, E + 1, z, chunkData.getXYZ(0, 0, z));
+                break;
+
+            case 19:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setVoxelUpdateBitsXYZ(x, -1, E + 1, chunkData.getXYZ(x, E, 0));
+                break;
+
+            case 21:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setVoxelUpdateBitsXYZ(-1, y, E + 1, chunkData.getXYZ(E, y, 0));
+                break;
+
+            case 23:
+                for (let y = 0; y < CHUNK_SIZE; y++)
+                    this.setVoxelUpdateBitsXYZ(E + 1, y, E + 1, chunkData.getXYZ(0, y, 0));
+                break;
+
+            case 25:
+                for (let x = 0; x < CHUNK_SIZE; x++)
+                    this.setVoxelUpdateBitsXYZ(x, E + 1, E + 1, chunkData.getXYZ(x, 0, 0));
+                break;
+        }
+    }
+
 
     peak(x, y) {
         for (let peek = CHUNK_SIZE - 1; peek > 0; peek--)
@@ -238,9 +469,18 @@ export class ChunkDataExtended extends Array3D {
         return chunkDataExtended;
     }
 
+    /**
+     * @param {(number, number, number) => ChunkData} chunkDataProvider 
+     * @param {number} cx 
+     * @param {number} cy 
+     * @param {number} cz 
+     * @returns {ChunkData}
+     */
     static load(chunkDataProvider, cx, cy, cz) {
+
         const chunkData = chunkDataProvider(cx, cy, cz);
-        const chunkDataExtended = new ChunkDataExtended();
+
+        // const chunkDataExtended = new ChunkDataExtended();
         const bounds = chunkData.bounds();
         let adj27Needed = (1 << 27) - 1
         if (bounds) {
@@ -268,10 +508,10 @@ export class ChunkDataExtended extends Array3D {
                 const dirOffset = Dir27[dir27];
                 const adjChunkData = chunkDataProvider(cx + dirOffset.x, cy + dirOffset.y, cz + dirOffset.z);
                 if (!adjChunkData) continue;
-                chunkDataExtended.setAdjData(dir27, adjChunkData);
+                chunkData.updateAdjData(dir27, adjChunkData);
             }
         }
-        return chunkDataExtended;
+        return chunkData;
     }
 }
 

@@ -570,6 +570,7 @@ export class NoiseChunkGenerator {
                         chunk.setHXY(w - chunkStartH, x, y, BLOCK_IDS.WATER);
                 }
             }
+        chunk.updateAdjBitsInside();
         return chunk;
     }
 }
@@ -623,7 +624,7 @@ export class FunctionChunkGenerator {
                     if (chunk.get(w, rx, ry) == BLOCK_IDS.EMPTY)
                         chunk.setHXY(w, rx, ry, BLOCK_IDS.WATER);
                 }
-            }
+            }        
         return chunk;
     }
 }
@@ -751,6 +752,28 @@ export class Generator02 extends FunctionChunkGenerator {
 
 
 export const GeneratorPatterns = {
+    single: chunk => {
+        chunk.setHXY(16, 16, 15, BLOCK_IDS.DIRT_GRASS);
+        return chunk;
+    },
+    ground: chunk => {
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            for (let x = 0; x < CHUNK_SIZE; x++)
+                chunk.setHXY(0, x, y, BLOCK_IDS.DIRT_GRASS);
+        return chunk;
+    },
+    corners: chunk => {
+        chunk.setHXY(0, 0, 0, BLOCK_IDS.DIRT_GRASS);
+        chunk.setHXY(0, 0, CHUNK_SIZE - 1, BLOCK_IDS.DIRT_GRASS);
+        chunk.setHXY(0, CHUNK_SIZE - 1, 0, BLOCK_IDS.DIRT_GRASS);
+        chunk.setHXY(0, CHUNK_SIZE - 1, CHUNK_SIZE - 1, BLOCK_IDS.DIRT_GRASS);
+        chunk.setHXY(CHUNK_SIZE - 1, 0, 0, BLOCK_IDS.DIRT_GRASS);
+        chunk.setHXY(CHUNK_SIZE - 1, 0, CHUNK_SIZE - 1, BLOCK_IDS.DIRT_GRASS);
+        chunk.setHXY(CHUNK_SIZE - 1, CHUNK_SIZE - 1, 0, BLOCK_IDS.DIRT_GRASS);
+        chunk.setHXY(CHUNK_SIZE - 1, CHUNK_SIZE - 1, CHUNK_SIZE - 1, BLOCK_IDS.DIRT_GRASS);
+
+        return chunk;
+    },
     fullChecker: chunk => {
         for (let h = 0; h < CHUNK_SIZE; h++)
             for (let y = 0; y < CHUNK_SIZE; y++)
@@ -805,13 +828,13 @@ export const GeneratorPatterns = {
         return chunk;
     },
     border: chunk => {
-        for (let h = 0; h < CHUNK_SIZE; h++)            
+        for (let h = 0; h < CHUNK_SIZE; h++)
             for (let y = 0; y < CHUNK_SIZE; y++)
                 for (let x = 0; x < CHUNK_SIZE; x++)
                     if (x == 0 || y == 0 || x == CHUNK_SIZE - 1 || y == CHUNK_SIZE - 1)
                         chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
-         for (let y = 0; y < CHUNK_SIZE; y++)
-                for (let x = 0; x < CHUNK_SIZE; x++) {
+        for (let y = 0; y < CHUNK_SIZE; y++)
+            for (let x = 0; x < CHUNK_SIZE; x++) {
                 chunk.setHXY(0, x, y, BLOCK_IDS.DIRT_GRASS);
                 chunk.setHXY(CHUNK_SIZE - 1, x, y, BLOCK_IDS.DIRT_GRASS);
             }
@@ -833,7 +856,7 @@ export class TestGenerator {
                 for (let x = 0; x < CHUNK_SIZE; x++) {
                     for (let h = 0; h < CHUNK_SIZE; h++) {
                         if (((x ^ y ^ h) & 1) == 0)
-                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                            chunk.setVoxelHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
                     }
                 }
         } else if (chunkPos.equals(2, 0, 0)) {
@@ -841,12 +864,12 @@ export class TestGenerator {
                 for (let x = 0; x < CHUNK_SIZE; x++)
                     for (let h = 0; h < CHUNK_SIZE; h++)
                         if (((x ^ y ^ h) & 2) == 0)
-                            chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                            chunk.setVoxelHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
         } else if (chunkPos.equals(0, 2, 0)) {
             for (let h = 0; h < CHUNK_SIZE; h++)
                 for (let y = 0; y < CHUNK_SIZE; y++)
                     for (let x = 0; x < CHUNK_SIZE; x++)
-                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                        chunk.setVoxelHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
 
         } else if (chunkPos.equals(2, 2, 0)) {
             for (let h = 0; h < CHUNK_SIZE; h++) {
@@ -854,7 +877,7 @@ export class TestGenerator {
                     continue;
                 for (let y = 0; y < CHUNK_SIZE; y++)
                     for (let x = 0; x < CHUNK_SIZE; x++)
-                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                        chunk.setVoxelHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
             }
         } else if (chunkPos.equals(-2, 0, 0)) {
             for (let y = 0; y < CHUNK_SIZE; y++) {
@@ -862,7 +885,7 @@ export class TestGenerator {
                     continue;
                 for (let h = 0; h < CHUNK_SIZE; h++)
                     for (let x = 0; x < CHUNK_SIZE; x++)
-                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                        chunk.setVoxelHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
             }
         } else if (chunkPos.equals(0, -2, 0)) {
             for (let x = 0; x < CHUNK_SIZE; x++) {
@@ -870,7 +893,7 @@ export class TestGenerator {
                     continue;
                 for (let y = 0; y < CHUNK_SIZE; y++)
                     for (let h = 0; h < CHUNK_SIZE; h++)
-                        chunk.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+                        chunk.setVoxelHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
             }
         }
 
@@ -878,6 +901,26 @@ export class TestGenerator {
     }
 }
 
+
+export class TestGenerator2 {
+
+    /**
+     * @param {Vec3} chunkPos
+     */
+    generateChunk(chunkPos) {
+        const chunk = new ChunkData();
+
+        // if (chunkPos.equals(0, 0, 0)) {
+        if (chunkPos.z == 0) {
+            GeneratorPatterns.ground(chunk);
+        }
+        // } else if (chunkPos.equals(1, 0, 0)) {
+        // GeneratorPatterns.corners(chunk);
+        // }
+
+        return chunk;
+    }
+}
 
 
 export function createGenerator() {
