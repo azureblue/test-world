@@ -1,5 +1,5 @@
 import { isSolidInt } from "./blocks.js";
-import { Dir27, DIR27_IDXS, fvec3, FVec3, IVec3 } from "./geom.js";
+import { Dir27, DIR27_IDXS_ENCODED, fvec3, FVec3, IVec3 } from "./geom.js";
 import { ChunkMesher } from "./mesher/mesher.js";
 import { Array3D, MovingAverage, perfDiff } from "./utils.js";
 
@@ -67,14 +67,15 @@ export class ChunkData extends Array3D {
                 }
     }
 
-    #updateAdjBorder(dir27Idxs, x, y, z) {
+    #updateAdjBorder(dir27, x, y, z) {
         const data = this.data;
         const adjData = this.adjData.data;
         let bits = 0;
-        const len = dir27Idxs.length;
+        const baseIdx = dir27 * 32;
+        const end = baseIdx + DIR27_IDXS_ENCODED[baseIdx] + 1;
         const idx = z * PLANE_SIZE + y * CHUNK_SIZE + x;
-        for (let i = 0; i < len; i++) {
-            const dir27 = dir27Idxs[i];
+        for (let i = baseIdx + 1; i < end; i++) {
+            const dir27 = DIR27_IDXS_ENCODED[i];
             const idxOffset = DIR27_RAW_OFFSETS[dir27];
             bits |= isSolidInt(data[idx + idxOffset]) << dir27;
         }
@@ -85,56 +86,36 @@ export class ChunkData extends Array3D {
         const E = CHUNK_SIZE - 1;
         this.#updateAdjInside();
 
-        for (let y = 0; y < CHUNK_SIZE; y++)
-            for (let x = 0; x < CHUNK_SIZE; x++)
-                this.#updateAdjBorder(DIR27_IDXS[4], x, y, 0);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            for (let x = 0; x < CHUNK_SIZE; x++)
-                this.#updateAdjBorder(DIR27_IDXS[10], x, 0, z);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            for (let y = 0; y < CHUNK_SIZE; y++)
-                this.#updateAdjBorder(DIR27_IDXS[12], 0, y, z);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            for (let y = 0; y < CHUNK_SIZE; y++)
-                this.#updateAdjBorder(DIR27_IDXS[14], E, y, z);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            for (let x = 0; x < CHUNK_SIZE; x++)
-                this.#updateAdjBorder(DIR27_IDXS[16], x, E, z);
-        for (let y = 0; y < CHUNK_SIZE; y++)
-            for (let x = 0; x < CHUNK_SIZE; x++)
-                this.#updateAdjBorder(DIR27_IDXS[22], x, y, E);
-        for (let x = 0; x < CHUNK_SIZE; x++)
-            this.#updateAdjBorder(DIR27_IDXS[1], x, 0, 0);
-        for (let y = 0; y < CHUNK_SIZE; y++)
-            this.#updateAdjBorder(DIR27_IDXS[3], 0, y, 0);
-        for (let y = 0; y < CHUNK_SIZE; y++)
-            this.#updateAdjBorder(DIR27_IDXS[5], E, y, 0);
-        for (let x = 0; x < CHUNK_SIZE; x++)
-            this.#updateAdjBorder(DIR27_IDXS[7], x, E, 0);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            this.#updateAdjBorder(DIR27_IDXS[9], 0, 0, z);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            this.#updateAdjBorder(DIR27_IDXS[11], E, 0, z);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            this.#updateAdjBorder(DIR27_IDXS[15], 0, E, z);
-        for (let z = 0; z < CHUNK_SIZE; z++)
-            this.#updateAdjBorder(DIR27_IDXS[17], E, E, z);
-        for (let x = 0; x < CHUNK_SIZE; x++)
-            this.#updateAdjBorder(DIR27_IDXS[19], x, 0, E);
-        for (let y = 0; y < CHUNK_SIZE; y++)
-            this.#updateAdjBorder(DIR27_IDXS[21], 0, y, E);
-        for (let y = 0; y < CHUNK_SIZE; y++)
-            this.#updateAdjBorder(DIR27_IDXS[23], E, y, E);
-        for (let x = 0; x < CHUNK_SIZE; x++)
-            this.#updateAdjBorder(DIR27_IDXS[25], x, E, E);
-        this.#updateAdjBorder(DIR27_IDXS[0], 0, 0, 0);
-        this.#updateAdjBorder(DIR27_IDXS[2], E, 0, 0);
-        this.#updateAdjBorder(DIR27_IDXS[6], 0, E, 0);
-        this.#updateAdjBorder(DIR27_IDXS[8], E, E, 0);
-        this.#updateAdjBorder(DIR27_IDXS[18], 0, 0, E);
-        this.#updateAdjBorder(DIR27_IDXS[20], E, 0, E);
-        this.#updateAdjBorder(DIR27_IDXS[24], 0, E, E);
-        this.#updateAdjBorder(DIR27_IDXS[26], E, E, E);
+        for (let a = 0; a < CHUNK_SIZE; a++) {
+            for (let b = 0; b < CHUNK_SIZE; b++) {
+                this.#updateAdjBorder(4, b, a, 0);
+                this.#updateAdjBorder(10, b, 0, a);
+                this.#updateAdjBorder(12, 0, b, a);
+                this.#updateAdjBorder(14, E, b, a);
+                this.#updateAdjBorder(16, b, E, a);
+                this.#updateAdjBorder(22, b, a, E);
+            }
+            this.#updateAdjBorder(1, a, 0, 0);
+            this.#updateAdjBorder(3, 0, a, 0);
+            this.#updateAdjBorder(5, E, a, 0);
+            this.#updateAdjBorder(7, a, E, 0);
+            this.#updateAdjBorder(9, 0, 0, a);
+            this.#updateAdjBorder(11, E, 0, a);
+            this.#updateAdjBorder(15, 0, E, a);
+            this.#updateAdjBorder(17, E, E, a);
+            this.#updateAdjBorder(19, a, 0, E);
+            this.#updateAdjBorder(21, 0, a, E);
+            this.#updateAdjBorder(23, E, a, E);
+            this.#updateAdjBorder(25, a, E, E);
+        }
+        this.#updateAdjBorder(0, 0, 0, 0);
+        this.#updateAdjBorder(2, E, 0, 0);
+        this.#updateAdjBorder(6, 0, E, 0);
+        this.#updateAdjBorder(8, E, E, 0);
+        this.#updateAdjBorder(18, 0, 0, E);
+        this.#updateAdjBorder(20, E, 0, E);
+        this.#updateAdjBorder(24, 0, E, E);
+        this.#updateAdjBorder(26, E, E, E);
     }
 
     setVoxelUpdateBitsXYZ(x, y, z, v) {
