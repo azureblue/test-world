@@ -29,8 +29,12 @@ export async function main() {
         vStripesY: GeneratorPatterns.verticalStripesY(new ChunkData()),
         vStripesX: GeneratorPatterns.verticalStripesX(new ChunkData()),
         border: GeneratorPatterns.border(new ChunkData())
-    };
+    };    
     const keys = Object.keys(chunkDataE);
+    for (let i = 0; i < keys.length; i++) {
+            const chunkData = chunkDataE[keys[i]];
+            chunkData.updateAdjBitsInside();
+    }
     const times = new Float32Buffer(200);
     let totalTotalTime = 0;
     let totalTotalSum = 0;
