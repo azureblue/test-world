@@ -86,8 +86,8 @@ export class ChunkData extends Array3D {
         const E = CHUNK_SIZE - 1;
         this.#updateAdjInside();
 
-        for (let a = 0; a < CHUNK_SIZE; a++) {
-            for (let b = 0; b < CHUNK_SIZE; b++) {
+        for (let a = 1; a < CHUNK_SIZE - 1; a++) {
+            for (let b = 1; b < CHUNK_SIZE - 1; b++) {
                 this.#updateAdjBorder(4, b, a, 0);
                 this.#updateAdjBorder(10, b, 0, a);
                 this.#updateAdjBorder(12, 0, b, a);
@@ -460,6 +460,7 @@ export class ChunkDataExtended extends Array3D {
     static load(chunkDataProvider, cx, cy, cz) {
 
         const chunkData = chunkDataProvider(cx, cy, cz);
+        // return chunkData;
 
         // const chunkDataExtended = new ChunkDataExtended();
         const bounds = chunkData.bounds();
