@@ -27,7 +27,7 @@ uniform vec3 m_translation;
 const float pixh = 1.0f / 16.0f;
 const float INV_VIEW_DISTANCE_SQ = 1.0f / VIEW_DISTANCE_SQ;
 
-const float[4] shadow_values = float[4](0.0f, 0.3f, 0.4f, 0.5f);
+const float[4] shadow_values = float[4](0.0f, 0.3f, 0.5f, 0.7f);
 
 out highp vec3 v_tex_coord;
 flat out uint o_norm;

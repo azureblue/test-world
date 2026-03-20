@@ -2,7 +2,7 @@ import { ChunkDataLoader, ChunkManager } from "./chunk.js";
 import { createGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
 import { Logger } from "./logging.js";
-import { UIntWasmMesher } from "./mesher/uIntWasmMesher.js";
+import { UIntWasmMesher, UIntWasmMesher2 } from "./mesher/uIntWasmMesher.js";
 
 const params = new URL(self.location.href).searchParams;
 const WORKER_ID = Number(params.get("workerId"));
@@ -39,7 +39,7 @@ await UIntWasmMesher.init();
 
 const generator = createGenerator(); // new Generator02();
 const chunkLoader = new ChunkDataLoader((cx, cy, cz) => generator.generateChunk(vec3(cx, cy, cz)));
-const chunkManager = new ChunkManager(chunkLoader, new UIntWasmMesher());
+const chunkManager = new ChunkManager(chunkLoader, new UIntWasmMesher2());
 
 
 
@@ -65,7 +65,7 @@ function loadAndPost(chunkPos) {
                 meshTranslation: chunkSpec.meshData.mTranslation
             }
         }, { "transfer": [chunkDataRaw.buffer, meshDataRaw.buffer] });
-    }).catch(r => logger.error(() => r));
+    });
 }
 
 onmessage = (message) => {
