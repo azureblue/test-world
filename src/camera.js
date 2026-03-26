@@ -1,4 +1,4 @@
-import { Chunk } from "./chunk.js";
+import { Chunk } from "./chunk/chunk.js";
 import { Frustum, FrustumPlanes, FVec2, FVec3, fvec3, Mat4 } from "./geom.js";
 import { Float32Vector3 } from "./matrixgl/float32vector.js";
 

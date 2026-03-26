@@ -1,11 +1,20 @@
-import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkData, ChunkDataExtended } from "./chunk.js";
+import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataFactory } from "./chunk/chunk.js";
+import { ChunkDataExtTransfer, ChunkExtDataFactory } from "./chunk/extChunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
+import { createFastMesher } from "./global.js";
 import { Logger } from "./logging.js";
-import { UIntMesh } from "./mesher/mesher.js";
-import { UIntWasmMesher } from "./mesher/uIntWasmMesher.js";
+import { MeshHandler } from "./mesh/mesh.js";
+import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
+import { UIntWasmMesher } from "./mesh/uIntWasmMesher.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
+
+/**
+ * @typedef {import("./chunkLoader.js").ChunkResponseData} ChunkResponseData
+ */
+
 await UIntWasmMesher.init();
 const logger = new Logger("World");
+
 
 const CHUNK_RENDER_DIST = 6;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
@@ -58,7 +67,6 @@ function pos3ToKey(x, y, z = 0) {
 // }
 
 
-
 class ChunkLoadPromise {
 
     constructor(key) {
@@ -80,7 +88,13 @@ export class World {
     #pos = fvec3();
     #chunkPos = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
     #chunkPosChanged = false;
-    #quickMesher = new UIntWasmMesher({ quick: true });
+    #meshHandler;
+    
+
+    #chunkDataTransfer = new ChunkDataExtTransfer();
+    #meshDataTransfer = new UIntMeshDataTransfer();
+    
+    #quickMesher = createFastMesher();
 
     /**@type {Array<Vec3>} */
     #rangeDeltas;
@@ -112,11 +126,12 @@ export class World {
     }
 
     /**
-     * @param {Worker} chunkLoader 
+     * @param {MeshHandler} meshHandler
      */
-    constructor() {
+    constructor(meshHandler) {
+        this.#meshHandler = meshHandler;
         this.#chunkLoaders = [];
-        for (let i = 0; i < 1; i++) {
+        for (let i = 0; i < 4; i++) {
             const id = i;
             const worker = new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=${id}`), { type: "module" });
             worker.ready = false;
@@ -129,7 +144,7 @@ export class World {
                         this.#sendChunkRequestToWorker(id, cpos);
                     }
                     worker.initialChunkRequestQueue = [];
-                } else {
+                } else if (me.data.type === "chunkResponse") {
                     this.onChunk(me.data.data);
                 }
             }
@@ -168,7 +183,10 @@ export class World {
         this.#loaderIndex = (this.#loaderIndex + 1) % this.#chunkLoaders.length;
     }
 
-    onChunk(data) {
+    /**
+     * @param {ChunkResponseData} data 
+     */
+    onChunk(data) {        
         const chunkPos = data.chunkPos;
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
         if (this.#currentChunkPromise != null && this.#currentChunkPromise.key == key)
@@ -178,7 +196,6 @@ export class World {
     }
 
     /**
-     * 
      * @param {FVec2} pos 
      */
     inRange(pos) {
@@ -188,10 +205,9 @@ export class World {
     }
 
     /**
-     * @import {ChunkMessage} from "./chunkLoader.js"
-     * @param {ChunkMessage} data 
+     * @param {ChunkResponseData} data 
      */
-    processChunkData(data) {
+    processChunkData(data) {        
         const chunkPos = data.chunkPos;
         // logger.info(`processing chunk data (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z})`);
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
@@ -208,11 +224,12 @@ export class World {
         }
 
         const now = performance.now();
-        const chunkData = new ChunkData();
-        chunkData.data.set(data.rawChunkData);
+        const meshData = this.#meshDataTransfer.createFrom(data.tMeshData);
+        const chunkData = this.#chunkDataTransfer.createFrom(data.tChunkData);
+        
         let mesh = null
-        if (data.rawMeshData.length > 0) {
-            mesh = UIntMesh.load(data.rawMeshData, data.meshTranslation);
+        if (!meshData.isEmpty()) {
+            mesh = this.#meshHandler.upload(meshData);
         }
 
         const chunk = new Chunk(chunkPos, chunkData, mesh);
@@ -265,7 +282,10 @@ export class World {
             const dz = z - this.#chunkPos.z;
             if (dx * dx + dy * dy + dz * dz > CHUNK_RETAIN_DIST_SQ) {
                 // logger.info("removing chunk: " + x + " " + y + " " + z);
-                chunkEntry.chunk?.mesh?.dispose();
+                const mesh = chunkEntry.chunk?.mesh;
+                if (mesh) {
+                    this.#meshHandler.dispose(mesh);
+                }
                 this.#chunks.delete(key);
             }
         }
@@ -424,6 +444,7 @@ export class World {
      * @returns 
      */
     removeBlock(pos) {
+        return;
         performance.mark("removeBlockStart");
         const start = performance.now();
 
@@ -451,7 +472,7 @@ export class World {
         const beforeMesh = performance.now();
         const mesh = this.#quickMesher.createMesh(entry.position, chunkDataExtended);
         entry.chunk.mesh?.dispose();
-        const uintMesh = UIntMesh.load(mesh.input, mesh.mTranslation);
+        const uintMesh = UIntMesh.load(mesh.data, mesh.mTranslation);
         entry.chunk.mesh = uintMesh;
         entry.dirty = true;
         const end = performance.now();
@@ -474,7 +495,7 @@ export class World {
         if (entry === undefined || !entry.loaded)
             return 0;
 
-        return entry.chunk.data.getHXY(bh, bx, by);
+        return entry.chunk.data.getVoxelXYZ(bx, by, bh);
     }
 }
 

@@ -187,7 +187,7 @@ __attribute__((always_inline)) inline uint ao_get<Direction::Up>(const array_3d<
 
 template <>
 __attribute__((always_inline)) inline uint ao_get<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
-    return data.get_hxy((h - 1), (x + d_xy.x), (y + d_xy.y));
+    return data.get_hxy((h - 1), (x + d_xy.x), (y - d_xy.y));
 }
 
 template <>

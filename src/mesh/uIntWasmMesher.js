@@ -1,31 +1,39 @@
-import { Resources } from "../utils.js";
-import { UIntMesher } from "./mesher.js";
+import { ChunkData } from "../chunk/chunk.js";
+import { copyData, Resources } from "../utils.js";
+import { UIntMesher } from "./uIntMesh.js";
 
 export class UIntWasmMesher extends UIntMesher {
 
     #quick = false;
     #mesherWasmFunction;
     #heapBase;
+    /** @type {WebAssembly.Memory} */
     #mem;
 
     constructor({ quick = false } = {}) {
         super();
-        this.#quick = quick;
+        this.#quick = true;
         this.#mesherWasmFunction = quick ? UIntWasmMesher.wasmCreateMeshQ : UIntWasmMesher.wasmCreateMesh;
         this.#heapBase = quick ? UIntWasmMesher._heap_baseQ : UIntWasmMesher._heap_base;
         this.#mem = quick ? UIntWasmMesher.memQ : UIntWasmMesher.mem;
     }
 
+    /**
+     * @param {ChunkData} chunkData
+     * @returns {Uint32Array}
+     */
     mesh(chunkData) {
+        const rawData = chunkData.rawData();
+        const dataByteLen = rawData.byteLength;
+        
         const MAX_FACES = 32 * 32 * 32 * 3;
         const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
-        const input = new Uint32Array(this.#mem.buffer, this.#heapBase, chunkData.data.length);
-        input.set(chunkData.data);
+        copyData(rawData, this.#mem.buffer, this.#heapBase);
         const len = this.#mesherWasmFunction(
             this.#heapBase,
-            this.#heapBase + input.byteLength
+            this.#heapBase + dataByteLen,
         )
-        const output = new Uint32Array(this.#mem.buffer, this.#heapBase + input.byteLength, OUTPUT_SIZE / 4);
+        const output = new Uint32Array(this.#mem.buffer, this.#heapBase + dataByteLen, OUTPUT_SIZE / 4);
         const trimmedOutput = new Uint32Array(len)
         trimmedOutput.set(output.subarray(0, len));
         return trimmedOutput;
@@ -69,7 +77,7 @@ export class UIntWasmMesher extends UIntMesher {
         // UIntWasmMesher.#outputSize = OUTPUT_SIZE;
 
         const uIntWasmMesherQResult = await WebAssembly.instantiateStreaming(
-            await fetch(Resources.relativeToRoot("./mesher/uIntWasmMesherQ.wasm")),
+            await fetch(Resources.relativeToRoot("./mesh/uIntWasmMesherQ.wasm")),
             {
                 env: {
                     memory: memQ
@@ -78,7 +86,7 @@ export class UIntWasmMesher extends UIntMesher {
         );
 
         const uIntWasmMesherResult = await WebAssembly.instantiateStreaming(
-            await fetch(Resources.relativeToRoot("./mesher/uIntWasmMesher.wasm")),
+            await fetch(Resources.relativeToRoot("./mesh/uIntWasmMesher.wasm")),
             {
                 env: {
                     memory: mem

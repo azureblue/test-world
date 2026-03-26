@@ -1,11 +1,8 @@
-import { ChunkDataLoader } from "./chunk/chunk.js";
-import { ChunkExtDataFactory as ChunkDataExtFactory, ChunkDataExtTransfer } from "./chunk/extChunk.js";
-import { createGenerator, NoiseChunkGenerator } from "./gen/generator.js";
+import { ChunkDataLoader, ChunkLoader } from "./chunk/chunk.js";
+import { createGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
 import { Logger } from "./logging.js";
-import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
-import { UIntWasmMesher } from "./mesh/uIntWasmMesher.js";
-
+import { UIntWasmMesher } from "./mesher/uIntWasmMesher.js";
 
 const params = new URL(self.location.href).searchParams;
 const WORKER_ID = Number(params.get("workerId"));
@@ -14,12 +11,13 @@ const logger = new Logger("chunk load worker " + WORKER_ID);
 logger.info(() => "booted " + self.location?.href);
 
 /**
- * @typedef {Object} ChunkResponseData
+ * @typedef {Object} ChunkMessage
+ * @property {any} id
  * @property {Vec3} chunkPos - The position of the chunk as [cx, cy, cz].
- * @property {ArrayBuffer} tChunkData - The transferred chunk data.
- * @property {ArrayBuffer} tMeshData - The transferred mesh data.
+ * @property {Uint32Array} [rawChunkData] - The raw chunk data.
+ * @property {Uint32Array} rawMeshData - The raw mesh data.
+ * @property {Vec3} meshTranslation - The translation vector of the mesh.
  */
-
 
 /**
  * @typedef {Object} GenerateRequest
@@ -50,15 +48,9 @@ logger.info(() => "booted " + self.location?.href);
 // const heightmap = await Resources.loadImage("./images/test.png");
 // const heightmapPixels = ImagePixels.from(heightmap);
 
-await UIntWasmMesher.init();
-
 const generator = createGenerator(); // new Generator02();
-const chunkDataFactory = new ChunkDataExtFactory();
-const chunkDataLoader = new ChunkDataLoader(generator, chunkDataFactory);
-const chunkDataTransfer = new ChunkDataExtTransfer();
-const mesher = new UIntWasmMesher({ quick: false });
-const meshDataTransfer = new UIntMeshDataTransfer();
-
+const chunkLoader = new ChunkDataLoader((cx, cy, cz) => generator.generateChunk(vec3(cx, cy, cz)));
+const chunkManager = new ChunkLoader(chunkLoader, new UIntWasmMesher());
 
 
 
@@ -68,24 +60,23 @@ function loadAndPost(chunkPos) {
     const cy = chunkPos.y;
     const cz = chunkPos.z;
     logger.debug(() => `handling chunk request (${cx}, ${cy}, ${cz})`);
-    const chunkData = chunkDataLoader.loadChunk(cx, cy, cz);
-    const meshData = mesher.createMesh(vec3(cx, cy, cz), chunkData);
-    
-    const chunkLoadTime = performance.now() - chunkLoadStart;
-    logger.debug(() => `complete loading chunk (${cx}, ${cy}, ${cz}) in ${chunkLoadTime} - posting`);
+    const res = chunkManager.load(cx, cy, cz);
+    res.then(chunkSpec => {
+        const chunkLoadTime = performance.now() - chunkLoadStart;
+        const chunkDataRaw = new Uint32Array(chunkSpec.chunkData.data);
+        logger.debug(() => `complete loading chunk (${cx}, ${cy}, ${cz}) in ${chunkLoadTime} - posting`);
+        const meshDataRaw = chunkSpec.meshData.input;
 
-    const chunkDataTransferObject = chunkDataTransfer.transfer(chunkData);
-    const meshDataTransferObject = meshDataTransfer.transfer(meshData);
-
-    postMessage({
-        type: "chunkResponse",
-        data: {
-            chunkPos: vec3(cx, cy, cz),
-            tChunkData: chunkDataTransferObject.data,
-            tMeshData: meshDataTransferObject.data
-        }
-    }, { "transfer": [...chunkDataTransferObject.transferList, ...meshDataTransferObject.transferList] });
-
+        postMessage({
+            type: "chunkResponse",
+            data: {
+                chunkPos: vec3(cx, cy, cz),
+                rawChunkData: chunkDataRaw,
+                rawMeshData: meshDataRaw,
+                meshTranslation: chunkSpec.meshData.mTranslation
+            }
+        }, { "transfer": [chunkDataRaw.buffer, meshDataRaw.buffer] });
+    }).catch(r => logger.error(() => r));
 }
 
 onmessage = (message) => {

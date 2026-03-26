@@ -1,7 +1,8 @@
-import { ChunkData, ChunkDataExtended } from "../chunk.js";
+import { ChunkBlockData } from "../chunk/chunk.js";
+import { ChunkExtDataFactory } from "../chunk/extChunk.js";
 import { GeneratorPatterns } from "../gen/generator.js";
 import { ivec3 } from "../geom.js";
-import { UIntWasmMesher } from "../mesher/uIntWasmMesher.js";
+import { UIntWasmMesher } from "../mesh/uIntWasmMesher.js";
 import { Arrays, Float32Buffer } from "../utils.js";
 async function sha1String(arr) {
     const view = new Uint8Array(
@@ -21,16 +22,17 @@ export async function main() {
     await UIntWasmMesher.init();
 
     const mesher = new UIntWasmMesher({ quick: false });
-    let chunkDataE = {
-        fullChecker: ChunkDataExtended.fromChunkData(GeneratorPatterns.fullChecker(new ChunkData())),
-        doubleChecker: ChunkDataExtended.fromChunkData(GeneratorPatterns.doubleChecker(new ChunkData())),
-        fullSolid: ChunkDataExtended.fromChunkData(GeneratorPatterns.fullSolid(new ChunkData())),
-        hStripes: ChunkDataExtended.fromChunkData(GeneratorPatterns.horizontalStripes(new ChunkData())),
-        vStripesY: ChunkDataExtended.fromChunkData(GeneratorPatterns.verticalStripesY(new ChunkData())),
-        vStripesX: ChunkDataExtended.fromChunkData(GeneratorPatterns.verticalStripesX(new ChunkData())),
-        border: ChunkDataExtended.fromChunkData(GeneratorPatterns.border(new ChunkData()))
+    const chunkDataFactory = new ChunkExtDataFactory();
+    let chunkDataCollection = {
+        fullChecker: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.fullChecker(new ChunkBlockData())),
+        doubleChecker: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.doubleChecker(new ChunkBlockData())),
+        fullSolid: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.fullSolid(new ChunkBlockData())),
+        hStripes: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.horizontalStripes(new ChunkBlockData())),
+        vStripesY: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.verticalStripesY(new ChunkBlockData())),
+        vStripesX: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.verticalStripesX(new ChunkBlockData())),
+        border: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.border(new ChunkBlockData()))
     };
-    const keys = Object.keys(chunkDataE);
+    const keys = Object.keys(chunkDataCollection);
     const times = new Float32Buffer(200);
     let totalTotalTime = 0;
     let totalTotalSum = 0;
@@ -41,7 +43,7 @@ export async function main() {
         let totalCount = 0;
         console.log(`--- run ${t} ---`);
         for (let i = 0; i < keys.length; i++) {
-            const chunkData = chunkDataE[keys[i]];
+            const chunkData = chunkDataCollection[keys[i]];
             times.reset();
             let sum = 0;
             const reps = 100;
@@ -67,10 +69,11 @@ export async function main() {
     console.log(`total test time: ${(totalTotalTime).toFixed(2)} ms`);
     console.log(`total test avg: ${(totalTotalSum / totalTotalCount).toFixed(2)} ms`);
     for (let i = 0; i < keys.length; i++) {
-        const chunkData = chunkDataE[keys[i]];
-        const meshData = mesher.createMesh(ivec3(), chunkData);
-        const hash = await sha1String(meshData.input);
-        console.log(`${keys[i].padEnd(13)} : mesh size ${meshData.input.length.toString().padEnd(7)} ${hash.substring(0, 8)}`);
+        const chunkData = chunkDataCollection[keys[i]];
+        const meshData = mesher.createMesh(ivec3(), chunkData);        
+        
+        const hash = await sha1String(meshData.data);
+        console.log(`${keys[i].padEnd(13)} : mesh size ${meshData.data.length.toString().padEnd(7)} ${hash.substring(0, 8)}`);
         
         
     }

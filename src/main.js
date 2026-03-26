@@ -3,7 +3,7 @@ import { Camera, FrustumCuller } from "./camera.js";
 import { FVec3, mat4, Projection, vec3 } from "./geom.js";
 import { Program } from "./gl.js";
 import { KeyboardInput, MouseInput } from "./input.js";
-import { UIntMesh } from "./mesher/mesher.js";
+import { UIntMeshDrawer, UIntMeshHandler } from "./mesh/uIntMesh.js";
 import { FPSCounter } from "./perf.js";
 import { TextureArray } from "./textures.js";
 import { Replacer, Resources, writeVoxelWireframe } from "./utils.js";
@@ -59,7 +59,7 @@ export async function start() {
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    const aIn = chunk0Program.getAttribLocation("a_in");
+    const aIn = chunk0Program.getAttribLocation("a_in");    
     const aInBH = blockHighlightProgram.getAttribLocation("a_in");
     const bhBuffer = gl.createBuffer();
     gl.useProgram(blockHighlightProgram.program);
@@ -71,10 +71,8 @@ export async function start() {
 
     gl.useProgram(chunk0Program.program);
 
-    UIntMesh.setGL(gl, aIn);
     const texArray = TextureArray.create(gl, textures, 16);
 
-    const world = new World();
 
     const uCamera = gl.getUniformBlockIndex(chunk0Program.program, "Camera");
     const uCameraSize = gl.getActiveUniformBlockParameter(chunk0Program.program, uCamera, gl.UNIFORM_BLOCK_DATA_SIZE);
@@ -116,10 +114,15 @@ export async function start() {
 
     const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
 
+    const meshHandler = new UIntMeshHandler(gl, aIn);
+    const meshDrawer = new UIntMeshDrawer(gl, uChunk0Translation);
+
+    const world = new World(meshHandler);
+
     // world.moveTo(0, 100, -0);
     // world.update();
 
-    const currentChunk = await world.getCurrentChunk();
+    // const currentChunk = await world.getCurrentChunk();
     // const peek = currentChunk.peek(0, 0);
     const camera = new Camera(new FVec3(-5, 3, 0));
     // const camera = new Camera(new FVec3(75, -40, -23));
@@ -197,11 +200,7 @@ export async function start() {
             }
             chunksDrawn++;
             const mesh = chunk.mesh;
-            mesh.bindVA();
-            const modelTranslation = mesh.modelTranslation;
-            gl.uniform3f(uChunk0Translation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-            gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
-            UIntMesh.unbind();
+            meshDrawer.draw(mesh);            
         });
         gl.bindVertexArray(null);
 

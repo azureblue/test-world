@@ -321,39 +321,45 @@ export class ImagePixels {
 
 export class Array3D {
     #planeSize
-    #size
-    #height
+    #xSize
+    #ySize
+    #zSize
     data
 
     /**
-     * @param {number} size 
-     * @param {number} height 
+     * @param {number} xSize 
+     * @param {number} ySize 
+     * @param {number} zSize 
      * @param {Uint32Array} [data]
      */
-    constructor(size, height, data = null) {
-        this.#size = size | 0;
-        this.#height = height | 0;
-        this.#planeSize = (size * size) | 0;
-        this.data = new Uint32Array(this.#planeSize * height);
+    constructor(xSize, ySize, zSize, data = null) {
+        this.#xSize = xSize | 0;
+        this.#ySize = ySize | 0;
+        this.#zSize = zSize | 0;
+        this.#planeSize = (xSize * ySize) | 0;        
         if (data !== null) {
-            this.data.set(data);
+            if (data.length !== this.#planeSize * this.#zSize) 
+                throw new Error(`Data length ${data.length} does not match expected size ${this.#planeSize * this.#zSize}`);
+            this.data = data;
+        } else {
+            this.data = new Uint32Array(this.#planeSize * this.#zSize);
         }
     }
 
     setHXY(h, x, y, v) {
-        this.data[this.#planeSize * h + y * this.#size + x] = v;
+        this.data[this.#planeSize * h + y * this.#xSize + x] = v;
     }
 
     setXYZ(x, y, z, v) {
-        this.data[this.#planeSize * z + y * this.#size + x] = v;
+        this.data[this.#planeSize * z + y * this.#xSize + x] = v;
     }
 
     getHXY(h, x, y) {
-        return this.data[this.#planeSize * h + y * this.#size + x];
+        return this.data[this.#planeSize * h + y * this.#xSize + x];
     }
 
     getXYZ(x, y, z) {
-        return this.data[this.#planeSize * z + y * this.#size + x];
+        return this.data[this.#planeSize * z + y * this.#xSize + x];
     }
 
     fill(v) {
@@ -361,23 +367,15 @@ export class Array3D {
     }
 
     index(h, x, y) {
-        return this.#planeSize * h + y * this.#size + x;
+        return this.#planeSize * h + y * this.#xSize + x;
     }
 
     rowIdx(h, y) {
-        return this.#planeSize * h + y * this.#size;
+        return this.#planeSize * h + y * this.#xSize;
     }
 
     planeIdx(h) {
         return this.#planeSize * h;
-    }
-
-    get size() {
-        return this.#size;
-    }
-
-    get height() {
-        return this.#height;
     }
 
     /**
@@ -387,8 +385,8 @@ export class Array3D {
      * @param {Uint32Array} array 
      * @param {number} len 
      */
-    put(h, x, y, array, len) {
-        const startIdx = this.#planeSize * h + y * this.#size + x;
+    put(h, x, y, array, len) {        
+        const startIdx = this.#planeSize * h + y * this.#xSize + x;
         for (let i = 0; i < len; i++) {
             this.data[startIdx + i] = array[i];
         }
@@ -402,7 +400,7 @@ export class Array3D {
      * @param {number} len 
      */
     fetch(h, x, y, array, len) {
-        const startIdx = this.#planeSize * h + y * this.#size + x;
+        const startIdx = this.#planeSize * h + y * this.#xSize + x;
         for (let i = 0; i < len; i++) {
             array[i] = this.data[startIdx + i];
         }
@@ -630,3 +628,15 @@ export const Arrays = {
 }
 
 Object.freeze(Arrays);
+
+
+/**
+ * @param {ArrayBuffer} source 
+ * @param {ArrayBuffer} target 
+ * @param {number} byteTargetOffset - Offset in the target buffer to start copying to (default 0)
+ */
+export function copyData(source, target, byteTargetOffset = 0) {
+    const sourceView = new Uint8Array(source);
+    const targetView = new Uint8Array(target, byteTargetOffset);
+    targetView.set(sourceView);
+}
