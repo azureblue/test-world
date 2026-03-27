@@ -15,7 +15,7 @@ export class ChunkDataExt extends ChunkData {
      */
     constructor(data = null) {
         super();
-        if (data !== null) {            
+        if (data !== null) {
             if (data.length !== CHUNK_SIZE_E * CHUNK_SIZE_E * CHUNK_SIZE_E) {
                 throw new Error(`Data length (${data.length}) does not match expected size (${CHUNK_SIZE_E * CHUNK_SIZE_E * CHUNK_SIZE_E})`);
             }
@@ -23,7 +23,7 @@ export class ChunkDataExt extends ChunkData {
         } else {
             this.array3d = new Array3D(CHUNK_SIZE_E, CHUNK_SIZE_E, CHUNK_SIZE_E);
         }
-     }
+    }
 
     /**
      * @return {ArrayBuffer}
@@ -35,7 +35,7 @@ export class ChunkDataExt extends ChunkData {
     /**
      * @param {ArrayBuffer} rawData
      */
-    setRawData(rawData) {        
+    setRawData(rawData) {
         this.array3d.data = new Uint32Array(rawData);
     }
 
@@ -47,7 +47,7 @@ export class ChunkDataExt extends ChunkData {
         return 0;
     }
 
-    getVoxelXYZ(x, y, z) {        
+    getVoxelXYZ(x, y, z) {
         return this.array3d.getHXY(z + 1, x + 1, y + 1);
     }
 
@@ -58,7 +58,7 @@ export class ChunkDataExt extends ChunkData {
     updateBorderVoxel(x, y, z, value) {
 
     }
-    
+
     /**     
      * @returns {minH:number, maxH:number, minY:number, maxY:number, minX:number, maxX:number} | null
      */
@@ -92,9 +92,9 @@ export class ChunkDataExt extends ChunkData {
      */
     updateAdjBlockData(dir27, chunkBlockData) {
         const E = CHUNK_SIZE + 1;
-        const e = CHUNK_SIZE - 1;        
+        const e = CHUNK_SIZE - 1;
         const a = this.array3d;
-        const b = chunkBlockData;        
+        const b = chunkBlockData;
 
         switch (dir27) {
             case 0: a.setXYZ(0, 0, 0, b.getXYZ(e, e, e)); break;
@@ -331,110 +331,26 @@ export class ChunkDataExtTransfer extends ChunkDataTransfer {
 
 export class ChunkExtDataFactory extends ChunkDataFactory {
 
-    constructor() {
-        super();
-     }
     /**
      * @param {ChunkBlockData} chunkBlockData
      * @returns {ChunkDataExt}
      */
-    createChunkDataFrom(chunkBlockData) {        
-        const extData = new ChunkDataExt();        
-        const a3dA = extData.array3d;
-        const a3dAData = a3dA.data;
-        const blockData = chunkBlockData.data;
-        for (let h = 0; h < CHUNK_SIZE; h++)
-            for (let y = 0; y < CHUNK_SIZE; y++) {
-                const rowIdx = a3dA.index(h + 1, 1, y + 1);
-                const blockRowIdx = chunkBlockData.index(h, 0, y);
+    createChunkDataFrom(chunkBlockData) {
+        const extData = new ChunkDataExt();
+        const dst = extData.array3d.data;
+        const src = chunkBlockData.data;
+
+        for (let h = 0; h < CHUNK_SIZE; h++) {
+            let dstRow = extData.array3d.index(h + 1, 1, 1);
+            let srcRow = chunkBlockData.index(h, 0, 0);
+
+            for (let y = 0; y < CHUNK_SIZE; y++, dstRow += CHUNK_SIZE_E, srcRow += CHUNK_SIZE) {
                 for (let x = 0; x < CHUNK_SIZE; x++) {
-                    a3dAData[rowIdx + x] = blockData[blockRowIdx + x];
+                    dst[dstRow + x] = src[srcRow + x];
                 }
             }
+        }
+
         return extData;
     }
 }
-
-// export class ChunkExt {
-//     #data
-//     #mesh
-//     #chunkPosition
-
-//     /**@type {FVec3} */
-//     #worldCenterPosition
-//     #worldAABBData = new Float32Array(6);
-
-//     extra = {}
-
-//     /**
-//      * @param {IVec3} chunkPosition 
-//      * @param {ChunkDataExt} data
-//      * @param {UIntMesh} mesh
-//      */
-//     constructor(chunkPosition, data, mesh) {
-//         this.#data = data;
-//         this.#chunkPosition = chunkPosition
-//         this.#mesh = mesh;
-//         this.#worldCenterPosition = fvec3(chunkPosition.x * CHUNK_SIZE + CHUNK_SIZE / 2, chunkPosition.z * CHUNK_SIZE + CHUNK_SIZE / 2, -chunkPosition.y * CHUNK_SIZE - CHUNK_SIZE / 2);
-//         this.#updateCornersData();
-//     }
-
-//     #updateCornersData() {
-//         const bounds = this.data.bounds();
-//         if (!bounds) {
-//             return;
-//         }
-
-//         const cp = this.#chunkPosition;
-//         const minX = cp.x * CHUNK_SIZE + bounds.minX;
-//         const maxX = cp.x * CHUNK_SIZE + bounds.maxX;
-
-//         const minY = cp.z * CHUNK_SIZE + bounds.minH;
-//         const maxY = cp.z * CHUNK_SIZE + bounds.maxH;
-
-//         const maxZ = -cp.y * CHUNK_SIZE - bounds.minY;
-//         const minZ = -cp.y * CHUNK_SIZE - bounds.maxY;
-
-//         const arr = this.#worldAABBData;
-//         arr[0] = minX; arr[1] = minY; arr[2] = minZ;
-//         arr[3] = maxX; arr[4] = maxY; arr[5] = maxZ;
-//     }
-
-//     peek(x, y) {
-//         return this.#data.peak(x, y);
-//     }
-
-//     /**     
-//      * @returns {minH:number, maxH:number, minY:number, maxY:number, minX:number, maxX:number} | null
-//      */
-//     bounds() {
-//     }
-
-//     get worldCenterPosition() {
-//         return this.#worldCenterPosition;
-//     }
-
-//     get worldAABBMinMax() {
-//         return this.#worldAABBData;
-//     }
-
-//     get mesh() {
-//         return this.#mesh;
-//     }
-
-//     set mesh(mesh) {
-//         this.#mesh = mesh;
-//     }
-
-//     get data() {
-//         return this.#data;
-//     }
-
-//     set data(data) {
-//         this.#data = data;
-//     }
-
-//     get position() {
-//         return this.#chunkPosition;
-//     }
-// }
