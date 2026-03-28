@@ -2,7 +2,7 @@ import { ChunkGenerator } from "../gen/generator.js";
 import { Dir27, fvec3, FVec3, IVec3, vec3 } from "../geom.js";
 import { ChunkMesh, MeshData } from "../mesh/mesh.js";
 import { TransferObject } from "../transfer.js";
-import { Array3D, MovingAverage } from "../utils.js";
+import { Array3D, FixedSizeMap, MovingAverage } from "../utils.js";
 
 export const CHUNK_SIZE_BIT_LEN = 5 | 0;
 export const CHUNK_SIZE = 32 | 0;
@@ -211,8 +211,8 @@ export class ChunkSpec {
 export class ChunkDataLoader {
     #avgTime = new MovingAverage(200);
 
-    /** @type {Map<string, ChunkBlockData>} */
-    #blockDataCache = new Map();
+    /** @type {FixedSizeMap<string, ChunkBlockData>} */
+    #blockDataCache = new FixedSizeMap(27 * 30);
 
     /** @type {ChunkGenerator} */
     #generator;

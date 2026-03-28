@@ -640,3 +640,37 @@ export function copyData(source, target, byteTargetOffset = 0) {
     const targetView = new Uint8Array(target, byteTargetOffset);
     targetView.set(sourceView);
 }
+
+export class FixedSizeMap {
+    #map;
+    #keys;
+    #maxSize;
+    #nextIndex = 0;
+    #count = 0;
+
+    constructor(maxSize) {
+        this.#map = new Map();
+        this.#keys = new Array(maxSize);
+        this.#maxSize = maxSize;
+    }
+
+    set(key, value) {
+        if (this.#count === this.#maxSize) {
+            this.#map.delete(this.#keys[this.#nextIndex]);
+        } else {
+            this.#count++;
+        }
+
+        this.#keys[this.#nextIndex] = key;
+        this.#map.set(key, value);
+
+        this.#nextIndex++;
+        if (this.#nextIndex === this.#maxSize) {
+            this.#nextIndex = 0;
+        }
+    }
+
+    get(key) {
+        return this.#map.get(key);
+    }
+}
