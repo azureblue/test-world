@@ -1,5 +1,5 @@
-import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataFactory } from "./chunk/chunk.js";
-import { ChunkDataExtTransfer, ChunkExtDataFactory } from "./chunk/extChunk.js";
+import { Chunk, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "./chunk/chunk.js";
+import { ChunkDataExtTransfer } from "./chunk/extChunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
 import { createFastMesher } from "./global.js";
 import { Logger } from "./logging.js";
@@ -7,6 +7,8 @@ import { MeshHandler } from "./mesh/mesh.js";
 import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
 import { UIntWasmMesher } from "./mesh/uIntWasmMesher.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
+import { ChunkRequest, ChunkResponse } from "./worker/common.js";
+import { WorkerClient } from "./worker/worker.js";
 
 /**
  * @typedef {import("./chunkLoader.js").ChunkResponseData} ChunkResponseData
@@ -82,18 +84,19 @@ class ChunkLoadPromise {
 
 export class World {
     #frame = 0;
-    #chunkLoaders;
+    #chunkLoaderWorkerClient;
+    /** @type {MessagePort} */
+    #chunkLoadPort;
     #loaderIndex = 0;
     #tmpBuffer = new GenericBuffer(1000);
     #pos = fvec3();
     #chunkPos = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
     #chunkPosChanged = false;
     #meshHandler;
-    
 
     #chunkDataTransfer = new ChunkDataExtTransfer();
     #meshDataTransfer = new UIntMeshDataTransfer();
-    
+
     #quickMesher = createFastMesher();
 
     /**@type {Array<Vec3>} */
@@ -106,7 +109,7 @@ export class World {
     #chunkDataQueue = new Map();
 
     /**@type {GenericBuffer<IVec3>} */
-    #initialChunkRequestQueue = new GenericBuffer(1000);
+    #initialChunkRequestQueue = [];
 
     /**@type {ChunkLoadPromise} */
     #currentChunkPromise = null;
@@ -130,26 +133,68 @@ export class World {
      */
     constructor(meshHandler) {
         this.#meshHandler = meshHandler;
-        this.#chunkLoaders = [];
-        for (let i = 0; i < 4; i++) {
-            const id = i;
-            const worker = new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=${id}`), { type: "module" });
-            worker.ready = false;
-            worker.initialChunkRequestQueue = []
-            worker.onmessage = (me) => {
-                if (me.data.type === "ready") {
-                    worker.ready = true;
-                    console.log("chunk loader worker ready: " + me.data.data.workerId);
-                    for (let cpos of worker.initialChunkRequestQueue) {
-                        this.#sendChunkRequestToWorker(id, cpos);
-                    }
-                    worker.initialChunkRequestQueue = [];
-                } else if (me.data.type === "chunkResponse") {
-                    this.onChunk(me.data.data);
-                }
+        this.#chunkLoaderWorkerClient = new WorkerClient(
+            new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=world0`), { type: "module" }),
+            logger
+        );
+        this.#chunkLoaderWorkerClient.connect("chunkLoad").then((messagePort) => {
+            logger.info(() => "connected to world worker");
+            this.#workerReady = true;
+            this.#chunkLoadPort = messagePort;
+            this.#chunkLoadPort.onmessage = (message) => {
+                const chunkResponse = ChunkResponse.from(message.data);
+                this.onChunk(chunkResponse);
             }
-            this.#chunkLoaders.push(worker);
-        }
+            for (let cpos of this.#initialChunkRequestQueue) {
+                this.#sendChunkRequestToWorker(0, cpos);
+            }
+            this.#initialChunkRequestQueue = [];
+        });
+        // this.#chunkLoader = new Worker(Resources.relativeToRoot(`./worker/worldWorker.js?workerId=world0`), { type: "module" });
+        // this.#chunkLoader.onmessage = (message) => {
+        //     switch (message.data.type) {
+        //         case "ready":
+        //             const workerReady = WorkerReadyResponse.from(message);
+        //             logger.info(() => `world worker ${workerReady.workerId} ready, sending connection port`);
+        //             new ConnectionPortRequest(this.#messageChannel.port1, "asd").toMessage().post(this.#chunkLoader);
+        //             break;
+        //         case "connectionPortResponse":
+        //             const connectionResponse = ConnectionPortResponse.from(message);
+        //             logger.info(() => `worker world0 connected to World with connection id ${connectionResponse.connectionId}`);
+        //             this.#workerReady = true;
+        //             for (let cpos of this.#initialChunkRequestQueue) {
+        //                 this.#sendChunkRequestToWorker(0, cpos);
+        //             }
+        //             this.#initialChunkRequestQueue = [];
+        //             break;
+        //         default:
+        //             logger.warn(() => "unknown message type: " + message.data.type);
+        //     }
+        // };
+        // this.#messageChannel.port2.onmessage = (message) => {
+        //     const chunkResponse = ChunkResponse.from(message);          
+        //     this.onChunk(chunkResponse);  
+        // }
+
+        // for (let i = 0; i < 4; i++) {
+        //     const id = i;
+        //     const worker = new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=${id}`), { type: "module" });
+        //     worker.ready = false;
+        //     worker.initialChunkRequestQueue = []
+        //     worker.onmessage = (me) => {
+        //         if (me.data.type === "ready") {
+        //             worker.ready = true;
+        //             console.log("chunk loader worker ready: " + me.data.data.workerId);
+        //             for (let cpos of worker.initialChunkRequestQueue) {
+        //                 this.#sendChunkRequestToWorker(id, cpos);
+        //             }
+        //             worker.initialChunkRequestQueue = [];
+        //         } else if (me.data.type === "chunkResponse") {
+        //             this.onChunk(me.data.data);
+        //         }
+        //     }
+        //     this.#chunkLoaders.push(worker);
+        // }
 
         /** @type {GenericBuffer<Vec3>} */
         const tmpBuff = new GenericBuffer(512);
@@ -167,26 +212,27 @@ export class World {
     }
 
     #sendChunkRequestToWorker(workerId, chunkPos) {
-        this.#chunkLoaders[workerId].postMessage({
-            type: "chunkRequest",
-            data: { chunkPos: chunkPos }
-        });
+        ChunkRequest.toMessage(new ChunkRequest(chunkPos)).post(this.#chunkLoadPort);
+        // this.#chunkLoaders[workerId].postMessage({
+        //     type: "chunkRequest",
+        //     data: { chunkPos: chunkPos }
+        // });
     }
 
     #requestChunk(cx, cy, cz) {
         const workerId = this.#loaderIndex;
-        if (!this.#chunkLoaders[workerId].ready) {
-            this.#chunkLoaders[workerId].initialChunkRequestQueue.push(vec3(cx, cy, cz));
+        if (!this.#workerReady) {
+            this.#initialChunkRequestQueue.push(vec3(cx, cy, cz));
         } else {
             this.#sendChunkRequestToWorker(workerId, vec3(cx, cy, cz));
         }
-        this.#loaderIndex = (this.#loaderIndex + 1) % this.#chunkLoaders.length;
+        // this.#loaderIndex = (this.#loaderIndex + 1) % this.#chunkLoaders.length;
     }
 
     /**
-     * @param {ChunkResponseData} data 
+     * @param {ChunkResponse} data 
      */
-    onChunk(data) {        
+    onChunk(data) {
         const chunkPos = data.chunkPos;
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
         if (this.#currentChunkPromise != null && this.#currentChunkPromise.key == key)
@@ -205,9 +251,9 @@ export class World {
     }
 
     /**
-     * @param {ChunkResponseData} data 
+     * @param {ChunkResponse} data 
      */
-    processChunkData(data) {        
+    processChunkData(data) {
         const chunkPos = data.chunkPos;
         // logger.info(`processing chunk data (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z})`);
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
@@ -224,9 +270,9 @@ export class World {
         }
 
         const now = performance.now();
-        const meshData = this.#meshDataTransfer.createFrom(data.tMeshData);
-        const chunkData = this.#chunkDataTransfer.createFrom(data.tChunkData);
-        
+        const meshData = data.chunkMesh;
+        const chunkData = data.chunkData;
+
         let mesh = null
         if (!meshData.isEmpty()) {
             mesh = this.#meshHandler.upload(meshData);
@@ -479,11 +525,11 @@ export class World {
         console.log(`before mesh: ${(beforeMesh - start).toFixed(0)} ms, mesh time: ${(end - beforeMesh).toFixed(0)} ms`);
     }
 
-    blockWorldAt(iwx, iwy, iwz) {        
+    blockWorldAt(iwx, iwy, iwz) {
         return this.blockAt(iwx, -iwz - 1, iwy);
     }
-     
-    blockAt(ix, iy, iz) {        
+
+    blockAt(ix, iy, iz) {
         const cx = ix >> CHUNK_SIZE_BIT_LEN;
         const cy = iy >> CHUNK_SIZE_BIT_LEN;
         const cz = iz >> CHUNK_SIZE_BIT_LEN;

@@ -897,12 +897,9 @@ export class TestGenerator2 {
      */
     generateChunk(chunkPos) {
         const chunkData = new ChunkBlockData();
-        if (chunkPos.equals(0, 0, 0)) 
-            GeneratorPatterns.border(chunkData);
-        // } else if (chunkPos.equals(1, 0, 0)) {
-            // GeneratorPatterns.border(chunkData);
+        // if (Math.max(Math.abs(chunkPos.x), Math.abs(chunkPos.y), Math.abs(chunkPos.z)) <= 2) {
+            GeneratorPatterns.fullSolid(chunkData);
         // }
-
         return chunkData;
     }
 }

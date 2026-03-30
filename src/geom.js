@@ -382,6 +382,11 @@ export class Vec3 {
         this.z = z;
     }
 
+    /* @param {Vec3} vec */
+    add(vec) {
+        return new Vec3(this.x + vec.x, this.y + vec.y, this.z + vec.z);
+    }
+
     equals(x, y, z) {
         return this.x === x && this.y === y && this.z === z;
     }

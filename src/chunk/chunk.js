@@ -1,5 +1,5 @@
 import { ChunkGenerator } from "../gen/generator.js";
-import { Dir27, fvec3, FVec3, IVec3, vec3 } from "../geom.js";
+import { Dir27, fvec3, FVec3, IVec3, Vec3, vec3 } from "../geom.js";
 import { ChunkMesh, MeshData } from "../mesh/mesh.js";
 import { TransferObject } from "../transfer.js";
 import { Array3D, FixedSizeMap, MovingAverage } from "../utils.js";
@@ -16,8 +16,11 @@ export function posToKey3(cx, cy, cz) {
 }
 
 export class ChunkBlockData extends Array3D {
-    constructor() {
-        super(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE);
+    /**
+     * @param {Uint32Array | null} data - The raw block data for the chunk. If null, a new buffer will be created.
+     */
+    constructor(data = null) {
+        super(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE, data);
     }
 }
 
@@ -125,9 +128,9 @@ export class Chunk {
     /**
      * @param {IVec3} chunkPosition 
      * @param {ChunkData} data
-     * @param {ChunkMesh} mesh
+     * @param {ChunkMesh} [mesh] Optional mesh for this chunk
      */
-    constructor(chunkPosition, data, mesh) {
+    constructor(chunkPosition, data, mesh = null) {
         this.#data = data;
         this.#chunkPosition = chunkPosition
         this.#mesh = mesh;
@@ -229,16 +232,14 @@ export class ChunkDataLoader {
     }
 
     /**
-     * @param {number} cx chunk x 
-     * @param {number} cy chunk y
-     * @param {number} cz chunk z 
+     * @param {Vec3} chunkPos
      * @returns {ChunkBlockData}
      */
-    #loadChunkBlockData(cx, cy, cz) {
-        const key = posToKey3(cx, cy, cz);
+    #loadChunkBlockData(chunkPos) {
+        const key = posToKey3(chunkPos.x, chunkPos.y, chunkPos.z);
         let chunkBlockData = this.#blockDataCache.get(key);
         if (chunkBlockData === undefined) {
-            chunkBlockData = this.#generator.generateChunk(vec3(cx, cy, cz));
+            chunkBlockData = this.#generator.generateChunk(chunkPos);
             this.#blockDataCache.set(key, chunkBlockData);
         }
 
@@ -248,17 +249,18 @@ export class ChunkDataLoader {
     /**
      * @returns {ChunkData}
      */
-    loadChunk(cx, cy, cz) {
-        const chunkBlockData = this.#loadChunkBlockData(cx, cy, cz);
+    loadChunk(chunkPos) {
+        const chunkBlockData = this.#loadChunkBlockData(chunkPos);
         const chunkData = this.#chunkDataFactory.createChunkDataFrom(chunkBlockData);
-        this.#updateAdjData(chunkData, cx, cy, cz);
+        this.#updateAdjData(chunkData, chunkPos);
         return chunkData;
     }
 
     /**
      * @param {ChunkData} chunkData
+     * @param {Vec3} chunkPos
      */
-    #updateAdjData(chunkData, cx, cy, cz) {
+    #updateAdjData(chunkData, chunkPos) {
         const bounds = chunkData.calculateBounds();
 
         let adj27Needed = (1 << 27) - 1
@@ -285,7 +287,7 @@ export class ChunkDataLoader {
             for (let dir27 = 0; dir27 < 27; dir27++, adj27Needed >>>= 1) {
                 if ((adj27Needed & 1) === 0) continue;
                 const dirOffset = Dir27[dir27];
-                const adjChunkBlockData = this.#loadChunkBlockData(cx + dirOffset.x, cy + dirOffset.y, cz + dirOffset.z);
+                const adjChunkBlockData = this.#loadChunkBlockData(chunkPos.add(dirOffset));
                 if (!adjChunkBlockData) continue;
                 chunkData.updateAdjBlockData(dir27, adjChunkBlockData);
             }

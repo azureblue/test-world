@@ -673,4 +673,8 @@ export class FixedSizeMap {
     get(key) {
         return this.#map.get(key);
     }
+
+    has(key) {
+        return this.#map.has(key);
+    }
 }

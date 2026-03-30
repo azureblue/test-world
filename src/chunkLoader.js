@@ -1,17 +1,19 @@
 import { ChunkDataLoader } from "./chunk/chunk.js";
-import { ChunkExtDataFactory as ChunkDataExtFactory, ChunkDataExtTransfer } from "./chunk/extChunk.js";
-import { createGenerator, NoiseChunkGenerator } from "./gen/generator.js";
+import { ChunkExtDataFactory as ChunkDataExtFactory } from "./chunk/extChunk.js";
+import { createGenerator } from "./gen/generator.js";
 import { Vec3, vec3 } from "./geom.js";
 import { Logger } from "./logging.js";
-import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
 import { UIntWasmMesher } from "./mesh/uIntWasmMesher.js";
+import { ChunkRequest, ChunkResponse } from "./worker/common.js";
+import { WorkerConnection, WorkerServer } from "./worker/worker.js";
 
 
 const params = new URL(self.location.href).searchParams;
-const WORKER_ID = Number(params.get("workerId"));
+const WORKER_ID = params.get("workerId");
+
+
 const logger = new Logger("chunk load worker " + WORKER_ID);
 
-logger.info(() => "booted " + self.location?.href);
 
 /**
  * @typedef {Object} ChunkResponseData
@@ -55,68 +57,35 @@ await UIntWasmMesher.init();
 const generator = createGenerator(); // new Generator02();
 const chunkDataFactory = new ChunkDataExtFactory();
 const chunkDataLoader = new ChunkDataLoader(generator, chunkDataFactory);
-const chunkDataTransfer = new ChunkDataExtTransfer();
 const mesher = new UIntWasmMesher({ quick: false });
-const meshDataTransfer = new UIntMeshDataTransfer();
 
+const workerServer = new WorkerServer(self, WORKER_ID, {
 
-
-
-function loadAndPost(chunkPos) {
-    const chunkLoadStart = performance.now();
-    const cx = chunkPos.x;
-    const cy = chunkPos.y;
-    const cz = chunkPos.z;
-    logger.debug(() => `handling chunk request (${cx}, ${cy}, ${cz})`);
-    const chunkData = chunkDataLoader.loadChunk(cx, cy, cz);
-    const meshData = mesher.createMesh(vec3(cx, cy, cz), chunkData);
-    
-    const chunkLoadTime = performance.now() - chunkLoadStart;
-    logger.debug(() => `complete loading chunk (${cx}, ${cy}, ${cz}) in ${chunkLoadTime} - posting`);
-
-    const chunkDataTransferObject = chunkDataTransfer.transfer(chunkData);
-    const meshDataTransferObject = meshDataTransfer.transfer(meshData);
-
-    postMessage({
-        type: "chunkResponse",
-        data: {
-            chunkPos: vec3(cx, cy, cz),
-            tChunkData: chunkDataTransferObject.data,
-            tMeshData: meshDataTransferObject.data
-        }
-    }, { "transfer": [...chunkDataTransferObject.transferList, ...meshDataTransferObject.transferList] });
-
-}
-
-onmessage = (message) => {
-    /** 
-     * @type {WorkerMessage} data
+    /**
+     * @param {MessageEvent} event - The message event containing the chunk request data.
+     * @param {WorkerConnection} connection
      */
-    const data = message.data;
+    chunkLoad: {
+        onMessage: (event, connection) => {
+            const chunkRequest = ChunkRequest.from(event);
+            const chunkPos = chunkRequest.chunkPos;
+            logger.debug(() => "chunk request: " + chunkPos.x + " " + chunkPos.y + " " + chunkPos.z);
 
-    if (data.type == "chunkRequest") {
-        const chunkPos = data.data.chunkPos;
-        logger.debug(() => "chunk request: " + chunkPos.x + " " + chunkPos.y + " " + chunkPos.z);
-        loadAndPost(chunkPos);
-    } else {
-        logger.warn(() => "unknown message type: " + data.type);
-    }
-};
+            const chunkLoadStart = performance.now();
+            const cx = chunkPos.x;
+            const cy = chunkPos.y;
+            const cz = chunkPos.z;
+            logger.debug(() => `handling chunk request (${cx}, ${cy}, ${cz})`);
+            const chunkData = chunkDataLoader.loadChunk(chunkPos);
+            const meshData = mesher.createMesh(chunkPos, chunkData);
 
+            const chunkLoadTime = performance.now() - chunkLoadStart;
+            logger.debug(() => `complete loading chunk (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z}) in ${chunkLoadTime} - posting`);
 
-logger.info(() => "initialized");
-postMessage({
-    type: "ready",
-    data: {
-        workerId: WORKER_ID
+            const chunkResponseMessage = ChunkResponse.toMessage(new ChunkResponse(chunkPos, chunkData, meshData));
+            chunkResponseMessage.post(connection.port);
+        }
     }
 });
 
-// for (const e of initialQueue) {
-//     setTimeout(() => {
-//         loadAndPost(e.cx, e.cy, e.cz);
-//     }, 0);
-// }
-
-// initialQueue.length = 0;
-// setTimeout(() => postMessage("ready"), 100);
+workerServer.start();
