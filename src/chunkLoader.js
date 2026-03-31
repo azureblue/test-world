@@ -14,47 +14,9 @@ const WORKER_ID = params.get("workerId");
 
 const logger = new Logger("chunk load worker " + WORKER_ID);
 
-
-/**
- * @typedef {Object} ChunkResponseData
- * @property {Vec3} chunkPos - The position of the chunk as [cx, cy, cz].
- * @property {ArrayBuffer} tChunkData - The transferred chunk data.
- * @property {ArrayBuffer} tMeshData - The transferred mesh data.
- */
-
-
-/**
- * @typedef {Object} GenerateRequest
- * @property {Vec3} chunkPos - The position of the chunk to generate as [cx, cy, cz].
- */
-
-/**
- * @typedef {Object} MeshRequest
- * @property {Vec3} chunkPos - The position of the chunk to mesh as [cx, cy, cz].
- * @property {ArrayBuffer} rawChunkData - The raw chunk data to mesh.
- */
-
-/**
- * @typedef {Object} WorkerMessage
- * @property {string} type - The type of message ("init", "generate", "mesh", etc.).
- * @property {any} id
- * @property {GenerateRequest | MeshRequest} data - The data associated with the message.
- */
-
-// const initialQueue = [];
-// onmessage = (e) => {
-//     initialQueue.push(
-//         { cx: e.data.cx, cy: e.data.cy, cz: e.data.cz }
-//     );
-// }
-
-// const heightmap = await Resources.loadImage("./images/heightmap2.png");
-// const heightmap = await Resources.loadImage("./images/test.png");
-// const heightmapPixels = ImagePixels.from(heightmap);
-
 await UIntWasmMesher.init();
 
-const generator = createGenerator(); // new Generator02();
+const generator = createGenerator();
 const chunkDataFactory = new ChunkDataExtFactory();
 const chunkDataLoader = new ChunkDataLoader(generator, chunkDataFactory);
 const mesher = new UIntWasmMesher({ quick: false });
@@ -66,7 +28,7 @@ const workerServer = new WorkerServer(self, WORKER_ID, {
      * @param {WorkerConnection} connection
      */
     chunkLoad: {
-        onMessage: (event, connection) => {
+        onMessage: async (event, connection) => {            
             const chunkRequest = ChunkRequest.from(event);
             const chunkPos = chunkRequest.chunkPos;
             logger.debug(() => "chunk request: " + chunkPos.x + " " + chunkPos.y + " " + chunkPos.z);
