@@ -1,5 +1,5 @@
 import { Logger } from "../logging.js";
-import { WorkerConnectAck, WorkerConnectReject, WorkerConnectRequest, WorkerReady } from "./common.js";
+import { CompletablePromise, WorkerConnectAck, WorkerConnectReject, WorkerConnectRequest, WorkerReady } from "./common.js";
 
 let NEXT_CONNECTION_ID = 1;
 
@@ -16,10 +16,7 @@ export class WorkerClient {
         this.workerId = null;
         this.supportedEndpoints = [];
 
-        this.readyPromise = new Promise((resolve, reject) => {
-            this._resolveReady = resolve;
-            this._rejectReady = reject;
-        });
+        this.readyPromise = new CompletablePromise();
 
         /**
          * connectionId -> { resolve, reject, localPort }
@@ -33,7 +30,7 @@ export class WorkerClient {
     }
 
     async waitUntilReady() {
-        return this.readyPromise;
+        await this.readyPromise;
     }
 
     /**
@@ -71,7 +68,7 @@ export class WorkerClient {
             this.ready = true;
             this.workerId = workerReady.workerId;
             this.supportedEndpoints = workerReady.supportedEndpoints || [];
-            this._resolveReady(workerReady);
+            this.readyPromise.resolve();
             return;
         }
 
@@ -162,7 +159,7 @@ export class WorkerServer {
 
             this.endpointConnections[endpointName].add(connection);
 
-            connection.port.onmessage = async (portEvent) => {
+            connection.port.onmessage = (portEvent) => {
                 try {
                     endpoint.onMessage(portEvent.data, connection);
                 } catch (err) {                    

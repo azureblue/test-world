@@ -7,6 +7,39 @@ import { UIntMeshDataTransfer } from "../mesh/uIntMesh.js";
 export const CHUNK_DATA_TRANSFER = new ChunkDataExtTransfer();
 export const MESH_DATA_TRANSFER = new UIntMeshDataTransfer();
 
+export class CompletablePromise {    
+    #promise;
+    #resolve;
+    #reject;
+
+    constructor() {
+        this.#promise = new Promise((resolve, reject) => {            
+            this.#resolve = resolve;
+            this.#reject = reject;
+        });
+    }
+
+    resolve(value) {
+        this.#resolve(value);
+    }
+    
+    reject(reason) {
+        this.#reject(reason);
+    }
+
+    then(a, b) {        
+        return this.#promise.then(a, b);
+    }
+
+    catch(a) {
+        return this.#promise.catch(a);
+    }
+
+    finally(a) {
+        return this.#promise.finally(a);
+    }
+}
+
 export class MessageTransportData {
     
     /**
