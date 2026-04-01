@@ -142,7 +142,7 @@ export class World {
             this.#workerReady = true;
             this.#chunkLoadPort = messagePort;
             this.#chunkLoadPort.onmessage = (message) => {
-                const chunkResponse = ChunkResponse.from(message.data);
+                const chunkResponse = ChunkResponse.fromMessage(message.data);
                 this.onChunk(chunkResponse);
             }
             for (let cpos of this.#initialChunkRequestQueue) {

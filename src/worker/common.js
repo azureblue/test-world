@@ -1,19 +1,19 @@
-import { ChunkBlockData, ChunkData, ChunkDataTransfer } from "../chunk/chunk.js";
+import { ChunkBlockData, ChunkData } from "../chunk/chunk.js";
 import { ChunkDataExtTransfer } from "../chunk/extChunk.js";
 import { vec3, Vec3 } from "../geom.js";
-import { MeshData, MeshDataTransfer } from "../mesh/mesh.js";
+import { MeshData } from "../mesh/mesh.js";
 import { UIntMeshDataTransfer } from "../mesh/uIntMesh.js";
 
 export const CHUNK_DATA_TRANSFER = new ChunkDataExtTransfer();
 export const MESH_DATA_TRANSFER = new UIntMeshDataTransfer();
 
-export class CompletablePromise {    
+export class CompletablePromise {
     #promise;
     #resolve;
     #reject;
 
     constructor() {
-        this.#promise = new Promise((resolve, reject) => {            
+        this.#promise = new Promise((resolve, reject) => {
             this.#resolve = resolve;
             this.#reject = reject;
         });
@@ -22,12 +22,12 @@ export class CompletablePromise {
     resolve(value) {
         this.#resolve(value);
     }
-    
+
     reject(reason) {
         this.#reject(reason);
     }
 
-    then(a, b) {        
+    then(a, b) {
         return this.#promise.then(a, b);
     }
 
@@ -41,7 +41,7 @@ export class CompletablePromise {
 }
 
 export class MessageTransportData {
-    
+
     /**
      * @param {string} type - The type of the message.
      * @param {any} data - The data associated with the message.
@@ -77,7 +77,7 @@ export class MessageTransportData {
  * @param {MessageEvent} message - The message event to check.
  * @throws Will throw an error if the message type does not match the expected type.
  */
-function checkType(messageClass, message) {    
+function checkType(messageClass, message) {
     if (message.type !== messageClass.type) {
         throw new Error(`Invalid message type for ${messageClass.name}: ${message.data.type}`);
     }
@@ -96,10 +96,10 @@ export class WorkerMessage {
 
 
 export class WorkerReady extends WorkerMessage {
-    static get type() {        
+    static get type() {
         return "worker_ready";
     }
-    
+
     /**
      * @param {string} workerId - The identifier for the worker.
      * @param {Array} supportedEndpoints - The list of supported endpoints.
@@ -113,7 +113,7 @@ export class WorkerReady extends WorkerMessage {
     static toMessage(workerReadyMessage) {
         return MessageTransportData.create(WorkerReady.type, { workerId: workerReadyMessage.workerId, supportedEndpoints: workerReadyMessage.supportedEndpoints });
     }
-    
+
     /**
      * @param {MessageEvent} message
      * @returns {WorkerReady}
@@ -138,9 +138,9 @@ export class WorkerConnectRequest extends WorkerMessage {
     }
 
     static toMessage(workerConnectRequest) {
-        return MessageTransportData.create(WorkerConnectRequest.type, { 
-            endpointName: workerConnectRequest.endpointName, 
-            connectionId: workerConnectRequest.connectionId, 
+        return MessageTransportData.create(WorkerConnectRequest.type, {
+            endpointName: workerConnectRequest.endpointName,
+            connectionId: workerConnectRequest.connectionId,
             port: workerConnectRequest.port
         }, [workerConnectRequest.port]);
     }
@@ -192,7 +192,7 @@ export class WorkerConnectReject extends WorkerMessage {
         this.connectionId = connectionId;
         this.reason = reason;
     }
-    
+
     static toMessage(workerConnectRejectMessage) {
         return MessageTransportData.create(WorkerConnectReject.type, { connectionId: workerConnectRejectMessage.connectionId, reason: workerConnectRejectMessage.reason });
     }
@@ -248,9 +248,9 @@ export class GenerateChunkResponse {
         this.chunkBlockData = chunkBlockData;
     }
 
-    toMessage() {        
-        return new MessageTransportData("generateChunkResponse", 
-            { chunkPos: this.chunkPos, chunkBlockData: this.chunkBlockData.data.buffer }, 
+    toMessage() {
+        return new MessageTransportData("generateChunkResponse",
+            { chunkPos: this.chunkPos, chunkBlockData: this.chunkBlockData.data.buffer },
             [this.chunkBlockData.data.buffer]);
     }
 
@@ -281,8 +281,8 @@ export class MeshChunkRequest {
 
     toMessage() {
         const tChunkData = CHUNK_DATA_TRANSFER.transfer(this.chunkData);
-        return new MessageTransportData("meshChunkRequest", 
-            { chunkPos: this.chunkPos, chunkData: tChunkData.data }, 
+        return new MessageTransportData("meshChunkRequest",
+            { chunkPos: this.chunkPos, chunkData: tChunkData.data },
             tChunkData.transferList);
     }
 
@@ -359,7 +359,7 @@ export class ChunkRequest extends WorkerMessage {
 
 
 export class ChunkResponse extends WorkerMessage {
-    
+
     static get type() {
         return "chunk_response";
     }
@@ -380,8 +380,22 @@ export class ChunkResponse extends WorkerMessage {
     static toMessage(chunkResponse) {
         const tMeshData = MESH_DATA_TRANSFER.transfer(chunkResponse.chunkMesh);
         const tChunkData = CHUNK_DATA_TRANSFER.transfer(chunkResponse.chunkData);
-        return new MessageTransportData(ChunkResponse.type, { 
-            chunkPos: chunkResponse.chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data }, [...tChunkData.transferList, ...tMeshData.transferList]);
+        return new MessageTransportData(ChunkResponse.type, {
+            chunkPos: chunkResponse.chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data
+        }, [...tChunkData.transferList, ...tMeshData.transferList]);
+    }
+
+    /**
+     * @param {Vec3} chunkPos - The position of the generated chunk.
+     * @param {ChunkData} chunkData - Chunk data to transfer.
+     * @param {ChunkMesh} chunkMesh - Mesh data to transfer.
+     */
+    static from(chunkPos, chunkData, chunkMesh) {
+        const tMeshData = MESH_DATA_TRANSFER.transfer(chunkMesh);
+        const tChunkData = CHUNK_DATA_TRANSFER.transfer(chunkData);
+        return new MessageTransportData(ChunkResponse.type, {
+            chunkPos: chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data
+        }, [...tChunkData.transferList, ...tMeshData.transferList]);
     }
 
     /**
@@ -390,7 +404,7 @@ export class ChunkResponse extends WorkerMessage {
      * @returns {ChunkResponse} A new instance of ChunkResponse.
      * @throws Will throw an error if the message type is not "chunkResponse".
      */
-    static from(message) {
+    static fromMessage(message) {
         checkType(this, message);
         const data = message.data;
         return new ChunkResponse(data.chunkPos,
