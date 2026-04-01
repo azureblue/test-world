@@ -453,7 +453,7 @@ export class World {
 
         while (t <= maxDist) {
             const block = this.blockWorldAt(x, y, z);
-            if (block !== 0) {
+            if (isSolid(block)) {
                 return { hit: true, x, y, z, block };
             }
 
