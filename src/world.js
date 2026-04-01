@@ -1,3 +1,4 @@
+import { isSolid } from "./blocks.js";
 import { Chunk, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "./chunk/chunk.js";
 import { ChunkDataExtTransfer } from "./chunk/extChunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
@@ -114,7 +115,8 @@ export class World {
     /**@type {ChunkLoadPromise} */
     #currentChunkPromise = null;
 
-    #chunkKeysSorted = new GenericBuffer(10000);
+    #chunkKeysSorted = new GenericBuffer(2000);
+    #chunkKeysSortedReversed = new GenericBuffer(2000);
     #workerReady = false;
 
     /** 
@@ -352,6 +354,11 @@ export class World {
                 this.#requestChunk(cx, cy, cz);
             }
         }
+        this.#chunkKeysSorted.trimToSize();
+        this.#chunkKeysSortedReversed.reset();
+        this.#chunkKeysSortedReversed.add(this.#chunkKeysSorted.array);
+        this.#chunkKeysSortedReversed.trimToSize();
+        this.#chunkKeysSortedReversed.array.reverse();
         // logger.debug(`requesting new chunks time: ${perfDiff(now)}`);
         // } 
     }
@@ -402,10 +409,25 @@ export class World {
     /**
      * @param {(chunk: Chunk) => void} chunkProcessor
      */
-    forEachChunkInRange(chunkProcessor) {
+    forEachChunkInRangeFarToNear(chunkProcessor) {
+        const arr = this.#chunkKeysSortedReversed.array
+        const len = this.#chunkKeysSortedReversed.length;
+        for (let i = 0; i < len; i++) {
+            const key = arr[i];
+            const value = this.#chunks.get(key);
+            if (value !== undefined && value.loaded) {
+                chunkProcessor(value.chunk, this.#frame);
+            }
+        }
+    }
+
+    /**
+     * @param {(chunk: Chunk) => void} chunkProcessor
+     */
+    forEachChunkInRangeNearToFar(chunkProcessor) {
         const arr = this.#chunkKeysSorted.array
         const len = this.#chunkKeysSorted.length;
-        for (let i = len - 1; i >= 0; i--) {
+        for (let i = 0; i < len; i++) {
             const key = arr[i];
             const value = this.#chunks.get(key);
             if (value !== undefined && value.loaded) {

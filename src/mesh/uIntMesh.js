@@ -10,11 +10,13 @@ export class UIntMeshData extends MeshData {
     /**
     * @param {Vec3} mTranslation 
     * @param {Uint32Array} data 
+    * @param {number} solidEnd
     */
-    constructor(mTranslation, data) {
+    constructor(mTranslation, data, solidEnd) {
         super();
-        this.mTranslation = mTranslation;
+        this.mTranslation = mTranslation;        
         this.data = data;
+        this.solidEnd = solidEnd;
     }
 
     isEmpty() {
@@ -31,6 +33,7 @@ export class UIntMeshDataTransfer extends MeshDataTransfer {
     transfer(meshData) {
         const uintMeshData = /** @type {UIntMeshData} */ (meshData);
         const transferData = {
+            solidEnd: uintMeshData.solidEnd,
             mTranslation: uintMeshData.mTranslation,
             data: uintMeshData.data.buffer
         };
@@ -38,7 +41,7 @@ export class UIntMeshDataTransfer extends MeshDataTransfer {
     }
 
     createFrom(data) {
-        return new UIntMeshData(vec3(data.mTranslation.x, data.mTranslation.y, data.mTranslation.z), new Uint32Array(data.data));
+        return new UIntMeshData(vec3(data.mTranslation.x, data.mTranslation.y, data.mTranslation.z), new Uint32Array(data.data), data.solidEnd);
     }
 }
 
@@ -59,7 +62,7 @@ export class UIntMeshHandler {
     }
 
     /**
-     * @param {UIntMeshData} mesh 
+     * @param {UIntMeshData} meshData 
      */
     upload(meshData) {
         const gl = this.#gl;
@@ -72,7 +75,7 @@ export class UIntMeshHandler {
         gl.vertexAttribIPointer(this.#aIn, 2, gl.UNSIGNED_INT, false, 0, 0);
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
-        return new UIntMesh(va, vb, meshData.mTranslation, meshData.data.length >> 1);
+        return new UIntMesh(va, vb, meshData.solidEnd >> 1, meshData.mTranslation, meshData.data.length >> 1);
     }
 
     /**
@@ -101,12 +104,14 @@ export class UIntMesh extends ChunkMesh {
      * @param {WebGLVertexArrayObject} va 
      * @param {WebGLBuffer} vb 
      * @param {FVec3} translation 
+     * @param {number} solidEnd
      * @param {number} len 
      */
-    constructor(va, vb, translation, len) {
+    constructor(va, vb, solidEnd, translation, len) {
         super();
         this.va = va;
         this.vb = vb;
+        this.solidEnd = solidEnd;
         this.mTranslation = translation;
         this.len = len;
     }
@@ -126,7 +131,7 @@ export class UIntMesher extends ChunkMesher {
 
     /**
       * @param {ChunkDataExt} chunkData
-      * @return {Uint32Array}
+      * @return {{data: Uint32Array, solidEnd: number}}
       */
     mesh(chunkData) {
         throw new Error("Not implemented");
@@ -143,7 +148,7 @@ export class UIntMesher extends ChunkMesher {
         const meshData = this.mesh(chunkData);
         this.#lastMeshTime = perfDiff(meshStart);
         return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
-            meshData);
+            meshData.data, meshData.solidEnd);
     }
 
     lastMeshTime() {
@@ -162,6 +167,7 @@ export class UIntMeshDrawer {
         this.#gl = gl;
         this.#uTranslation = uTranslation;
     }
+    
     /**
      * @param {UIntMesh} mesh 
      */
@@ -169,8 +175,19 @@ export class UIntMeshDrawer {
         const gl = this.#gl;
         gl.bindVertexArray(mesh.va);        
         const modelTranslation = mesh.modelTranslation;
+        gl.uniform3f(this.#uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);        
+        gl.drawArrays(gl.TRIANGLES, 0, mesh.solidEnd);
+    }
+
+    /**
+     * @param {UIntMesh} mesh 
+     */
+    drawNonSolids(mesh) {
+        const gl = this.#gl;
+        gl.bindVertexArray(mesh.va);        
+        const modelTranslation = mesh.modelTranslation;
         gl.uniform3f(this.#uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-        gl.drawArrays(gl.TRIANGLES, 0, mesh.len);
+        gl.drawArrays(gl.TRIANGLES, mesh.solidEnd, mesh.len - mesh.solidEnd);
     }
 }
 

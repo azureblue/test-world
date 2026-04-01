@@ -20,7 +20,7 @@ export class UIntWasmMesher extends UIntMesher {
 
     /**
      * @param {ChunkData} chunkData
-     * @returns {Uint32Array}
+     * @return {{data: Uint32Array, solidEnd: number}}     
      */
     mesh(chunkData) {
         const rawData = chunkData.rawData();
@@ -34,9 +34,13 @@ export class UIntWasmMesher extends UIntMesher {
             this.#heapBase + dataByteLen,
         )
         const output = new Uint32Array(this.#mem.buffer, this.#heapBase + dataByteLen, OUTPUT_SIZE / 4);
-        const trimmedOutput = new Uint32Array(len)
-        trimmedOutput.set(output.subarray(0, len));
-        return trimmedOutput;
+        const solidEnd = output[0];
+        const trimmedOutput = new Uint32Array(len - 2)
+        trimmedOutput.set(output.subarray(2, len));        
+        return {
+            data: trimmedOutput,
+            solidEnd: solidEnd
+        };
     }
 
 

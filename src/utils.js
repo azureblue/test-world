@@ -173,12 +173,15 @@ export class GenericBuffer {
      * @param {ArrayLike<T>} elements 
      */
     add(elements) {
-        if (this.array.length - this.#pos < elements.length) {
+        const len = elements.length;
+        if (this.array.length - this.#pos < len) {
             this.#extendSize();
             this.add(elements);
         } else {
-            this.array.set(elements, this.#pos);
-            this.#pos += elements.length;
+            for (let i = 0; i < len; i++) {
+                this.array[this.#pos + i] = elements[i];
+            }
+            this.#pos += len;
         }
     }
 
@@ -197,6 +200,10 @@ export class GenericBuffer {
 
     #extendSize() {
         this.array.length = this.array.length * 2;
+    }
+
+    trimToSize() {
+        this.array.length = this.#pos;
     }
 
     /**

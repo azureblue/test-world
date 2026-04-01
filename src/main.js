@@ -6,7 +6,7 @@ import { KeyboardInput, MouseInput } from "./input.js";
 import { UIntMeshDrawer, UIntMeshHandler } from "./mesh/uIntMesh.js";
 import { FPSCounter } from "./perf.js";
 import { TextureArray } from "./textures.js";
-import { Replacer, Resources, writeVoxelWireframe } from "./utils.js";
+import { GenericBuffer, Replacer, Resources, writeVoxelWireframe } from "./utils.js";
 import { Position, World } from "./world.js";
 
 const VIEW_DISTANCE_SQ = (8 * 32) ** 2;
@@ -59,7 +59,7 @@ export async function start() {
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    const aIn = chunk0Program.getAttribLocation("a_in");    
+    const aIn = chunk0Program.getAttribLocation("a_in");
     const aInBH = blockHighlightProgram.getAttribLocation("a_in");
     const bhBuffer = gl.createBuffer();
     gl.useProgram(blockHighlightProgram.program);
@@ -155,6 +155,7 @@ export async function start() {
         }
     });
 
+    const visibleChunks = new GenericBuffer(2000);
     function draw() {
         if (pause) {
             requestAnimationFrame(draw);
@@ -193,15 +194,18 @@ export async function start() {
         texArray.bind(gl);
         world.update();
 
-        world.forEachChunkInRange(chunk => {
+        visibleChunks.reset();
+        world.forEachChunkInRangeNearToFar(chunk => {
             allChunks++;
             if (!frustumCuller.shouldDraw(chunk)) {
                 return;
             }
             chunksDrawn++;
             const mesh = chunk.mesh;
-            meshDrawer.draw(mesh);            
+            meshDrawer.draw(mesh);
+            visibleChunks.put(chunk);
         });
+
         gl.bindVertexArray(null);
 
         const camDir = camera.direction;
@@ -219,6 +223,12 @@ export async function start() {
             gl.vertexAttribPointer(aInBH, 3, gl.FLOAT, false, 0, 0);
             gl.drawArrays(gl.LINES, 0, 24);
             // gl.enable(gl.DEPTH_TEST);
+        }
+
+        chunk0Program.use();
+        for (let chunk of visibleChunks) {
+            const mesh = chunk.mesh;
+            meshDrawer.drawNonSolids(mesh);
         }
 
 

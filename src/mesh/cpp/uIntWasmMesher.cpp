@@ -44,13 +44,15 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     out += 6;
 }
 
-uint complete(uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
+uint complete(uint64* out_data_ptr, uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
     uint nWater = mesh_water_ptr - mesh_data_water_base;
     uint nSolid = mesh_solid_ptr - mesh_data_solid_base;
     for (uint i = 0; i < nWater; i++) {
         *(mesh_data_solid_base + nSolid + i) = *(mesh_data_water_base + i);
     }
-    return (nSolid + nWater) * 2;
+    uint64 solidEnd = nSolid * 2;
+    out_data_ptr[0] = solidEnd;
+    return (nSolid + nWater) * 2 + 2;
 }
 
 struct face_buffers {
@@ -110,7 +112,7 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
 }
 
 template <Direction DIR>
-void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {    
+void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {
     uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
     uint layer_start_top = layers.plane_idx(DIR + top_layer_offset);
     uint layer_end_idx = layer_start_current + PLANE_SIZE;
@@ -227,7 +229,7 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, ui
 }
 
 template <Direction DIR>
-void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset) {    
+void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset) {
     const uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
     constexpr uint dir_encode_base_idx = (DIR << 3);
     constexpr int dir_xx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 0];
@@ -253,9 +255,9 @@ void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers,
 }
 
 extern "C"
-    __attribute__((export_name("create_mesh")))
-    uint
-    create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_mesh_ptr) {
+    __attribute__((export_name("create_mesh"))) uint
+    create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
+    uint64* __restrict out_mesh_ptr = out_data_ptr + 1;
     face_buffers buffers = {
         .mesh_solid_ptr = out_mesh_ptr,
         .mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64,
@@ -355,5 +357,5 @@ extern "C"
     merge_side_faces_finish<Direction::Back>(buffers, layers, current_layer_offset);
     merge_side_faces_finish<Direction::Right>(buffers, layers, current_layer_offset);
 
-    return complete(out_mesh_ptr, out_mesh_ptr + MAX_OUTPUT_UINTS64, buffers.mesh_solid_ptr, buffers.mesh_water_ptr);
+    return complete(out_data_ptr, out_mesh_ptr, out_mesh_ptr + MAX_OUTPUT_UINTS64, buffers.mesh_solid_ptr, buffers.mesh_water_ptr);
 }
