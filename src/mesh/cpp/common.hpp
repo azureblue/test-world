@@ -20,6 +20,7 @@ constexpr uint MAX_VISIBLE_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
 constexpr uint MAX_OUTPUT_UINTS64 = MAX_FACES * 6;
+constexpr uint HEADER_SIZE_IN_UINT64 = 4;
 
 constexpr int SY = 34;
 constexpr int PS = 1156;
@@ -226,6 +227,17 @@ __attribute__((always_inline)) static inline uint compute_ao_shadows(const array
         c_d.rotate_ccw();
     }
     return shadows;
+}
+
+static uint complete(uint64* out_data_ptr, uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
+    uint nWater = mesh_water_ptr - mesh_data_water_base;
+    uint nSolid = mesh_solid_ptr - mesh_data_solid_base;
+    for (uint i = 0; i < nWater; i++) {
+        *(mesh_data_solid_base + nSolid + i) = *(mesh_data_water_base + i);
+    }
+    uint64 solidEnd = nSolid * 2;
+    out_data_ptr[0] = solidEnd;
+    return (nSolid + nWater) * 2 + HEADER_SIZE_IN_UINT64 * 2;
 }
 
 // template <Direction DIR>

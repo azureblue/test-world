@@ -1,9 +1,8 @@
 import { ChunkDataLoader } from "./chunk/chunk.js";
 import { ChunkExtDataFactory as ChunkDataExtFactory } from "./chunk/extChunk.js";
 import { createGenerator } from "./gen/generator.js";
-import { Vec3, vec3 } from "./geom.js";
 import { Logger } from "./logging.js";
-import { UIntWasmMesher } from "./mesh/uIntWasmMesher.js";
+import { UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
 import { perfDiff } from "./utils.js";
 import { ChunkRequest, ChunkResponse } from "./worker/common.js";
 import { WorkerConnection, WorkerServer } from "./worker/worker.js";
@@ -15,12 +14,10 @@ const WORKER_ID = params.get("workerId");
 
 const logger = new Logger("chunk load worker " + WORKER_ID);
 
-await UIntWasmMesher.init();
-
 const generator = createGenerator();
 const chunkDataFactory = new ChunkDataExtFactory();
 const chunkDataLoader = new ChunkDataLoader(generator, chunkDataFactory);
-const mesher = new UIntWasmMesher({ quick: false });
+const mesher = await UIntExtWasmMesher.createMesher();
 
 const workerServer = new WorkerServer(self, WORKER_ID, {
 
@@ -29,7 +26,7 @@ const workerServer = new WorkerServer(self, WORKER_ID, {
      * @param {WorkerConnection} connection
      */
     chunkLoad: {
-        onMessage: async (data, connection) => {                 
+        onMessage: async (data, connection) => {
             const chunkRequest = ChunkRequest.from(data);
             const chunkPos = chunkRequest.chunkPos;
             logger.debug(() => `chunk request: (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z})`);

@@ -2,11 +2,10 @@ import { isSolid } from "./blocks.js";
 import { Chunk, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "./chunk/chunk.js";
 import { ChunkDataExtTransfer } from "./chunk/extChunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
-import { createFastMesher } from "./global.js";
 import { Logger } from "./logging.js";
 import { MeshHandler } from "./mesh/mesh.js";
 import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
-import { UIntWasmMesher } from "./mesh/uIntWasmMesher.js";
+import { UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
 import { ChunkRequest, ChunkResponse } from "./worker/common.js";
 import { WorkerClient } from "./worker/worker.js";
@@ -15,8 +14,9 @@ import { WorkerClient } from "./worker/worker.js";
  * @typedef {import("./chunkLoader.js").ChunkResponseData} ChunkResponseData
  */
 
-await UIntWasmMesher.init();
 const logger = new Logger("World");
+
+const quickMesher = await UIntExtWasmMesher.createQuickMesher();
 
 
 const CHUNK_RENDER_DIST = 6;
@@ -98,7 +98,7 @@ export class World {
     #chunkDataTransfer = new ChunkDataExtTransfer();
     #meshDataTransfer = new UIntMeshDataTransfer();
 
-    #quickMesher = createFastMesher();
+    #quickMesher = quickMesher;
 
     /**@type {Array<Vec3>} */
     #rangeDeltas;

@@ -44,17 +44,6 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     out += 6;
 }
 
-uint complete(uint64* out_data_ptr, uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
-    uint nWater = mesh_water_ptr - mesh_data_water_base;
-    uint nSolid = mesh_solid_ptr - mesh_data_solid_base;
-    for (uint i = 0; i < nWater; i++) {
-        *(mesh_data_solid_base + nSolid + i) = *(mesh_data_water_base + i);
-    }
-    uint64 solidEnd = nSolid * 2;
-    out_data_ptr[0] = solidEnd;
-    return (nSolid + nWater) * 2 + 2;
-}
-
 struct face_buffers {
     uint64* __restrict mesh_solid_ptr;
     uint64* __restrict mesh_water_ptr;
@@ -257,7 +246,7 @@ void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers,
 extern "C"
     __attribute__((export_name("create_mesh"))) uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
-    uint64* __restrict out_mesh_ptr = out_data_ptr + 1;
+    uint64* __restrict out_mesh_ptr = out_data_ptr + HEADER_SIZE_IN_UINT64;
     face_buffers buffers = {
         .mesh_solid_ptr = out_mesh_ptr,
         .mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64,
