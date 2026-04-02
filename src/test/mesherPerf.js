@@ -2,7 +2,7 @@ import { ChunkBlockData } from "../chunk/chunk.js";
 import { ChunkExtDataFactory } from "../chunk/extChunk.js";
 import { GeneratorPatterns } from "../gen/generator.js";
 import { ivec3 } from "../geom.js";
-import { UIntWasmMesher } from "../mesh/uIntWasmMesher.js";
+import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
 import { Arrays, Float32Buffer } from "../utils.js";
 async function sha1String(arr) {
     const view = new Uint8Array(
@@ -19,9 +19,8 @@ async function sha1String(arr) {
         .join("");
 }
 export async function main() {
-    await UIntWasmMesher.init();
+    const mesher = await UIntExtWasmMesher.createQuickMesher();
 
-    const mesher = new UIntWasmMesher({ quick: false });
     const chunkDataFactory = new ChunkExtDataFactory();
     let chunkDataCollection = {
         fullChecker: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.fullChecker(new ChunkBlockData())),
