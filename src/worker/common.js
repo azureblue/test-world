@@ -1,10 +1,11 @@
+import { ChunkAdjDataTransfer } from "../chunk/adjChunk.js";
 import { ChunkBlockData, ChunkData } from "../chunk/chunk.js";
 import { ChunkDataExtTransfer } from "../chunk/extChunk.js";
 import { vec3, Vec3 } from "../geom.js";
 import { MeshData } from "../mesh/mesh.js";
 import { UIntMeshDataTransfer } from "../mesh/uIntMesh.js";
 
-export const CHUNK_DATA_TRANSFER = new ChunkDataExtTransfer();
+export const CHUNK_DATA_TRANSFER = new ChunkAdjDataTransfer();
 export const MESH_DATA_TRANSFER = new UIntMeshDataTransfer();
 
 export class CompletablePromise {

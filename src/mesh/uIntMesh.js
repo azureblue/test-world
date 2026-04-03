@@ -3,7 +3,7 @@ import { ChunkDataExt } from "../chunk/extChunk.js";
 import { FVec3, IVec3, Vec3, vec3 } from "../geom.js";
 import { TransferObject } from "../transfer.js";
 import { perfDiff } from "../utils.js";
-import { ChunkMesh, ChunkMesher, MeshData, MeshDataTransfer } from "./mesh.js";
+import { ChunkMesh, ChunkMesher, MeshData, MeshDataTransfer, MeshHandler } from "./mesh.js";
 
 export class UIntMeshData extends MeshData {
 
@@ -46,7 +46,7 @@ export class UIntMeshDataTransfer extends MeshDataTransfer {
 }
 
 
-export class UIntMeshHandler {
+export class UIntMeshHandler extends MeshHandler {
      /** @type {WebGL2RenderingContext} */
     #gl;
     /** @type {number} */
@@ -57,6 +57,7 @@ export class UIntMeshHandler {
      * @param {number} aIn 
      */
     constructor(gl, aIn) {
+        super();
         this.#gl = gl;
         this.#aIn = aIn;
     }

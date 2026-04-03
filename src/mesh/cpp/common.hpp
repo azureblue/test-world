@@ -13,6 +13,7 @@ enum Direction : uint {
 };
 
 constexpr uint CHUNK_SIZE = 32;
+constexpr uint DATA_INPUT_SIZE_IN_UINT32 = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 constexpr uint PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
 constexpr uint CHUNK_SIZE_E = CHUNK_SIZE + 2;
 constexpr uint PLANE_SIZE_E = CHUNK_SIZE_E * CHUNK_SIZE_E;
@@ -178,6 +179,14 @@ consteval uint64 vertex_offset_bits(Direction dir) {
     return (static_cast<uint64>(VERTEX_OFFSETS[dir][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[dir][1]) << 7) + (static_cast<uint64>(VERTEX_OFFSETS[dir][2]) << 14);
 };
 
+static inline uint offset_to_dir27(int x, int y, int z) {
+    return (z + 1) * 9 + (y + 1) * 3 + (x + 1);
+}
+
+static inline uint dir27_is_bit_set(uint dir27, int x, int y, int z) {
+    return (dir27 >> offset_to_dir27(x, y, z)) & 1;
+}
+
 template <Direction dir>
 __attribute__((always_inline)) static inline uint ao_get(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y);
 
@@ -211,6 +220,41 @@ __attribute__((always_inline)) inline uint ao_get<Direction::Right>(const array_
     return data.get_hxy((h + d_xy.y), (x + 1), (y + d_xy.x));
 }
 
+
+template <Direction dir>
+__attribute__((always_inline)) static inline uint ao_get_2(uint adj, const dir_xy& d_xy);
+
+template <>
+__attribute__((always_inline)) inline uint ao_get_2<Up>(uint adj, const dir_xy& d_xy) {
+    return adj >> offset_to_dir27(d_xy.x, d_xy.y, 1) & 1;    
+}
+
+template <>
+__attribute__((always_inline)) inline uint ao_get_2<Down>(uint adj, const dir_xy& d_xy) {
+    return adj >> offset_to_dir27(d_xy.x, d_xy.y, -1) & 1;
+}
+
+template <>
+__attribute__((always_inline)) inline uint ao_get_2<Front>(uint adj, const dir_xy& d_xy) {
+    return adj >> offset_to_dir27(d_xy.x, -1, d_xy.y) & 1;
+}
+
+template <>
+__attribute__((always_inline)) inline uint ao_get_2<Left>(uint adj, const dir_xy& d_xy) {
+    return adj >> offset_to_dir27(-1, -d_xy.x , d_xy.y) & 1;
+}
+
+template <>
+__attribute__((always_inline)) inline uint ao_get_2<Back>(uint adj, const dir_xy& d_xy) {
+    return adj >> offset_to_dir27(-d_xy.x, 1, d_xy.y) & 1;    
+}
+
+template <>
+__attribute__((always_inline)) inline uint ao_get_2<Right>(uint adj, const dir_xy& d_xy) {
+    return adj >> offset_to_dir27(1, d_xy.x, d_xy.y) & 1;    
+}
+
+
 template <Direction DIR>
 __attribute__((always_inline)) static inline uint compute_ao_shadows(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
     dir_xy s_d0{-1, 0};
@@ -228,6 +272,26 @@ __attribute__((always_inline)) static inline uint compute_ao_shadows(const array
     }
     return shadows;
 }
+
+
+template <Direction DIR>
+__attribute__((always_inline)) static inline uint compute_ao_shadows_2(const uint adj) {
+    dir_xy s_d0{-1, 0};
+    dir_xy s_d1{0, -1};
+    dir_xy c_d{-1, -1};
+    uint shadows = 0;
+    for (uint v = 0; v < 4; v++) {
+        uint s0 = ao_get_2<DIR>(adj, s_d0);
+        uint s1 = ao_get_2<DIR>(adj, s_d1);
+        uint c = ao_get_2<DIR>(adj, c_d);
+        shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
+        s_d0.rotate_ccw();
+        s_d1.rotate_ccw();
+        c_d.rotate_ccw();
+    }
+    return shadows;
+}
+
 
 static uint complete(uint64* out_data_ptr, uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
     uint nWater = mesh_water_ptr - mesh_data_water_base;

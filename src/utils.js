@@ -369,6 +369,31 @@ export class Array3D {
         return this.data[this.#planeSize * z + y * this.#xSize + x];
     }
 
+    setBitHXYChecked(h, x, y, bit, v01) {
+        if (h < 0 || h >= this.#zSize || x < 0 || x >= this.#xSize || y < 0 || y >= this.#ySize) {
+            return
+        }
+        this.setBitHXY(h, x, y, bit, v01);
+    }
+
+    setBitHXY(h, x, y, bit, v01) {
+        this.setBitXYZ(x, y, h, bit, v01);
+    }
+
+    setBitXYZ(x, y, z, bit, v01) {
+        const idx = this.#planeSize * z + y * this.#xSize + x;
+        this.data[idx] ^= (-v01 ^ this.data[idx]) & (1 << bit);
+    }
+
+    getBitHXY(h, x, y, bit) {
+        this.getBitXYZ(x, y, h, bit);
+    }
+
+    getBitXYZ(x, y, z, bit) {
+        const idx = this.#planeSize * z + y * this.#xSize + x;
+        return (this.data[idx] >>> bit) & 1;
+    }
+
     fill(v) {
         this.data.fill(v);
     }

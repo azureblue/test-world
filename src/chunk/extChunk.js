@@ -52,7 +52,8 @@ export class ChunkDataExt extends ChunkData {
     }
 
     setVoxelXYZ(x, y, z, value) {
-        this.array3d.setHXY(z + 1, x + 1, y + 1, value);
+        throw new Error("setVoxelXYZ is not implemented in ChunkDataExt");
+        // this.array3d.setHXY(z + 1, x + 1, y + 1, value);
     }
 
     updateBorderVoxel(x, y, z, value) {
