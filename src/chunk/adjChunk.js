@@ -1,13 +1,14 @@
-import { isSolidInt } from "../blocks.js";
+import { isLiquidInt, isSolidInt } from "../blocks.js";
 import { Dir27, DIR27_IDXS_ENCODED } from "../geom.js";
 import { TransferObject } from "../transfer.js";
-import { Array3D } from "../utils.js";
+import { Array3D, setBit } from "../utils.js";
 import { CHUNK_SIZE, ChunkBlockData, ChunkData, ChunkDataFactory, ChunkDataTransfer } from "./chunk.js";
 
 export const CHUNK_ADJ_DATA_LEN = CHUNK_SIZE ** 3 * 2;
 
 const DIR27_RAW_OFFSETS = new Int32Array([-1057, -1056, -1055, -1025, -1024, -1023, -993, -992, -991, -33, -32, -31, -1, 0, 1, 31, 32, 33, 991, 992, 993, 1023, 1024, 1025, 1055, 1056, 1057]);
 const PLANE_SIZE = CHUNK_SIZE * CHUNK_SIZE;
+const LIQUID_ABOVE_BIT = 30;
 
 export class ChunkAdjData extends ChunkData {
 
@@ -26,7 +27,7 @@ export class ChunkAdjData extends ChunkData {
         } else {
             this.array3d = new Array3D(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE * 2);
         }
-        this.adjData = new Array3D(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE, 
+        this.adjData = new Array3D(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE,
             this.array3d.data.subarray(this.array3d.data.length / 2));
     }
 
@@ -90,6 +91,23 @@ export class ChunkAdjData extends ChunkData {
         adjData[idx] = bits;
     }
 
+    updateLiquidAboveBits() {
+        const data = this.array3d.data;
+        const adjData = this.adjData.data;
+        for (let h = 0; h < CHUNK_SIZE - 1; h++)
+            for (let y = 0; y < CHUNK_SIZE; y++) {
+                const rowIdx = this.array3d.rowIdx(h, y);
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    adjData[rowIdx + x] = setBit(
+                        adjData[rowIdx + x],
+                         LIQUID_ABOVE_BIT, 
+                         isLiquidInt(data[rowIdx + x + PLANE_SIZE])
+                        );
+                }
+            }
+    }
+
+
     updateAdjBitsInside() {
         const E = CHUNK_SIZE - 1;
         this.#updateAdjInside();
@@ -124,17 +142,21 @@ export class ChunkAdjData extends ChunkData {
         this.#updateAdjBorder(20, E, 0, E);
         this.#updateAdjBorder(24, 0, E, E);
         this.#updateAdjBorder(26, E, E, E);
+        this.updateLiquidAboveBits();
     }
 
     setVoxelUpdateBitsXYZ(x, y, z, v) {
         const bit = isSolidInt(v);
+        const liquidBitValue = isLiquidInt(v);
         for (let dir27 = 0; dir27 < 27; dir27++) {
             const dirOffset = Dir27[dir27];
             const adjH = z + dirOffset.z;
             const adjX = x + dirOffset.x;
             const adjY = y + dirOffset.y;
-
-            this.adjData.setBitHXYChecked(adjH, adjX, adjY, 27 - dir27 - 1, bit);
+            this.adjData.setBitHXYChecked(adjH, adjX, adjY, 27 - dir27 - 1, bit);            
+        }
+        if (liquidBitValue === 1) {
+            this.adjData.setBitHXYChecked(z - 1, x, y, LIQUID_ABOVE_BIT, liquidBitValue);
         }
     }
 
@@ -142,7 +164,7 @@ export class ChunkAdjData extends ChunkData {
      * @param {number} dir27
      * @param {Array3D} chunkData
      */
-    #updateAdjData(dir27, chunkData) {    
+    #updateAdjData(dir27, chunkData) {
         const E = CHUNK_SIZE - 1;
         const dirOffset = Dir27[dir27];
         const opDirOffset = Dir27[26 - dir27];
@@ -192,7 +214,7 @@ export class ChunkAdjData extends ChunkData {
                 break;
             case 22:
                 for (let y = 0; y < CHUNK_SIZE; y++)
-                    for (let x = 0; x < CHUNK_SIZE; x++)
+                    for (let x = 0; x < CHUNK_SIZE; x++) 
                         this.setVoxelUpdateBitsXYZ(x, y, E + 1, chunkData.getXYZ(x, y, 0));
                 break;
             case 1:
@@ -346,7 +368,7 @@ export class ChunkAdjDataFactory extends ChunkDataFactory {
                 let dstRow = adjData.array3d.index(h, 0, y);
                 let srcRow = chunkBlockData.index(h, 0, y);
                 for (let x = 0; x < CHUNK_SIZE; x++) {
-                    dst[dstRow + x ] = src[srcRow + x];
+                    dst[dstRow + x] = src[srcRow + x];
                 }
             }
         }

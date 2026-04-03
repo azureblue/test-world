@@ -79,7 +79,7 @@ static inline uint is_solid_01(uint block) {
 }
 
 static inline uint decode_block_id(uint id) {
-    return id & 0x7fff'ffff;
+    return id & 0x7fff'fff;
 }
 
 struct dir_xy {
@@ -185,6 +185,10 @@ static inline uint offset_to_dir27(int x, int y, int z) {
 
 static inline uint dir27_is_bit_set(uint dir27, int x, int y, int z) {
     return (dir27 >> offset_to_dir27(x, y, z)) & 1;
+}
+
+static inline bool is_bit_set(uint value, uint bit) {
+    return (value >> bit) & 1;
 }
 
 template <Direction dir>

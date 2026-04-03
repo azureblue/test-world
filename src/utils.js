@@ -710,3 +710,7 @@ export class FixedSizeMap {
         return this.#map.has(key);
     }
 }
+
+export function setBit(value, bit, v01) {
+    return value ^= (-v01 ^ value) & (1 << bit);
+}

@@ -8,6 +8,8 @@ constexpr int DIRECTION_ENCODE[40] = {
     0, -1, CHUNK_SIZE - 1, 1, 0, 0, 0, 0};
 
 constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
+constexpr uint LIQUID_ABOVE_BIT = 30;
+
 template <Direction DIR>
 __attribute__((always_inline)) static inline void encode_face(uint64* __restrict& out, uint64 bits, uint64 w, uint64 h, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
@@ -272,16 +274,17 @@ extern "C"
 
         for (uint y = 0; y < CHUNK_SIZE; y++) {
             for (uint x = 0; x < CHUNK_SIZE; x++) {
-                uint block_id = data.get_hxy(h, x, y);
+                uint block_data = data.get_hxy(h, x, y);
+                uint block_id = decode_block_id(block_data);
                 const uint adj = adj_data.get_hxy(h, x, y);                
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
-                const uint* block_textures = BLOCKS_TEXTURES[decode_block_id(block_id)];
+                const uint* block_textures = BLOCKS_TEXTURES[block_id];
                 uint is_water = block_id == BLOCK_WATER;
-                uint above = data.get_hxy(h, x, y);
+                bool is_liquid_above = is_bit_set(adj, LIQUID_ABOVE_BIT);
                 if (!dir27_is_bit_set(adj, 0, 0, 1)) {
-                    if (is_water && above == BLOCK_WATER) {
+                    if (is_water && is_liquid_above) {
                         continue;
                     }
                     uint shadows = 0;
