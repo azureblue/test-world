@@ -32,16 +32,18 @@ export class Block {
     }
 }
 
+const SOLID_BIT = 31;
+const LIQUID_BIT = 30;
 export const BLOCK_IDS = {
     EMPTY: 0,
-    DIRT: 1 | (1 << 31),
-    DIRT_GRASS: 2 | (1 << 31),
-    GRASS: 3 | (1 << 31),
-    GRAVE: 4 | (1 << 31),
-    ROCK: 5 | (1 << 31),
-    WATER: 6,
-    SAND: 7 | (1 << 31),
-    GRASS_SHORT: 8 | (1 << 31),
+    DIRT: 1 | (1 << SOLID_BIT),
+    DIRT_GRASS: 2 | (1 << SOLID_BIT),
+    GRASS: 3 | (1 << SOLID_BIT),
+    GRAVE: 4 | (1 << SOLID_BIT),
+    ROCK: 5 | (1 << SOLID_BIT),
+    WATER: 6 | (1 << LIQUID_BIT),
+    SAND: 7 | (1 << SOLID_BIT),
+    GRASS_SHORT: 8 | (1 << SOLID_BIT),
     CHUNK_EDGE: 255
 };
 
@@ -81,14 +83,22 @@ const BLOCK_SOLID = [
 Object.freeze(BLOCK_SOLID);
 
 export function isSolid(block) {
-    return (block >>> 31 & 1) !== 0;
+    return (block >>> SOLID_BIT & 1) !== 0;
 }
 
 export function isSolidInt(block) {
-    return block >>> 31 & 1;
+    return block >>> SOLID_BIT & 1;
+}
+
+export function isLiquid(block) {
+    return (block >>> LIQUID_BIT & 1) !== 0;
+}
+
+export function isLiquidInt(block) {
+    return block >>> LIQUID_BIT & 1;
 }
 
 export function getBlockById(id) {
-    return BLOCKS[id & 0x7FFFFFFF];
+    return BLOCKS[id & 0x7FFFFFF];
 }
 
