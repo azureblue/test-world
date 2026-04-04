@@ -20,9 +20,9 @@ async function sha1String(arr) {
         .join("");
 }
 export async function main() {
-    const mesher = await UIntAdjWasmMesher.createMesher();
+    const mesher = await UIntExtWasmMesher.createFastkMesher();
 
-    const chunkDataFactory = new ChunkAdjDataFactory();
+    const chunkDataFactory = new ChunkExtDataFactory();
     let chunkDataCollection = {
         fullChecker: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.fullChecker(new ChunkBlockData())),
         doubleChecker: chunkDataFactory.createChunkDataFrom(GeneratorPatterns.doubleChecker(new ChunkBlockData())),

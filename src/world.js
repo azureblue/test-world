@@ -16,7 +16,7 @@ import { WorkerClient } from "./worker/worker.js";
 
 const logger = new Logger("World");
 
-const quickMesher = await UIntExtWasmMesher.createQuickMesher();
+const quickMesher = await UIntExtWasmMesher.createMesher();
 
 
 const CHUNK_RENDER_DIST = 6;

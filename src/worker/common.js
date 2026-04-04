@@ -5,7 +5,7 @@ import { vec3, Vec3 } from "../geom.js";
 import { MeshData } from "../mesh/mesh.js";
 import { UIntMeshDataTransfer } from "../mesh/uIntMesh.js";
 
-export const CHUNK_DATA_TRANSFER = new ChunkAdjDataTransfer();
+export const CHUNK_DATA_TRANSFER = new ChunkDataExtTransfer();
 export const MESH_DATA_TRANSFER = new UIntMeshDataTransfer();
 
 export class CompletablePromise {
