@@ -80,7 +80,7 @@ export class UIntExtWasmMesher extends UIntMesher {
         return new UIntExtWasmMesher(wasmCreateMesh, heap_base, mem);        
     }
 
-    static async createQuickMesher() {
+    static async createFastkMesher() {
         const mem = new WebAssembly.Memory({
             initial: initialPages,
             maximum: initialPages,
