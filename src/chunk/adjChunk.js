@@ -64,16 +64,41 @@ export class ChunkAdjData extends ChunkData {
         const data = this.array3d.data;
         const adjData = this.adjData.data;
         for (let h = 1; h < CHUNK_SIZE - 1; h++)
-            for (let y = 1; y < CHUNK_SIZE - 1; y++)
+            for (let y = 1; y < CHUNK_SIZE - 1; y++) {
+                const rowIdx = h * PLANE_SIZE + y * CHUNK_SIZE;
                 for (let x = 1; x < CHUNK_SIZE - 1; x++) {
-                    const idx = h * PLANE_SIZE + y * CHUNK_SIZE + x;
+                    const idx = rowIdx + x;
                     let bits = 0;
-                    for (let dir27 = 0; dir27 < 27; dir27++) {
-                        const idxOffset = DIR27_RAW_OFFSETS[dir27];
-                        bits |= isSolidInt(data[idx + idxOffset]) << dir27;
-                    }
+                    bits |= (data[idx - 1057] >>> 31) << 0;
+                    bits |= (data[idx - 1056] >>> 31) << 1;
+                    bits |= (data[idx - 1055] >>> 31) << 2;
+                    bits |= (data[idx - 1025] >>> 31) << 3;
+                    bits |= (data[idx - 1024] >>> 31) << 4;
+                    bits |= (data[idx - 1023] >>> 31) << 5;
+                    bits |= (data[idx - 993] >>> 31) << 6;
+                    bits |= (data[idx - 992] >>> 31) << 7;
+                    bits |= (data[idx - 991] >>> 31) << 8;
+                    bits |= (data[idx - 33] >>> 31) << 9;
+                    bits |= (data[idx - 32] >>> 31) << 10;
+                    bits |= (data[idx - 31] >>> 31) << 11;
+                    bits |= (data[idx - 1] >>> 31) << 12;
+                    bits |= (data[idx + 0] >>> 31) << 13;
+                    bits |= (data[idx + 1] >>> 31) << 14;
+                    bits |= (data[idx + 31] >>> 31) << 15;
+                    bits |= (data[idx + 32] >>> 31) << 16;
+                    bits |= (data[idx + 33] >>> 31) << 17;
+                    bits |= (data[idx + 991] >>> 31) << 18;
+                    bits |= (data[idx + 992] >>> 31) << 19;
+                    bits |= (data[idx + 993] >>> 31) << 20;
+                    bits |= (data[idx + 1023] >>> 31) << 21;
+                    bits |= (data[idx + 1024] >>> 31) << 22;
+                    bits |= (data[idx + 1025] >>> 31) << 23;
+                    bits |= (data[idx + 1055] >>> 31) << 24;
+                    bits |= (data[idx + 1056] >>> 31) << 25;
+                    bits |= (data[idx + 1057] >>> 31) << 26;
                     adjData[idx] = bits;
                 }
+            }
     }
 
     #updateAdjBorder(dir27, x, y, z) {
@@ -100,9 +125,9 @@ export class ChunkAdjData extends ChunkData {
                 for (let x = 0; x < CHUNK_SIZE; x++) {
                     adjData[rowIdx + x] = setBit(
                         adjData[rowIdx + x],
-                         LIQUID_ABOVE_BIT, 
-                         isLiquidInt(data[rowIdx + x + PLANE_SIZE])
-                        );
+                        LIQUID_ABOVE_BIT,
+                        isLiquidInt(data[rowIdx + x + PLANE_SIZE])
+                    );
                 }
             }
     }
@@ -153,7 +178,7 @@ export class ChunkAdjData extends ChunkData {
             const adjH = z + dirOffset.z;
             const adjX = x + dirOffset.x;
             const adjY = y + dirOffset.y;
-            this.adjData.setBitHXYChecked(adjH, adjX, adjY, 27 - dir27 - 1, bit);            
+            this.adjData.setBitHXYChecked(adjH, adjX, adjY, 27 - dir27 - 1, bit);
         }
         if (liquidBitValue === 1) {
             this.adjData.setBitHXYChecked(z - 1, x, y, LIQUID_ABOVE_BIT, liquidBitValue);
@@ -214,7 +239,7 @@ export class ChunkAdjData extends ChunkData {
                 break;
             case 22:
                 for (let y = 0; y < CHUNK_SIZE; y++)
-                    for (let x = 0; x < CHUNK_SIZE; x++) 
+                    for (let x = 0; x < CHUNK_SIZE; x++)
                         this.setVoxelUpdateBitsXYZ(x, y, E + 1, chunkData.getXYZ(x, y, 0));
                 break;
             case 1:
@@ -374,5 +399,20 @@ export class ChunkAdjDataFactory extends ChunkDataFactory {
         }
         adjData.updateAdjBitsInside();
         return adjData;
+    }
+}
+
+const CODE_GEN = {
+
+    adjInside: () => {
+        const solid01 = v => `(${v} >>> 31)`;
+        const DIR27_RAW_OFFSETS = new Int32Array([-1057, -1056, -1055, -1025, -1024, -1023, -993, -992, -991, -33, -32, -31, -1, 0, 1, 31, 32, 33, 991, 992, 993, 1023, 1024, 1025, 1055, 1056, 1057]);
+        let code = "";
+
+        for (let dir27 = 0; dir27 < 27; dir27++) {
+            code += `
+            bits |= ${solid01(`data[idx ${DIR27_RAW_OFFSETS[dir27] >= 0 ? '+' : ''} ${DIR27_RAW_OFFSETS[dir27]}]`)} << ${dir27};`;
+        }
+        return code;
     }
 }
