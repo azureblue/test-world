@@ -272,15 +272,16 @@ extern "C"
             for (uint x = 1; x < CHUNK_SIZE + 1; x++) {
                 uint real_x = x - 1;
                 uint real_y = y - 1;
-                uint block_id = data.get_hxy(h, x, y);
+                uint block_data = data.get_hxy(h, x, y);
+                uint block_id = decode_block_id(block_data);
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
-                const uint* block_textures = BLOCKS_TEXTURES[decode_block_id(block_id)];
+                const uint* block_textures = BLOCKS_TEXTURES[block_id];
                 uint is_water = block_id == BLOCK_WATER;
                 uint above = data.get_hxy(h + 1, x, y);
                 if (!is_solid(above)) {
-                    if (is_water && above == BLOCK_WATER) {
+                    if (is_water && decode_block_id(above) == BLOCK_WATER) {
                         continue;
                     }
                     uint shadows = 0;

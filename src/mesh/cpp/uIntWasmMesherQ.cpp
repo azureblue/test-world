@@ -38,7 +38,7 @@ extern "C"
     __attribute__((export_name("create_mesh")))
     uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
-    uint64* __restrict out_mesh_ptr = out_data_ptr + HEADER_SIZE_IN_UINT64;        
+    uint64* __restrict out_mesh_ptr = out_data_ptr + HEADER_SIZE_IN_UINT64;
     uint64* mesh_solid_ptr = out_mesh_ptr;
     uint64* mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64;
 
@@ -48,17 +48,18 @@ extern "C"
         for (uint y = 1; y < CHUNK_SIZE + 1; y++) {
             for (uint x = 1; x < CHUNK_SIZE + 1; x++) {
                 uint64 pos_bits = encode_pos_bits(h - 1, x - 1, y - 1);
-                uint block_id = data.get_hxy(h, x, y);
+                uint block_data = data.get_hxy(h, x, y);
+                uint block_id = decode_block_id(block_data);
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
 
-                const uint(&block_textures)[6] = BLOCKS_TEXTURES[decode_block_id(block_id)];
+                const uint(&block_textures)[6] = BLOCKS_TEXTURES[block_id];
                 uint is_water = block_id == BLOCK_WATER;
                 uint64*& face_buffer = is_water ? mesh_water_ptr : mesh_solid_ptr;
                 uint above = data.get_hxy(h + 1, x, y);
                 if (!is_solid(above)) {
-                    if (is_water && above == BLOCK_WATER) {
+                    if (is_water && decode_block_id(above) == BLOCK_WATER) {
                         continue;
                     }
                     uint shadows = 0;
