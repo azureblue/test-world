@@ -32,14 +32,23 @@ export async function start() {
     });
 
 
-    const chunk0Program = new Program(
+    const cubeSolidProgram = new Program(
         gl,
-        Replacer.replace(await Resources.loadText("shaders/chunk0.vert"),
+        Replacer.replace(await Resources.loadText("shaders/cube_solid.vert"),
             {
                 "viewDistanceSq": VIEW_DISTANCE_SQ.toFixed(1)
             }
         ),
-        await Resources.loadText("shaders/chunk0.frag")
+        await Resources.loadText("shaders/cube_solid.frag")
+    );
+    const xQuadsProgram = new Program(
+        gl,
+        Replacer.replace(await Resources.loadText("shaders/x_quads.vert"),
+            {
+                "viewDistanceSq": VIEW_DISTANCE_SQ.toFixed(1)
+            }
+        ),
+        await Resources.loadText("shaders/x_quads.frag")
     );
 
     const blockHighlightProgram = new Program(
@@ -59,7 +68,8 @@ export async function start() {
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
-    const aIn = chunk0Program.getAttribLocation("a_in");
+    const aIn = cubeSolidProgram.getAttribLocation("a_in");
+    const aInXQuads = xQuadsProgram.getAttribLocation("a_in");
     const aInBH = blockHighlightProgram.getAttribLocation("a_in");
     const bhBuffer = gl.createBuffer();
     gl.useProgram(blockHighlightProgram.program);
@@ -69,21 +79,21 @@ export async function start() {
     gl.bufferData(gl.ARRAY_BUFFER, bhFBuffer, gl.DYNAMIC_DRAW);
     gl.vertexAttribPointer(aInBH, 3, gl.FLOAT, false, 0, 0);
 
-    gl.useProgram(chunk0Program.program);
+    gl.useProgram(cubeSolidProgram.program);
 
     const texArray = TextureArray.create(gl, textures, 16);
 
 
-    const uCamera = gl.getUniformBlockIndex(chunk0Program.program, "Camera");
-    const uCameraSize = gl.getActiveUniformBlockParameter(chunk0Program.program, uCamera, gl.UNIFORM_BLOCK_DATA_SIZE);
+    const uCamera = gl.getUniformBlockIndex(cubeSolidProgram.program, "Camera");
+    const uCameraSize = gl.getActiveUniformBlockParameter(cubeSolidProgram.program, uCamera, gl.UNIFORM_BLOCK_DATA_SIZE);
     const uCameraBuffer = gl.createBuffer();
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
     gl.bufferData(gl.UNIFORM_BUFFER, uCameraSize, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
     gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, uCameraBuffer);
 
-    const uCameraIndices = gl.getUniformIndices(chunk0Program.program, ["cam_projection_view", "cam_pos"]);
-    const uCameraOffsets = gl.getActiveUniforms(chunk0Program.program, uCameraIndices, gl.UNIFORM_OFFSET);
+    const uCameraIndices = gl.getUniformIndices(cubeSolidProgram.program, ["cam_projection_view", "cam_pos"]);
+    const uCameraOffsets = gl.getActiveUniforms(cubeSolidProgram.program, uCameraIndices, gl.UNIFORM_OFFSET);
 
     const uCameraVariableInfo = {
         projection_view: {
@@ -96,7 +106,7 @@ export async function start() {
         }
     };
 
-    gl.uniformBlockBinding(chunk0Program.program, gl.getUniformBlockIndex(chunk0Program.program, "Camera"), 0);
+    gl.uniformBlockBinding(cubeSolidProgram.program, gl.getUniformBlockIndex(cubeSolidProgram.program, "Camera"), 0);
     gl.uniformBlockBinding(blockHighlightProgram.program, gl.getUniformBlockIndex(blockHighlightProgram.program, "Camera"), 0);
 
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
@@ -112,10 +122,11 @@ export async function start() {
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
 
-    const uChunk0Translation = chunk0Program.getUniformLocation("m_translation");
+    const cubeSolidTranslation = cubeSolidProgram.getUniformLocation("m_translation");
+    const xQuadsTranslation = xQuadsProgram.getUniformLocation("m_translation");
 
-    const meshHandler = new UIntMeshHandler(gl, aIn);
-    const meshDrawer = new UIntMeshDrawer(gl, uChunk0Translation);
+    const meshHandler = new UIntMeshHandler(gl, aIn, aInXQuads);
+    const meshDrawer = new UIntMeshDrawer(gl, cubeSolidTranslation, xQuadsTranslation);
 
     const world = new World(meshHandler);
 
@@ -180,7 +191,7 @@ export async function start() {
         mProjection.mulOut(mView, mProjectionView);
 
 
-        chunk0Program.use()
+        cubeSolidProgram.use()
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.bindBuffer(gl.UNIFORM_BUFFER, uCameraBuffer);
         gl.bufferSubData(gl.UNIFORM_BUFFER, uCameraVariableInfo.projection_view.offset, mProjectionView._values, 0);
@@ -225,11 +236,18 @@ export async function start() {
             // gl.enable(gl.DEPTH_TEST);
         }
 
-        chunk0Program.use();
+        cubeSolidProgram.use();
         for (let chunk of visibleChunks) {
-            const mesh = chunk.mesh;
-            meshDrawer.drawNonSolids(mesh);
+            meshDrawer.drawNonSolids(chunk.mesh);
         }
+
+        gl.disable(gl.CULL_FACE);
+        xQuadsProgram.use();
+        for (let chunk of visibleChunks) {
+            meshDrawer.drawXQuads(chunk.mesh);
+        }
+        gl.enable(gl.CULL_FACE);
+
 
 
         if (fpsCounter.getCurrentFrame() % 5 === 0) {

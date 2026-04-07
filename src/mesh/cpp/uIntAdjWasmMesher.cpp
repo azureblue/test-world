@@ -46,10 +46,6 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     out += 6;
 }
 
-struct face_buffers {
-    uint64* __restrict mesh_solid_ptr;
-    uint64* __restrict mesh_water_ptr;
-};
 
 template <Direction DIR>
 static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
@@ -66,9 +62,9 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     uint shadows = data_texture_shadows & 0b11111111;
     uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(DIR);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<DIR>(buffers.mesh_water_ptr, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
-        encode_face<DIR>(buffers.mesh_solid_ptr, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_solid_cur, bits, width, height, shadows);
     }
 }
 
@@ -81,9 +77,9 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     uint shadows = data_texture_shadows & 0b11111111;
     uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Up);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Up>(buffers.mesh_water_ptr, bits, width, height, shadows);
+        encode_face<Direction::Up>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
-        encode_face<Direction::Up>(buffers.mesh_solid_ptr, bits, width, height, shadows);
+        encode_face<Direction::Up>(buffers.mesh_solid_cur, bits, width, height, shadows);
     }
 }
 
@@ -96,9 +92,9 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint shadows = data_texture_shadows & 0b11111111;
     uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Down);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Down>(buffers.mesh_water_ptr, bits, width, height, shadows);
+        encode_face<Direction::Down>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
-        encode_face<Direction::Down>(buffers.mesh_solid_ptr, bits, width, height, shadows);
+        encode_face<Direction::Down>(buffers.mesh_solid_cur, bits, width, height, shadows);
     }
 }
 
@@ -248,12 +244,8 @@ void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers,
 extern "C"
     __attribute__((export_name("create_mesh"))) uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
-    uint* __restrict in_adj_data_ptr = in_chunk_data_ptr + DATA_INPUT_SIZE_IN_UINT32;
-    uint64* __restrict out_mesh_ptr = out_data_ptr + HEADER_SIZE_IN_UINT64;
-    face_buffers buffers = {
-        .mesh_solid_ptr = out_mesh_ptr,
-        .mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64,
-    };
+    uint* __restrict in_adj_data_ptr = in_chunk_data_ptr + DATA_INPUT_SIZE_IN_UINT32;    
+    face_buffers buffers(out_data_ptr);
 
     array_3d<CHUNK_SIZE> data(in_chunk_data_ptr);
     array_3d<CHUNK_SIZE> adj_data(in_adj_data_ptr);
@@ -350,5 +342,5 @@ extern "C"
     merge_side_faces_finish<Direction::Back>(buffers, layers, current_layer_offset);
     merge_side_faces_finish<Direction::Right>(buffers, layers, current_layer_offset);
 
-    return complete(out_data_ptr, out_mesh_ptr, out_mesh_ptr + MAX_OUTPUT_UINTS64, buffers.mesh_solid_ptr, buffers.mesh_water_ptr);
+    return complete_buffers(buffers);
 }

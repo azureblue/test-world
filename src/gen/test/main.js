@@ -313,8 +313,8 @@ export function main() {
     // (x, y) => image1.data[((y * canvas1.width) + x) * 4] / 255.0 * 2.0 - 1.0);
     (x, y) => cellular0.gen(x, -y),
     {
-        heightMapResolution: 2,
-        gridN: 500
+        heightMapResolution: 4,
+        gridN: 100
     }
 );
 }

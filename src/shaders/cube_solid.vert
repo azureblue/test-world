@@ -49,7 +49,7 @@ void main() {
     float m_x = float(a_in_aux_bits & b_0011_1111);
     float m_y = float(a_in_aux_bits >> 7 & b_0011_1111);
 
-    vec3 pos = vec3(float(x) - 0.5f, float(z) - 0.5f - float(lowered) * pixh, -float(y) + 0.5f) + m_translation;
+    vec3 pos = vec3(float(x), float(z) - float(lowered) * pixh, -float(y)) + m_translation;
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 
