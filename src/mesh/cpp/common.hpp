@@ -49,10 +49,11 @@ inline constexpr uint BLOCKS_TEXTURES[9][6] = {
     {5, 5, 5, 5, 5, 5},
     {6, 6, 6, 6, 6, 6},
     {7, 7, 7, 7, 7, 7},
-    {0, 8, 8, 8, 8, 0},
+    {0, 9, 9, 9, 9, 0},
 };
 
 constexpr uint WATER_TEXTURE = BLOCKS_TEXTURES[BLOCK_WATER][0];
+
 
 __attribute__((always_inline)) static inline uint64 encode_pos_bits(uint h, uint x, uint y) {
     return h << 14 | y << 7 | x;
@@ -70,8 +71,17 @@ __attribute__((always_inline)) static inline uint64 encode_dir_tex_bits(Directio
     return encode_dir_bits(dir) | encode_tex_bits(block_textures[dir]);
 }
 
+__attribute__((always_inline)) static inline uint64 encode_pos_tex_bits(uint h, uint y, uint x, uint tex_id) {
+    return h << 14 | y << 7 | x | encode_tex_bits(tex_id);
+}
+
+
 static inline bool is_solid(uint block) {
     return (block & 0x8000'0000u) != 0;
+}
+
+static inline bool is_x_quads(uint block) {
+    return (block >> 29) & 1;
 }
 
 static inline uint is_solid_01(uint block) {
@@ -296,6 +306,28 @@ __attribute__((always_inline)) static inline uint compute_ao_shadows_2(const uin
     return shadows;
 }
 
+struct face_buffers {
+    uint64* output_base;
+    uint64* mesh_base;
+    uint64* mesh_water_base;
+    uint64* mesh_cutout_x_base;
+
+    uint64* __restrict mesh_solid_cur;
+    uint64* __restrict mesh_water_cur;
+    uint64* __restrict mesh_cutout_x_cur;
+
+    face_buffers(uint64 * output_data_ptr) {
+        output_base = output_data_ptr;
+        mesh_base = output_data_ptr + HEADER_SIZE_IN_UINT64;
+        mesh_water_base = mesh_base + MAX_OUTPUT_UINTS64;
+        mesh_cutout_x_base = mesh_water_base + MAX_OUTPUT_UINTS64;
+        mesh_solid_cur = mesh_base;
+        mesh_water_cur = mesh_water_base;
+        mesh_cutout_x_cur = mesh_cutout_x_base;
+    }
+        
+};
+
 
 static uint complete(uint64* out_data_ptr, uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
     uint nWater = mesh_water_ptr - mesh_data_water_base;
@@ -306,6 +338,32 @@ static uint complete(uint64* out_data_ptr, uint64* mesh_data_solid_base, uint64*
     uint64 solidEnd = nSolid * 2;
     out_data_ptr[0] = solidEnd;
     return (nSolid + nWater) * 2 + HEADER_SIZE_IN_UINT64 * 2;
+}
+
+static uint complete_buffers(face_buffers& buffers) {
+    uint n_cutout_x = static_cast<uint>(buffers.mesh_cutout_x_cur - buffers.mesh_cutout_x_base);
+    uint n_water    = static_cast<uint>(buffers.mesh_water_cur - buffers.mesh_water_base);
+    uint n_solid    = static_cast<uint>(buffers.mesh_solid_cur - buffers.mesh_base);
+
+    uint64* __restrict out = buffers.mesh_base + n_solid;
+
+    for (uint i = 0; i < n_water; i++)
+        *out++ = buffers.mesh_water_base[i];
+
+    for (uint i = 0; i < n_cutout_x; i++)
+        *out++ = buffers.mesh_cutout_x_base[i];
+
+    uint solid_end = n_solid * 2;
+    uint water_end = (n_solid + n_water) * 2;
+    uint64 cutout_x_end = (n_solid + n_water + n_cutout_x) * 2;
+
+    buffers.output_base[0] =
+        (static_cast<uint64>(water_end) << 32) |
+        static_cast<uint64>(solid_end);
+    buffers.output_base[1] =
+        (static_cast<uint64>(cutout_x_end));
+
+    return (n_solid + n_water + n_cutout_x) * 2 + HEADER_SIZE_IN_UINT64 * 2;
 }
 
 // template <Direction DIR>

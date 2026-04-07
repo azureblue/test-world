@@ -11,12 +11,16 @@ export class UIntMeshData extends MeshData {
     * @param {Vec3} mTranslation 
     * @param {Uint32Array} data 
     * @param {number} solidEnd
+    * @param {number} liquidEnd
+    * @param {number} xQuadEnd
     */
-    constructor(mTranslation, data, solidEnd) {
+    constructor(mTranslation, data, solidEnd, liquidEnd, xQuadEnd) {
         super();
         this.mTranslation = mTranslation;        
         this.data = data;
         this.solidEnd = solidEnd;
+        this.liquidEnd = liquidEnd;
+        this.xQuadEnd = xQuadEnd;
     }
 
     isEmpty() {
@@ -34,6 +38,8 @@ export class UIntMeshDataTransfer extends MeshDataTransfer {
         const uintMeshData = /** @type {UIntMeshData} */ (meshData);
         const transferData = {
             solidEnd: uintMeshData.solidEnd,
+            liquidEnd: uintMeshData.liquidEnd,
+            xQuadEnd: uintMeshData.xQuadEnd,
             mTranslation: uintMeshData.mTranslation,
             data: uintMeshData.data.buffer
         };
@@ -41,7 +47,7 @@ export class UIntMeshDataTransfer extends MeshDataTransfer {
     }
 
     createFrom(data) {
-        return new UIntMeshData(vec3(data.mTranslation.x, data.mTranslation.y, data.mTranslation.z), new Uint32Array(data.data), data.solidEnd);
+        return new UIntMeshData(vec3(data.mTranslation.x, data.mTranslation.y, data.mTranslation.z), new Uint32Array(data.data), data.solidEnd, data.liquidEnd, data.xQuadEnd);
     }
 }
 
@@ -51,21 +57,29 @@ export class UIntMeshHandler extends MeshHandler {
     #gl;
     /** @type {number} */
     #aIn;
+    /** @type {number} */
+    #aInXQuads;
 
     /**
      * @param {WebGL2RenderingContext} gl 
      * @param {number} aIn 
+     * @param {number} aInXQuads
      */
-    constructor(gl, aIn) {
+    constructor(gl, aIn, aInXQuads) {
         super();
         this.#gl = gl;
         this.#aIn = aIn;
+        this.#aInXQuads = aInXQuads;
     }
 
     /**
      * @param {UIntMeshData} meshData 
+     * @return {UIntMesh}
      */
     upload(meshData) {
+        const solidLen = meshData.solidEnd >> 1;
+        const liquidLen = (meshData.liquidEnd - meshData.solidEnd) >> 1;
+        const xQuadLen = (meshData.xQuadEnd - meshData.liquidEnd);
         const gl = this.#gl;
         const va = gl.createVertexArray();
         const vb = gl.createBuffer();
@@ -76,7 +90,18 @@ export class UIntMeshHandler extends MeshHandler {
         gl.vertexAttribIPointer(this.#aIn, 2, gl.UNSIGNED_INT, false, 0, 0);
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
-        return new UIntMesh(va, vb, meshData.solidEnd >> 1, meshData.mTranslation, meshData.data.length >> 1);
+
+        const vaXQuads = gl.createVertexArray();
+        const vbXQuads = gl.createBuffer();
+        gl.bindVertexArray(vaXQuads);
+        gl.enableVertexAttribArray(this.#aInXQuads);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbXQuads);
+        gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW, meshData.liquidEnd);
+        gl.vertexAttribIPointer(this.#aInXQuads, 1, gl.UNSIGNED_INT, false, 0, 0);
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        
+        return new UIntMesh(va, vb, vaXQuads, vbXQuads, meshData.mTranslation, solidLen, liquidLen, xQuadLen);
     }
 
     /**
@@ -86,6 +111,8 @@ export class UIntMeshHandler extends MeshHandler {
         const gl = this.#gl;
         gl.deleteBuffer(mesh.vb);
         gl.deleteVertexArray(mesh.va);
+        gl.deleteBuffer(mesh.vbXQuads);
+        gl.deleteVertexArray(mesh.vaXQuads);
     }
 
     static unbind(gl) {
@@ -96,34 +123,39 @@ export class UIntMeshHandler extends MeshHandler {
 export class UIntMesh extends ChunkMesh {
     /** @type {WebGLVertexArrayObject} */
     va;
+    /** @type {WebGLVertexArrayObject} */
+    vaXQuads;
     /** @type {WebGLBuffer} */
     vb;
+    /** @type {WebGLBuffer} */
+    vbXQuads;
     mTranslation;
-    len;
 
     /**
      * @param {WebGLVertexArrayObject} va 
      * @param {WebGLBuffer} vb 
+     * @param {WebGLVertexArrayObject} vaXQuads
+     * @param {WebGLBuffer} vbXQuads
      * @param {FVec3} translation 
-     * @param {number} solidEnd
-     * @param {number} len 
+     * @param {number} solidLen
+     * @param {number} liquidLen
+     * @param {number} xQuadLen
      */
-    constructor(va, vb, solidEnd, translation, len) {
+    constructor(va, vb, vaXQuads, vbXQuads, translation, solidLen, liquidLen, xQuadLen) {
         super();
         this.va = va;
         this.vb = vb;
-        this.solidEnd = solidEnd;
+        this.vaXQuads = vaXQuads;
+        this.vbXQuads = vbXQuads;
         this.mTranslation = translation;
-        this.len = len;
+        this.solidLen = solidLen;
+        this.liquidLen = liquidLen;
+        this.xQuadLen = xQuadLen;
     }
 
     get modelTranslation() {
         return this.mTranslation;
     }
-
-    get len() {
-        return this.len;
-    }    
 }
 
 
@@ -132,7 +164,7 @@ export class UIntMesher extends ChunkMesher {
 
     /**
       * @param {ChunkDataExt} chunkData
-      * @return {{data: Uint32Array, solidEnd: number}}
+      * @return {{data: Uint32Array, solidEnd: number, liquidEnd: number, xQuadEnd: number}}
       */
     mesh(chunkData) {
         throw new Error("Not implemented");
@@ -148,8 +180,8 @@ export class UIntMesher extends ChunkMesher {
         const meshStart = performance.now();
         const meshData = this.mesh(chunkData);
         this.#lastMeshTime = perfDiff(meshStart);
-        return new UIntMeshData(vec3(position.x * CHUNK_SIZE + 0.5, position.z * CHUNK_SIZE + 0.5, -position.y * CHUNK_SIZE - 0.5),
-            meshData.data, meshData.solidEnd);
+        return new UIntMeshData(vec3(position.x * CHUNK_SIZE, position.z * CHUNK_SIZE, -position.y * CHUNK_SIZE),
+            meshData.data, meshData.solidEnd, meshData.liquidEnd, meshData.xQuadEnd);
     }
 
     lastMeshTime() {
@@ -160,13 +192,16 @@ export class UIntMesher extends ChunkMesher {
 export class UIntMeshDrawer {
     #gl;
     #uTranslation;
+    #uXQuadsTranslation;
     /**
      * @param {WebGL2RenderingContext} gl
      * @param {WebGLUniformLocation} uTranslation
+     * @param {WebGLUniformLocation} uXQuadsTranslation
      */
-    constructor(gl, uTranslation) {
+    constructor(gl, uTranslation, uXQuadsTranslation) {
         this.#gl = gl;
         this.#uTranslation = uTranslation;
+        this.#uXQuadsTranslation = uXQuadsTranslation;
     }
     
     /**
@@ -177,7 +212,7 @@ export class UIntMeshDrawer {
         gl.bindVertexArray(mesh.va);        
         const modelTranslation = mesh.modelTranslation;
         gl.uniform3f(this.#uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);        
-        gl.drawArrays(gl.TRIANGLES, 0, mesh.solidEnd);
+        gl.drawArrays(gl.TRIANGLES, 0, mesh.solidLen);
     }
 
     /**
@@ -188,7 +223,18 @@ export class UIntMeshDrawer {
         gl.bindVertexArray(mesh.va);        
         const modelTranslation = mesh.modelTranslation;
         gl.uniform3f(this.#uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-        gl.drawArrays(gl.TRIANGLES, mesh.solidEnd, mesh.len - mesh.solidEnd);
+        gl.drawArrays(gl.TRIANGLES, mesh.solidLen, mesh.liquidLen);
+    }
+
+    /**
+     * @param {UIntMesh} mesh 
+     */
+    drawXQuads(mesh) {
+        const gl = this.#gl;
+        gl.bindVertexArray(mesh.vaXQuads);        
+        const modelTranslation = mesh.modelTranslation;
+        gl.uniform3f(this.#uXQuadsTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+        gl.drawArrays(gl.TRIANGLES, 0, mesh.xQuadLen);
     }
 }
 

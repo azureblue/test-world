@@ -18,7 +18,7 @@ const logger = new Logger("chunk load worker " + WORKER_ID);
 const generator = createGenerator();
 const chunkDataFactory = new ChunkExtDataFactory();
 const chunkDataLoader = new ChunkDataLoader(generator, chunkDataFactory);
-const mesher = await UIntExtWasmMesher.createFastkMesher();
+const mesher = await UIntExtWasmMesher.createMesher();
 
 const workerServer = new WorkerServer(self, WORKER_ID, {
 

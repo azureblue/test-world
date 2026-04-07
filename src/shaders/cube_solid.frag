@@ -13,12 +13,9 @@ const float norm_to_light_map[8] = float[8](1.0f, 0.8f, 0.6f, 0.6f, 0.7f, 0.5f, 
 void main() {
 
     vec4 tex = texture(u_array_sampler, v_tex_coord);
-    if (tex.a < 0.8)
-        discard;
-
     const float edge0 = 0.60f;
     const float edge1 = 1.0f;
-    vec4 tex_lighted = vec4(tex.xyz * norm_to_light_map[o_norm], tex.a);
+    vec4 tex_lighted = vec4(tex.xyz * norm_to_light_map[o_norm], 1.0);
     vec4 tex_shadowed = mix(tex_lighted, vec4(0.0, 0.0, 0.0, 1.0), smoothstep(0.0, 1.0, v_shadow));
     color_out = mix(tex_shadowed, sky_color, smoothstep(edge0, edge1, fading));
     // color_out.a = alpha;

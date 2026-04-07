@@ -8,6 +8,7 @@ constexpr int DIRECTION_ENCODE[40] = {
     0, -1, CHUNK_SIZE - 1, 1, 0, 0, 0, 0};
 
 constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
+
 template <Direction DIR>
 __attribute__((always_inline)) static inline void encode_face(uint64* __restrict& out, uint64 bits, uint64 w, uint64 h, uint64 shadows) {
     uint64 cs0 = (shadows << 59) & 0x1800000000000000;
@@ -44,10 +45,26 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     out += 6;
 }
 
-struct face_buffers {
-    uint64* __restrict mesh_solid_ptr;
-    uint64* __restrict mesh_water_ptr;
-};
+//       ttttTTTThwzzzzzyyyyyxxxxx
+//10987654321098765432109876543210
+template <Direction DIR>
+__attribute__((always_inline)) static inline void encode_quad(uint64* __restrict& out, uint h, uint x, uint y, uint tex) {
+    uint64 bits = encode_pos_bits(h, x + VERTEX_OFFSETS[DIR][X], y + VERTEX_OFFSETS[DIR][Y]) | tex << 23;    
+    uint mw = static_cast<uint>(merge_vector_w_bits(DIR));
+    uint mh = static_cast<uint>(merge_vector_h_bits(DIR));
+    uint mwh = mw + mh;
+    uint mbw = 1 << 21;
+    uint mbh = 1 << 22;
+
+    uint64 v0 = bits;
+    uint64 v1 = bits + mw | mbw;
+    uint64 v2 = bits + mwh | mbw | mbh;
+    uint64 v3 = bits + mh | mbh;
+    out[0] = v0 | (v1 << 32);
+    out[1] = v2 | (v0 << 32);
+    out[2] = v2 | (v3 << 32);
+    out += 3;
+}
 
 template <Direction DIR>
 static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
@@ -64,9 +81,9 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     uint shadows = data_texture_shadows & 0b11111111;
     uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(DIR);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<DIR>(buffers.mesh_water_ptr, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
-        encode_face<DIR>(buffers.mesh_solid_ptr, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_solid_cur, bits, width, height, shadows);
     }
 }
 
@@ -79,9 +96,9 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     uint shadows = data_texture_shadows & 0b11111111;
     uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Up);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Up>(buffers.mesh_water_ptr, bits, width, height, shadows);
+        encode_face<Direction::Up>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
-        encode_face<Direction::Up>(buffers.mesh_solid_ptr, bits, width, height, shadows);
+        encode_face<Direction::Up>(buffers.mesh_solid_cur, bits, width, height, shadows);
     }
 }
 
@@ -94,9 +111,9 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint shadows = data_texture_shadows & 0b11111111;
     uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Down);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Down>(buffers.mesh_water_ptr, bits, width, height, shadows);
+        encode_face<Direction::Down>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
-        encode_face<Direction::Down>(buffers.mesh_solid_ptr, bits, width, height, shadows);
+        encode_face<Direction::Down>(buffers.mesh_solid_cur, bits, width, height, shadows);
     }
 }
 
@@ -246,11 +263,7 @@ void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers,
 extern "C"
     __attribute__((export_name("create_mesh"))) uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
-    uint64* __restrict out_mesh_ptr = out_data_ptr + HEADER_SIZE_IN_UINT64;
-    face_buffers buffers = {
-        .mesh_solid_ptr = out_mesh_ptr,
-        .mesh_water_ptr = out_mesh_ptr + MAX_OUTPUT_UINTS64,
-    };
+    face_buffers buffers(out_data_ptr);
 
     array_3d<CHUNK_SIZE_E> data(in_chunk_data_ptr);
     uint layers_data[CHUNK_SIZE * CHUNK_SIZE * 12];
@@ -278,6 +291,13 @@ extern "C"
                     continue;
                 }
                 const uint* block_textures = BLOCKS_TEXTURES[block_id];
+
+                if (is_x_quads(block_data)) {                    
+                    encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_h, real_x, real_y, block_textures[1]);
+                    encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, real_h, real_x, real_y, block_textures[2]);
+                    continue;
+                }
+
                 uint is_water = block_id == BLOCK_WATER;
                 uint above = data.get_hxy(h + 1, x, y);
                 if (!is_solid(above)) {
@@ -347,5 +367,5 @@ extern "C"
     merge_side_faces_finish<Direction::Back>(buffers, layers, current_layer_offset);
     merge_side_faces_finish<Direction::Right>(buffers, layers, current_layer_offset);
 
-    return complete(out_data_ptr, out_mesh_ptr, out_mesh_ptr + MAX_OUTPUT_UINTS64, buffers.mesh_solid_ptr, buffers.mesh_water_ptr);
+    return complete_buffers(buffers);
 }

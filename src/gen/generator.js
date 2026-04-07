@@ -503,7 +503,7 @@ export class NoiseChunkGenerator extends ChunkGenerator {
     //             })
     //         )
     //     });
-    goodNoise0 = testgen()
+    goodNoise0 = testgen();
 
     // goodNoise0 = new Noise(
     //         SimplexNoise.seed(1),
@@ -540,7 +540,8 @@ export class NoiseChunkGenerator extends ChunkGenerator {
 
     constructor() {
         super();
-        this.#offests = seedOffset(this.#noise.seed);
+        this.goodNoise0.seedSet(1234562);
+        this.#offests = seedOffset(this.#noise.seed);        
         this.#offests.ox = 0;
         this.#offests.oy = 0;
     }
@@ -574,6 +575,11 @@ export class NoiseChunkGenerator extends ChunkGenerator {
 
                 if (r < chunkEndH && r < height) {
                     blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT_GRASS);
+                }
+                r++;
+                if (r < chunkEndH && r === height) {
+                    if (Math.random() < 0.05)
+                        blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT);
                 }
 
                 for (let w = r; w < Math.min(-55, chunkEndH); w++) {
@@ -897,9 +903,10 @@ export class TestGenerator2 {
      */
     generateChunk(chunkPos) {
         const chunkData = new ChunkBlockData();
+        if (chunkPos.z == 0) {
         // if (Math.max(Math.abs(chunkPos.x), Math.abs(chunkPos.y), Math.abs(chunkPos.z)) <= 2) {
             GeneratorPatterns.fullSolid(chunkData);
-        // }
+        }
         return chunkData;
     }
 }

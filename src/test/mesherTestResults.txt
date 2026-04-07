@@ -1,19 +1,110 @@
+ext fast:
+
+fullChecker   : mesh size 1179648 48cd46ca
+doubleChecker : mesh size 589824  b2cbaae1
+fullSolid     : mesh size 2359296 db354e9c
+hStripes      : mesh size 417792  e802ede0
+vStripesY     : mesh size 417792  39ed718d
+vStripesX     : mesh size 417792  0b40f1bc
+border        : mesh size 138528  387e00d6
+--- run 0 ---
+fullChecker   : avg 3.18  min 2.70  max 5.60  median 3.00 
+doubleChecker : avg 1.64  min 1.30  max 3.60  median 1.60 
+fullSolid     : avg 4.24  min 3.90  max 7.00  median 4.10 
+hStripes      : avg 1.18  min 0.90  max 3.00  median 1.10 
+vStripesY     : avg 1.16  min 1.00  max 4.10  median 1.10 
+vStripesX     : avg 1.22  min 1.00  max 4.60  median 1.10 
+border        : avg 0.43  min 0.30  max 1.50  median 0.40 
+test time: 1304.80 ms
+test avg: 1.86 ms
+--- run 1 ---
+fullChecker   : avg 2.94  min 2.60  max 5.90  median 2.80 
+doubleChecker : avg 1.53  min 1.30  max 4.70  median 1.50 
+fullSolid     : avg 4.16  min 3.90  max 4.90  median 4.10 
+hStripes      : avg 1.15  min 0.90  max 3.00  median 1.10 
+vStripesY     : avg 1.14  min 0.90  max 3.20  median 1.10 
+vStripesX     : avg 1.14  min 1.00  max 3.50  median 1.10 
+border        : avg 0.41  min 0.30  max 0.50  median 0.40 
+test time: 1247.80 ms
+test avg: 1.78 ms
+--- run 2 ---
+fullChecker   : avg 2.94  min 2.60  max 6.00  median 2.80 
+doubleChecker : avg 1.54  min 1.30  max 4.70  median 1.50 
+fullSolid     : avg 4.17  min 3.80  max 6.10  median 4.10 
+hStripes      : avg 1.14  min 0.90  max 3.70  median 1.10 
+vStripesY     : avg 1.17  min 1.00  max 4.50  median 1.10 
+vStripesX     : avg 1.16  min 0.90  max 3.10  median 1.10 
+border        : avg 0.40  min 0.20  max 0.70  median 0.40 
+test time: 1252.30 ms
+test avg: 1.79 ms
 --- run 3 ---
-fullChecker   : avg 7.08  min 6.80  max 9.10  median 7.00 
-doubleChecker : avg 3.94  min 3.70  max 4.70  median 3.90 
-fullSolid     : avg 1.08  min 0.90  max 1.40  median 1.10 
-hStripes      : avg 1.13  min 1.00  max 1.50  median 1.10 
-vStripesY     : avg 1.12  min 1.00  max 1.50  median 1.10 
-vStripesX     : avg 1.12  min 0.90  max 1.50  median 1.10 
-border        : avg 1.08  min 0.90  max 2.00  median 1.00 
-test time: 1653.40 ms
-test avg: 2.36 ms
-total test time: 4958.50 ms
-total test avg: 1652.83 ms
-fullChecker   : mesh size 1179648
-doubleChecker : mesh size 562176
-fullSolid     : mesh size 72
-hStripes      : mesh size 1152
-vStripesY     : mesh size 1152
-vStripesX     : mesh size 1152
-border        : mesh size 720
+fullChecker   : avg 2.95  min 2.70  max 6.00  median 2.80 
+doubleChecker : avg 1.55  min 1.30  max 4.80  median 1.50 
+fullSolid     : avg 4.14  min 3.90  max 4.90  median 4.10 
+hStripes      : avg 1.13  min 0.90  max 1.90  median 1.10 
+vStripesY     : avg 1.16  min 1.00  max 3.10  median 1.10 
+vStripesX     : avg 1.17  min 0.90  max 3.10  median 1.10 
+border        : avg 0.42  min 0.20  max 1.40  median 0.40 
+test time: 1252.20 ms
+test avg: 1.79 ms
+total test time: 3752.30 ms
+total test avg: 1250.77 ms
+fullChecker   : mesh size 1179648 48cd46ca
+doubleChecker : mesh size 589824  b2cbaae1
+fullSolid     : mesh size 2359296 db354e9c
+hStripes      : mesh size 417792  e802ede0
+vStripesY     : mesh size 417792  39ed718d
+vStripesX     : mesh size 417792  0b40f1bc
+border        : mesh size 138528  387e00d6
+
+adj fast
+
+--- run 0 ---
+fullChecker   : avg 3.17  min 2.60  max 6.40  median 2.90 
+doubleChecker : avg 1.49  min 1.20  max 2.30  median 1.40 
+fullSolid     : avg 0.19  min 0.10  max 0.30  median 0.20 
+hStripes      : avg 1.14  min 0.90  max 2.90  median 1.10 
+vStripesY     : avg 1.09  min 0.90  max 2.20  median 1.00 
+vStripesX     : avg 1.12  min 0.90  max 3.40  median 1.10 
+border        : avg 0.41  min 0.30  max 0.80  median 0.40 
+test time: 861.40 ms
+test avg: 1.23 ms
+--- run 1 ---
+fullChecker   : avg 2.80  min 2.50  max 5.90  median 2.70 
+doubleChecker : avg 1.46  min 1.20  max 4.60  median 1.40 
+fullSolid     : avg 0.19  min 0.10  max 0.30  median 0.20 
+hStripes      : avg 1.08  min 0.90  max 1.90  median 1.10 
+vStripesY     : avg 1.14  min 0.90  max 2.70  median 1.00 
+vStripesX     : avg 1.12  min 0.90  max 3.50  median 1.10 
+border        : avg 0.41  min 0.30  max 0.90  median 0.40 
+test time: 819.90 ms
+test avg: 1.17 ms
+--- run 2 ---
+fullChecker   : avg 2.77  min 2.50  max 5.90  median 2.60 
+doubleChecker : avg 1.46  min 1.20  max 2.90  median 1.40 
+fullSolid     : avg 0.19  min 0.10  max 0.30  median 0.20 
+hStripes      : avg 1.09  min 0.90  max 2.10  median 1.00 
+vStripesY     : avg 1.08  min 0.90  max 2.00  median 1.00 
+vStripesX     : avg 1.08  min 0.90  max 3.00  median 1.00 
+border        : avg 0.40  min 0.20  max 0.70  median 0.40 
+test time: 807.20 ms
+test avg: 1.15 ms
+--- run 3 ---
+fullChecker   : avg 2.75  min 2.50  max 6.10  median 2.70 
+doubleChecker : avg 1.44  min 1.20  max 3.00  median 1.40 
+fullSolid     : avg 0.19  min 0.10  max 0.40  median 0.20 
+hStripes      : avg 1.07  min 0.90  max 1.90  median 1.00 
+vStripesY     : avg 1.07  min 0.90  max 2.40  median 1.00 
+vStripesX     : avg 1.10  min 0.90  max 3.30  median 1.00 
+border        : avg 0.41  min 0.30  max 0.50  median 0.40 
+test time: 802.50 ms
+test avg: 1.15 ms
+total test time: 2429.60 ms
+total test avg: 809.87 ms
+fullChecker   : mesh size 1179648 ebf95218
+doubleChecker : mesh size 589824  2118cb6c
+fullSolid     : mesh size 12288   9fecd12f
+hStripes      : mesh size 417792  e802ede0
+vStripesY     : mesh size 417792  39ed718d
+vStripesX     : mesh size 417792  0b40f1bc
+border        : mesh size 138528  415b6d9f
