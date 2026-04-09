@@ -68,12 +68,14 @@ export class ChunkDataExt extends ChunkData {
         let minY = CHUNK_SIZE, maxY = -1;
         let minX = CHUNK_SIZE, maxX = -1;
         const a3d = this.array3d;
+        const data = this.array3d.data;
 
         for (let h = 0; h < CHUNK_SIZE; h++)
-            for (let y = 0; y < CHUNK_SIZE_E; y++)
-                for (let x = 0; x < CHUNK_SIZE_E; x++) {
-                    const data = a3d.getHXY(h + 1, x + 1, y + 1);
-                    if (data === 0) continue;
+            for (let y = 0; y < CHUNK_SIZE; y++) {
+                const idxBase = a3d.index(h + 1, 1, y + 1);
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    const v = data[idxBase + x];
+                    if (v === 0) continue;
                     if (h < minH) minH = h;
                     if (h + 1 > maxH) maxH = h + 1;
                     if (y < minY) minY = y;
@@ -81,6 +83,7 @@ export class ChunkDataExt extends ChunkData {
                     if (x < minX) minX = x;
                     if (x + 1 > maxX) maxX = x + 1;
                 }
+            }
 
         if (maxH < 0)
             return null;
