@@ -111,6 +111,20 @@ export class ChunkDataProvider {
     }
 }
 
+/**
+ * @typedef {Object} ChunkCullBounds
+ * @property {number} minZ - Minimum Z coordinate of the chunk
+ * @property {number} maxZ - Maximum Z coordinate of the chunk
+ * @property {number} minY - Minimum Y coordinate of the chunk
+ * @property {number} maxY - Maximum Y coordinate of the chunk
+ * @property {number} minX - Minimum X coordinate of the chunk
+ * @property {number} maxX - Maximum X coordinate of the chunk
+ * @property {number} sphereCenterX - X coordinate of the bounding sphere center
+ * @property {number} sphereCenterY - Y coordinate of the bounding sphere center
+ * @property {number} sphereCenterZ - Z coordinate of the bounding sphere center
+ * @property {number} sphereRadius - Radius of the bounding sphere
+ */
+
 export class Chunk {
     #data
     #mesh
@@ -118,6 +132,9 @@ export class Chunk {
     /** @type {{minH:number, maxH:number, minY:number, maxY:number, minX:number, maxX:number} | null} */
     #bounds = null;
     #boundsValid = false;
+
+    /** @type {ChunkCullBounds} */
+    cullBounds;
 
     /**@type {FVec3} */
     #worldCenterPosition
@@ -165,6 +182,19 @@ export class Chunk {
         const arr = this.#worldAABBData;
         arr[0] = minX; arr[1] = minY; arr[2] = minZ;
         arr[3] = maxX; arr[4] = maxY; arr[5] = maxZ;
+        const dx = maxX - minX;
+        const dy = maxY - minY;
+        const dz = maxZ - minZ;
+
+        this.cullBounds = {
+            minZ: minZ, maxZ: maxZ,
+            minY: minY, maxY: maxY,
+            minX: minX, maxX: maxX,
+            sphereCenterX: (minX + maxX) / 2,
+            sphereCenterY: (minY + maxY) / 2,
+            sphereCenterZ: (minZ + maxZ) / 2,
+            sphereRadius: Math.sqrt(dx * dx + dy * dy + dz * dz) / 2                
+        }
     }
 
     peek(x, y) {
