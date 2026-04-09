@@ -270,29 +270,70 @@ class FrustumCuller {
      */
     shouldDraw(chunk) {
         if (chunk.mesh === null) return false;
+        // const planes4 = this.#planes4;
+
+        // const bounds = chunk.cullBounds;
+        // const cx = bounds.sphereCenterX;
+        // const cy = bounds.sphereCenterY;
+        // const cz = bounds.sphereCenterZ;
+        // const r = bounds.sphereRadius;
+
+        // if (planes4[0] * cx + planes4[1] * cy + planes4[2] * cz + planes4[3] < -r) return false;
+        // if (planes4[4] * cx + planes4[5] * cy + planes4[6] * cz + planes4[7] < -r) return false;
+        // if (planes4[8] * cx + planes4[9] * cy + planes4[10] * cz + planes4[11] < -r) return false;
+        // if (planes4[12] * cx + planes4[13] * cy + planes4[14] * cz + planes4[15] < -r) return false;
+        // if (planes4[16] * cx + planes4[17] * cy + planes4[18] * cz + planes4[19] < -r) return false;
+        // if (planes4[20] * cx + planes4[21] * cy + planes4[22] * cz + planes4[23] < -r) return false;
+
+        // return true;
+
+        // if (chunk.mesh === null) return false;
 
         const arr = chunk.worldAABBMinMax;
         const minX = arr[0], minY = arr[1], minZ = arr[2];
         const maxX = arr[3], maxY = arr[4], maxZ = arr[5];
 
-        const planes4 = this.#planes4;
+        const p = this.#planes4;
         const minusDelta = -FrustumCuller.#DELTA;
 
-        for (let i = 0; i < 6; i++) {
-            const planeIdx = i << 2;
-            const nx = planes4[planeIdx];
-            const ny = planes4[planeIdx + 1];
-            const nz = planes4[planeIdx + 2];
-            const nd = planes4[planeIdx + 3];
+        let nx, ny, nz, nd, vx, vy, vz;
 
-            const vx = nx >= 0 ? maxX : minX;
-            const vy = ny >= 0 ? maxY : minY;
-            const vz = nz >= 0 ? maxZ : minZ;
+        nx = p[0]; ny = p[1]; nz = p[2]; nd = p[3];
+        vx = nx >= 0 ? maxX : minX;
+        vy = ny >= 0 ? maxY : minY;
+        vz = nz >= 0 ? maxZ : minZ;
+        if (nx * vx + ny * vy + nz * vz + nd < minusDelta) return false;
 
-            const dotDiff = nx * vx + ny * vy + nz * vz + nd;
+        nx = p[4]; ny = p[5]; nz = p[6]; nd = p[7];
+        vx = nx >= 0 ? maxX : minX;
+        vy = ny >= 0 ? maxY : minY;
+        vz = nz >= 0 ? maxZ : minZ;
+        if (nx * vx + ny * vy + nz * vz + nd < minusDelta) return false;
 
-            if (dotDiff < minusDelta) return false;
-        }
+        nx = p[8]; ny = p[9]; nz = p[10]; nd = p[11];
+        vx = nx >= 0 ? maxX : minX;
+        vy = ny >= 0 ? maxY : minY;
+        vz = nz >= 0 ? maxZ : minZ;
+        if (nx * vx + ny * vy + nz * vz + nd < minusDelta) return false;
+
+        nx = p[12]; ny = p[13]; nz = p[14]; nd = p[15];
+        vx = nx >= 0 ? maxX : minX;
+        vy = ny >= 0 ? maxY : minY;
+        vz = nz >= 0 ? maxZ : minZ;
+        if (nx * vx + ny * vy + nz * vz + nd < minusDelta) return false;
+
+        nx = p[16]; ny = p[17]; nz = p[18]; nd = p[19];
+        vx = nx >= 0 ? maxX : minX;
+        vy = ny >= 0 ? maxY : minY;
+        vz = nz >= 0 ? maxZ : minZ;
+        if (nx * vx + ny * vy + nz * vz + nd < minusDelta) return false;
+
+        nx = p[20]; ny = p[21]; nz = p[22]; nd = p[23];
+        vx = nx >= 0 ? maxX : minX;
+        vy = ny >= 0 ? maxY : minY;
+        vz = nz >= 0 ? maxZ : minZ;
+        if (nx * vx + ny * vy + nz * vz + nd < minusDelta) return false;
+
         return true;
     }
 }
