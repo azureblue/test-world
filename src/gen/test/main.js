@@ -1,4 +1,4 @@
-import { blend, BLEND_MODE } from "../../blend.js";
+import { blend, BLEND_FUNCTION } from "../../blend.js";
 import { normalize, spreadSin11, unnormalize } from "../../functions.js";
 import { CellularNoise } from "../../noise/cellular.js";
 import { FBM } from "../../noise/fbm.js";
@@ -7,6 +7,7 @@ import { DomainWrap, Noise, Postprocessor, Reducer } from "../../noise/noise.js"
 import { SimplexNoise, SimplexNoiseGenerator } from "../../noise/opensimplex2.js";
 import { CurveRenderer, LinearCurve, point } from "../curve.js";
 import { DomainWarpNode } from "../generator.js";
+import { baseNode0, blendNode0 } from "../generators.js";
 import { BlendNode, CurveNode, GenericNode, GenNode, Node } from "../node.js";
 import { renderTerrain } from "./terrainRenderer.js";
 
@@ -130,7 +131,7 @@ export function main() {
             frequency: 0.003 * scale,
             octaves: 4
         })
-    }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_MODE.NORMAL, 0.5));
+    }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_FUNCTION.NORMAL, 0.5));
 
     const riverNode = new GenNode(
         new SimplexNoiseGenerator({
@@ -163,7 +164,7 @@ export function main() {
         }
     )
 
-    const mergeNode = new BlendNode([node1, riverCurveNode], BLEND_MODE.MULTIPLY, 1);
+    const mergeNode = new BlendNode([node1, riverCurveNode], BLEND_FUNCTION.MULTIPLY, 1);
 
     // renderNode(node1, getCanvas("canvas0"));
     // renderGen(riverNode, getCanvas("canvas1"));
@@ -292,9 +293,9 @@ export function main() {
     renderGenSlice(cellular00, getCanvas("slice0"), 400, { x: 0, y: 200 });
     // renderGenSlice(cellular0, getCanvas("slice1"), 400, { x: 0, y: 200 });
     // renderGen(cellular00, getCanvas("canvas0"), true);
-    renderGen(cellular0, getCanvas("canvas1"), false);
+    renderGen(baseNode0, getCanvas("canvas1"), false);
     renderGen(cellular1, getCanvas("canvas2"), true);
-    renderGen(ridgeNode2, getCanvas("canvas3"), true);
+    renderGen(blendNode0, getCanvas("canvas3"), true);
 
     const canvas1 = getCanvas("canvas1");
     // renderIsoPerPixel(getCanvas("canvas0"), 800, 800, (x, y) => cellular0.gen(x - 400, 800 - 1 - y - 400), {
@@ -309,12 +310,12 @@ export function main() {
     // });
 
     const image1 = canvas1.getContext("2d").getImageData(0, 0, canvas1.width, canvas1.height);
-    renderTerrain(getCanvas("canvas0"), -400, -400, 800, 800,
-    // (x, y) => image1.data[((y * canvas1.width) + x) * 4] / 255.0 * 2.0 - 1.0);
-    (x, y) => cellular0.gen(x, -y),
-    {
-        heightMapResolution: 4,
-        gridN: 100
-    }
-);
+//     renderTerrain(getCanvas("canvas0"), -400, -400, 800, 800,
+//     // (x, y) => image1.data[((y * canvas1.width) + x) * 4] / 255.0 * 2.0 - 1.0);
+//     (x, y) => cellular0.gen(x, -y),
+//     {
+//         heightMapResolution: 4,
+//         gridN: 100
+//     }
+// );
 }

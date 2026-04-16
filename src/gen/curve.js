@@ -25,6 +25,21 @@ export class Curve {
     }
 }
 
+export class FunctionCurve extends Curve {
+    
+    constructor(fun) {
+        this.fun = fun;
+    }
+
+    apply(x) {
+        return this.fun(x);
+    }
+
+    static from(a, b) {
+        return new FunctionCurve(smo)
+    } 
+}
+
 export class CurveRenderer {
     /**
      * @param {Curve} curve 

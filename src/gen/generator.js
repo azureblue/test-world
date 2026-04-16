@@ -1,4 +1,4 @@
-import { blend, BLEND_MODE } from "../blend.js";
+import { blend, BLEND_FUNCTION } from "../blend.js";
 import { BLOCK_IDS } from "../blocks.js";
 import { CHUNK_SIZE, ChunkBlockData, ChunkData } from "../chunk/chunk.js";
 import { Vec2, Vec3 } from "../geom.js";
@@ -721,7 +721,7 @@ export class Generator02 extends FunctionChunkGenerator {
                 frequency: 0.003 * scale,
                 octaves: 4
             })
-        }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_MODE.NORMAL, 0.5));
+        }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_FUNCTION.NORMAL, 0.5));
 
 
         const riverNode = new GenNode(

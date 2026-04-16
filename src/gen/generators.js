@@ -1,15 +1,28 @@
+import { Blend, BLEND, BLEND_FUNCTION, CLAMP_FUNCTION } from "../blend.js";
 import { logistic, spreadSin11, unnormalize } from "../functions.js";
 import { CellularNoise } from "../noise/cellular.js";
 import { FBM } from "../noise/fbm.js";
 import { Hash01Noise } from "../noise/hashNoise.js";
 import { DomainWrap, Noise, Postprocessor } from "../noise/noise.js";
 import { SimplexNoise } from "../noise/opensimplex2.js";
+import { BlendNode, GenNode, Node } from "./node.js";
 
 export function testgen() {
-    return test2;
+    return baseNode0;
 }
+    const baseNode1 = new GenNode(new Noise(
+        SimplexNoise.seed(1234),
+        {
+            preprocessors: [
 
-const test2 = new Noise(
+            ],
+            reducer: FBM.reducer({
+                frequency: 0.005
+            })
+        }));
+
+
+export const baseNode0 = new GenNode(new Noise(
         SimplexNoise.seed(128334),
         // SimplexNoise.seed(1192),
         {
@@ -42,8 +55,11 @@ const test2 = new Noise(
             postprocessors: [
                 Postprocessor.of(v => spreadSin11(v, 0.4))
             ]
-        });
+        }));
 
+export const blendNode0 = new BlendNode(
+    [baseNode0, baseNode1], 
+    new Blend(BLEND_FUNCTION.MULTIPLY, CLAMP_FUNCTION.none, true));
 const test1 = new Noise(
         SimplexNoise.seed(1234),
         // SimplexNoise.seed(1192),
