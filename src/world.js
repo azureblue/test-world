@@ -19,7 +19,7 @@ const logger = new Logger("World");
 const quickMesher = await UIntExtWasmMesher.createMesher();
 
 
-const CHUNK_RENDER_DIST = 6;
+const CHUNK_RENDER_DIST = 8;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
 const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * 4;
 
