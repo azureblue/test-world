@@ -80,7 +80,7 @@ export class SeededGenerator extends Generator {
     }
 }
 
-export class Postprocessor {
+export class Processor {
 
     apply(value) {
         return value;
@@ -91,25 +91,24 @@ export class Postprocessor {
      * @param {(v: number) => number} func 
      */
     static of(func) {
-        return new class extends Postprocessor {
+        return new class extends Processor {
             apply(value) {
                 return func(value);
             }
         }
     }
+
+    static default = new Processor();
 }
 
-export class Preprocessor {
-
-    constructor(preprocessor) {
-    }
+export class DomainProcessor {
 
     /**
      * @param {number} x 
      * @param {number} y 
      * @param {number[]} out 
      */
-    preprocess(x, y, out) {
+    apply(x, y, out) {
         out[0] = x;
         out[1] = y;
     }
@@ -118,15 +117,15 @@ export class Preprocessor {
      * @param {(x: number, y: number, out: number[]) => void} func 
      */
     static of(func) {
-        return new class extends Preprocessor {
-            preprocess(x, y, out) {
+        return new class extends DomainProcessor {
+            apply(x, y, out) {
                 func(x, y, out);
             }
         }
     }
 }
 
-export class Reducer {
+export class Extractor {
 
     /**
      * @param {Generator} gen 
@@ -137,10 +136,10 @@ export class Reducer {
         return gen.gen(x, y);
     }
 
-    static default = new Reducer();
+    static default = new Extractor();
 
     static of(func) {
-        return new class extends Reducer {
+        return new class extends Extractor {
             apply(gen, x, y) {
                 return func(gen, x, y);
             }
@@ -151,14 +150,13 @@ export class Reducer {
      * @param {(value: number) => number} func 
      */
     static func(func) {
-        return new class extends Reducer {
+        return new class extends Extractor {
             apply(gen, x, y) {
                 return func(gen.gen(x, y));
             }
         }
     }
 }
-
 
 export class NoiseSource extends SeededGenerator {
     #rawNoise;
@@ -192,10 +190,10 @@ export class NoiseSource extends SeededGenerator {
 }
 
 
-export class DomainWrap extends Preprocessor {
+export class DomainWrap extends DomainProcessor {
 
     #warpFreq;
-    #warpAmp
+    #warpAmp;
     #noiseGenerator;
 
     /** 
@@ -211,7 +209,7 @@ export class DomainWrap extends Preprocessor {
         this.#warpAmp = warpAmp;
     }
 
-    preprocess(x, y, out) {
+    apply(x, y, out) {
         const wx = this.#noiseGenerator.gen(x * this.#warpFreq, y * this.#warpFreq);
         const wy = this.#noiseGenerator.gen((x + 17.3) * this.#warpFreq, (y + 9.2) * this.#warpFreq);
         out[0] = x + wx * this.#warpAmp;
@@ -239,11 +237,11 @@ export class Noise extends Generator {
     /**
      * @param {SeededGenerator} gen 
      * @param {Object} options
-     * @param {Preprocessor[]} options.preprocessors
-     * @param {Reducer} options.reducer
-     * @param {Postprocessor[]} options.postprocessors 
+     * @param {DomainProcessor[]} options.preprocessors
+     * @param {Extractor} options.reducer
+     * @param {Processor[]} options.postprocessors 
      */
-    constructor(gen, { preprocessors = [], reducer = Reducer.default, postprocessors = [] } = {}) {
+    constructor(gen, { preprocessors = [], reducer = Extractor.default, postprocessors = [] } = {}) {
         super();
         this.#gen = gen;
         this.#preprocessors = preprocessors;
@@ -261,7 +259,7 @@ export class Noise extends Generator {
     
     gen(x, y) {
         for (const pre of this.#preprocessors) {
-            pre.preprocess(x, y, this.#tmp);
+            pre.apply(x, y, this.#tmp);
             x = this.#tmp[0];
             y = this.#tmp[1];
         }

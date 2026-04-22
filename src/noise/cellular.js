@@ -1,6 +1,6 @@
 import { unnormalize } from "../functions.js";
 import { hash01 } from "./hash.js";
-import { Generator, Reducer } from "./noise.js";
+import { Generator, Extractor } from "./noise.js";
 
 export const MAX_F1_SQ = 2.0;
 export const MAX_F2_SQ = 2.5;
@@ -10,7 +10,7 @@ export const MAX_F2 = Math.sqrt(2.5);
 
 export class CellularNoise {
     static worleyReducer(seed, operator = WorleyOperators.defaultF1DistOperator) {
-        return new class extends Reducer {
+        return new class extends Extractor {
             apply(gen, x, y) {
                 return worley(seed, x, y, operator);
             }            
@@ -67,7 +67,7 @@ export function worley(seed, x, y, operator = WorleyOperators.defaultF1DistOpera
     return operator(F1, F2);
 }
 
-export class WorleyOperators{
+export class WorleyOperators {
 
     static defaultF1DistOperator = (f1, f2) => unnormalize(Math.sqrt(f1) / MAX_F1);
 

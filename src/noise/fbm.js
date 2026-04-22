@@ -1,12 +1,12 @@
-import { Generator, Reducer, SeededGenerator, SeedStream as SeedGen } from "./noise.js";
+import { Generator, Extractor, SeededGenerator, SeedStream as SeedGen, Processor } from "./noise.js";
 
 
-export class FBM extends Reducer {
+export class FBM extends Extractor {
     #octaves;
     #frequency;
     #lacunarity;
     #gain;
-    #extractor;
+    #processor;
 
     /**
      * @param {Object} [fbmOptions]
@@ -14,15 +14,15 @@ export class FBM extends Reducer {
      * @param {number} [fbmOptions.frequency=1.0]
      * @param {number} [fbmOptions.lacunarity=2.0]
      * @param {number} [fbmOptions.gain=0.5]
-     * @param {Reducer} [extractor]
+     * @param {Processor} [processor]
      */
-    constructor({ octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5 } = {}, extractor = Reducer.default) {
+    constructor({ octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5, processor = Processor.default } = {}) {
         super();
         this.#octaves = octaves;
         this.#frequency = frequency;
         this.#lacunarity = lacunarity;
         this.#gain = gain;
-        this.#extractor = extractor;
+        this.#processor = processor;
     }
 
     /**
@@ -42,8 +42,8 @@ export class FBM extends Reducer {
             for (let i = 0; i < this.#octaves; i++) {
                 octaveSeed = SeedGen.nextSeed(octaveSeed);
                 gen.seedSet(octaveSeed);
-                const n = this.#extractor.apply(gen, x * freq, y * freq);
-                sum += n * amp;
+                const v = this.#processor.apply(gen.gen(x * freq, y * freq));
+                sum += v * amp;
                 ampSum += amp;
                 freq *= this.#lacunarity;
                 amp *= this.#gain;
@@ -54,16 +54,16 @@ export class FBM extends Reducer {
         return sum / ampSum;
     }
 
-    static reducer({ octaves = 4, frequency = 1.0, lacunarity = 2.0, gain = 0.5 } = {}, extractor = Reducer.default) {
-        return new FBM({ octaves, frequency, lacunarity, gain }, extractor);
+    static reducer({ octaves = 4, frequency = 1.0, lacunarity = 2.0, gain = 0.5, processor = Processor.default } = {}) {
+        return new FBM({ octaves, frequency, lacunarity, gain, processor });
     }
 
     /**
      * @param {SeededGenerator} gen 
      * @returns 
      */
-    static generator(gen, { octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5 } = {}, extractor = Reducer.default) {
-        const fbm = new FBM({ octaves, frequency, lacunarity, gain }, extractor);
+    static generator(gen, { octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5, processor = Processor.default } = {}) {
+        const fbm = new FBM({ octaves, frequency, lacunarity, gain, processor });
         return new class extends Generator {
             constructor() {
                 super();
