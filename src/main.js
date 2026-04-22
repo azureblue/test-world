@@ -237,11 +237,12 @@ export async function start() {
         }
 
         cubeSolidProgram.use();
+        gl.disable(gl.CULL_FACE);
         for (let chunk of visibleChunks) {
             meshDrawer.drawNonSolids(chunk.mesh);
         }
 
-        gl.disable(gl.CULL_FACE);
+        
         xQuadsProgram.use();
         for (let chunk of visibleChunks) {
             meshDrawer.drawXQuads(chunk.mesh);
