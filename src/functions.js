@@ -26,8 +26,16 @@ export function preciseLerp(a, b, t) {
     return (1 - t) * a + t * b;
 }
 
+export function remap(x, inMin, inMax, outMin, outMax) {
+    return outMin + (outMax - outMin) * ((x - inMin) / (inMax - inMin));
+}
+
 export function normalize(x) {
     return (x + 1) / 2;
+}
+
+export function nomrmalizeRange(x, min, max) {
+    return (x - min) / (max - min);
 }
 
 export function unnormalize(x) {
