@@ -453,9 +453,9 @@ export class Cube27 {
 export class Array2D {
     #width
     data
-    constructor(width, height = width) {
+    constructor(width, height = width, ArrayType = Uint32Array) {
         this.#width = width;
-        this.data = new Uint32Array(width * height);
+        this.data = new ArrayType(width * height);
     }
 
     fill(v) {
