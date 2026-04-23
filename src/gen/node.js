@@ -1,4 +1,6 @@
-import { createBlend } from "../blend.js";
+import { Blend, createBlend } from "../blend.js";
+import { normalize, unnormalize } from "../functions.js";
+import { Generator } from "../noise/noise.js";
 import { Array2D } from "../utils.js";
 import { Curve } from "./curve.js";
 
@@ -29,29 +31,23 @@ export class NodeRegistry {
 
 export class Node {
     static #ID = 0;
+    #iter = null;
     #id
-    #name
+    name
     #value = 0;
-    #srcNodes;
-    #srcNodeValues;
+    srcNodes;
+    #srcValues;
 
     /**
      * @param {Array<Node>} srcNodes 
      */
-    constructor(srcNodes = []) {
-        this.#srcNodes = srcNodes;
-        this.#srcNodeValues = new Float64Array(srcNodes.length);
+    constructor(srcNodes = [], name) {
         this.#id = Node.#ID++;
-        this.#name = this.constructor.name + "-" + this.#id;
+        this.srcNodes = srcNodes;
+        this.#srcValues = new Float64Array(srcNodes.length);
+        this.name = name || this.constructor.name + "-" + this.#id;        
     }
 
-    get name() {
-        return this.#name;
-    }
-
-    set name(name) {
-        this.#name = name;
-    }
 
     get id() {
         return this.#id;
@@ -62,25 +58,35 @@ export class Node {
      * @param {number} y 
      * @param {Float32Array} srcNodeValues 
      */
-    _gen(x, y, srcNodeValues) {
+    $gen(x, y, srcNodeValues) {
 
     }
 
-    gen(x, y) {
+    gen(x, y, iteration) {
+        if (iteration === this.#iter)
+            return this.#value;
 
-        for (let i = 0; i < this.#srcNodes.length; i++) {
-            this.#srcNodeValues[i] = this.#srcNodes[i].gen(x, y, iter);
+        for (let i = 0; i < this.srcNodes.length; i++) {
+            this.#srcValues[i] = this.srcNodes[i].gen(x, y, iteration);
         }
 
-        this.#value = this._gen(x, y, this.#srcNodeValues);
+        this.#value = this.$gen(x, y, this.#srcValues);
+        if (iteration !== undefined)
+            this.#iter = iteration;
         return this.#value;
+    }
+
+    static createConstValue(v) {
+        return {
+            gen: () => v
+        };
     }
 }
 
 export class GenNode extends Node {
     #noiseGen;
     /**
-     * @param {NoiseGenerator} noiseGen 
+     * @param {Generator} noiseGen 
      */
     constructor(noiseGen) {
         super();
@@ -92,8 +98,20 @@ export class GenNode extends Node {
      * @param {number} y 
      * @param {Float32Array} srcNodeValues 
      */
-    _gen(x, y, srcNodeValues) {
+    $gen(x, y, srcNodeValues) {
         return this.#noiseGen.gen(x, y);
+    }
+}
+
+export class FunctionNode extends Node {
+    constructor(srcNode, fun) {
+        super([srcNode]);
+        this.fun = fun;
+    }
+
+    $gen(x, y, values) {
+        const v = values[0];
+        return this.fun(v, x, y);
     }
 }
 
@@ -125,25 +143,35 @@ export class CurveNode extends Node {
 
 export class BlendNode extends Node {
 
-    #blendFunction
     /**
      * @param {Array<Node>} nodes 
-     * @param {Function} blendMode 
-     * @param {number} opacity 
+     * @param {Blend} blend 
      */
-    constructor(nodes, blendMode, opacity) {
-        super(nodes);
-        this.#blendFunction = createBlend(blendMode, opacity);
+    constructor(nodes, blend, {
+        opacityNode = Node.createConstValue(1.0),
+        preprocessor = x => x,
+        preprocessors = null,
+        postprocessor = x => x
+    } = {}) {
+        super([...nodes, opacityNode]);
+        this.blend = blend;
+        this.preprocessors = preprocessors || new Array(nodes.length).fill(preprocessor);
+        if (this.preprocessors.length != nodes.length)
+            throw new Error("Preprocessors length must match nodes length");
+        this.postprocessor = postprocessor;
     }
 
     /**
      * @param {Float32Array} values 
      */
-    _gen(x, y, values) {
-        let r = values[0];
-        for (let i = 1; i < values.length; i++)
-            r = this.#blendFunction(r, values[i]);
-        return r;
+    $gen(x, y, values) {
+        const lastIdx = values.length - 1;
+        const opacity = values[lastIdx];
+        const preprocessors = this.preprocessors;
+        let r = preprocessors[0](values[0]);
+        for (let i = 1; i < lastIdx; i++)
+            r = this.blend.apply(r, preprocessors[i](values[i]), opacity);
+        return this.postprocessor(r);
     }
 }
 
