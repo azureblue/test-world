@@ -1,13 +1,15 @@
-import { blend, BLEND_MODE } from "../../blend.js";
-import { normalize, spreadSin11, unnormalize } from "../../functions.js";
+import { blend, BLEND_FUNCTION } from "../../blend.js";
+import { normalize, unnormalize } from "../../functions.js";
 import { CellularNoise } from "../../noise/cellular.js";
 import { FBM } from "../../noise/fbm.js";
 import { Hash01Noise } from "../../noise/hashNoise.js";
-import { DomainWrap, Noise, Postprocessor, Reducer } from "../../noise/noise.js";
+import { DomainWrap, Noise, Extractor } from "../../noise/noise.js";
 import { SimplexNoise, SimplexNoiseGenerator } from "../../noise/opensimplex2.js";
 import { CurveRenderer, LinearCurve, point } from "../curve.js";
 import { DomainWarpNode } from "../generator.js";
+import { baseNode0, baseNode1, baseNode2, baseNode3, baseNodePlateau, blendNode0, blendNode1, cellularNode0 } from "../generators.js";
 import { BlendNode, CurveNode, GenericNode, GenNode, Node } from "../node.js";
+import { PalleteMapper, renderGen, RenderingNodeIntrospector } from "../utils.js";
 import { renderTerrain } from "./terrainRenderer.js";
 
 function updateCanvases() {
@@ -25,97 +27,6 @@ function getCanvas(id) {
     return document.getElementById(id);
 }
 
-/**
- * 
- * @param {Node} node 
- * @param {HTMLCanvasElement} canvas 
- */
-function renderGen(node, canvas, drawMiddleLines = false) {
-    const w = canvas.width;
-    const wHalf = w >> 1;
-    const h = canvas.height;
-    const hHalf = h >> 1;
-    const c2d = canvas.getContext("2d");
-    const tmpImageData = c2d.createImageData(w, h);
-    for (let x = 0; x < w; x++)
-        for (let y = 0; y < w; y++) {
-            const baseIdx = (y * w + x) * 4;
-            const r = normalize(node.gen(x - wHalf, h - y - hHalf - 1));
-            tmpImageData.data[baseIdx] = Math.floor(r * 256);
-            tmpImageData.data[baseIdx + 1] = Math.floor(r * 256);
-            tmpImageData.data[baseIdx + 2] = Math.floor(r * 256);
-            tmpImageData.data[baseIdx + 3] = 255;
-        }
-    c2d.putImageData(tmpImageData, 0, 0);
-    if (drawMiddleLines) {
-        c2d.lineWidth = 2;
-        c2d.strokeStyle = "rgba(173,216,230,0.5)";
-        c2d.beginPath();
-        c2d.moveTo(0, h / 2);
-        c2d.lineTo(w, h / 2);
-        c2d.moveTo(w / 2, 0);
-        c2d.lineTo(w / 2, h);
-        c2d.stroke();
-    }
-}
-
-/**
- * 
- * @param {Node} node 
- * @param {HTMLCanvasElement} canvas 
- */
-function renderGenSlice(node, canvas, width, offset = { x: 0, y: 0 }) {
-    const w = canvas.width;
-    const wHalf = w << 1;
-    const h = canvas.height;
-    const hHalf = h << 1;
-    const points = [];
-
-    for (let x = 0; x < w; x++) {
-        const x01 = x / w;
-        points.push({ x: x01, y: normalize(node.gen(offset.x + width * x01 - wHalf, offset.y - hHalf)) });
-    }
-    const curve = new LinearCurve(points);
-    const renderer = new CurveRenderer();
-    renderer.render(curve, canvas);
-}
-
-
-/**
- * @param {ImageData} data 
- */
-function fillArr(ctx, fun) {
-    for (let y = 0; y < w; y++)
-        for (let x = 0; x < w; x++) {
-            const c = Math.floor(fun(x, y) * 256);
-            const baseIdx = (y * w + x) * 4;
-            tmpImageData.data[baseIdx] = c;
-            tmpImageData.data[baseIdx + 1] = c;
-            tmpImageData.data[baseIdx + 2] = c;
-            tmpImageData.data[baseIdx + 3] = 255;
-        }
-
-    ctx.putImageData(tmpImageData, 0, 0);
-}
-
-// function wang_hash2d(x, y, seed = 0) {
-//     let h = x;
-//     h = (h ^ 61) ^ (h >>> 16);
-//     h = h + (h << 3);
-//     h = h ^ (h >>> 4);
-//     h = h * 0x27d4eb2d;
-//     h = h ^ (h >>> 15);
-
-//     h += y + seed;
-//     h = (h ^ 61) ^ (h >>> 16);
-//     h = h + (h << 3);
-//     h = h ^ (h >>> 4);
-//     h = h * 0x27d4eb2d;
-//     h = h ^ (h >>> 15);
-
-//     return (h >>> 0) / 0x100000000; // [0, 1)
-// }
-
 export function main() {
     updateCanvases();
     const scale = 1;
@@ -130,7 +41,7 @@ export function main() {
             frequency: 0.003 * scale,
             octaves: 4
         })
-    }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_MODE.NORMAL, 0.5));
+    }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_FUNCTION.NORMAL, 0.5));
 
     const riverNode = new GenNode(
         new SimplexNoiseGenerator({
@@ -163,7 +74,7 @@ export function main() {
         }
     )
 
-    const mergeNode = new BlendNode([node1, riverCurveNode], BLEND_MODE.MULTIPLY, 1);
+    const mergeNode = new BlendNode([node1, riverCurveNode], BLEND_FUNCTION.MULTIPLY, 1);
 
     // renderNode(node1, getCanvas("canvas0"));
     // renderGen(riverNode, getCanvas("canvas1"));
@@ -209,7 +120,7 @@ export function main() {
 
     const cellular0 = new Noise(
         // new Hasn2DNoise((Date.now() * 0.001) | 0),
-         new Hash01Noise((Date.now() * 0.1) | 0),
+        new Hash01Noise((Date.now() * 0.1) | 0),
         // SimplexNoise.seed(1192),
         {
             preprocessors: [
@@ -284,17 +195,35 @@ export function main() {
                 frequency: 0.01,
                 lacunarity: 2,
                 gain: 0.5
-            }, Reducer.func(v => unnormalize(1 - Math.abs(v)))
+            }, Extractor.func(v => unnormalize(1 - Math.abs(v)))
             )
         }
     );
 
-    renderGenSlice(cellular00, getCanvas("slice0"), 400, { x: 0, y: 200 });
+    // renderGenSlice(cellular00, getCanvas("slice0"), 400, { x: 0, y: 200 });
     // renderGenSlice(cellular0, getCanvas("slice1"), 400, { x: 0, y: 200 });
     // renderGen(cellular00, getCanvas("canvas0"), true);
-    renderGen(cellular0, getCanvas("canvas1"), false);
-    renderGen(cellular1, getCanvas("canvas2"), true);
-    renderGen(ridgeNode2, getCanvas("canvas3"), true);
+    // renderGen(baseNode0, getCanvas("canvas0"), { scale: 1.0, drawMiddleLines: false });
+    const baseNode0Renderer = new RenderingNodeIntrospector(baseNode0, getCanvas("canvas0"));
+    const baseNode1Renderer = new RenderingNodeIntrospector(baseNode1, getCanvas("canvas1"), {
+        palleteMapper: PalleteMapper.grayscale(-0.6, -0.4)
+    });
+    const baseNodePlateauRenderer = new RenderingNodeIntrospector(baseNodePlateau, getCanvas("canvas2"));
+
+    const baseNode2Renderer = new RenderingNodeIntrospector(baseNode2, getCanvas("canvas3"));
+    const baseNode3Renderer = new RenderingNodeIntrospector(baseNode3, getCanvas("canvas4"));
+    const blendNode0Renderer = new RenderingNodeIntrospector(blendNode0, getCanvas("canvas5"));
+    const blendNode1Renderer = new RenderingNodeIntrospector(blendNode1, getCanvas("canvas6"));
+    renderGen(cellularNode0, getCanvas("canvas7"), {scale: 100.0});
+    // renderGen(baseNode1, getCanvas("canvas1"), { scale: 1.0, drawMiddleLines: false });
+    // renderGen(baseNode2, getCanvas("canvas2"), { scale: 1.0, drawMiddleLines: false });
+    // renderGen(blendNode0, getCanvas("canvas3"), { scale: 1.0, drawMiddleLines: false });
+    // for (let i = 0; i < 400; i++)
+    //     for (let j = 0; j < 400; j++)
+    //         blendNode0.gen(i - 200, j - 200, i * 400 + j);
+
+
+
 
     const canvas1 = getCanvas("canvas1");
     // renderIsoPerPixel(getCanvas("canvas0"), 800, 800, (x, y) => cellular0.gen(x - 400, 800 - 1 - y - 400), {
@@ -309,12 +238,19 @@ export function main() {
     // });
 
     const image1 = canvas1.getContext("2d").getImageData(0, 0, canvas1.width, canvas1.height);
-    renderTerrain(getCanvas("canvas0"), -400, -400, 800, 800,
-    // (x, y) => image1.data[((y * canvas1.width) + x) * 4] / 255.0 * 2.0 - 1.0);
-    (x, y) => cellular0.gen(x, -y),
-    {
-        heightMapResolution: 4,
-        gridN: 100
-    }
-);
+    renderTerrain(getCanvas("canvas8"), -200, -200, 400, 400,
+        //     // (x, y) => image1.data[((y * canvas1.width) + x) * 4] / 255.0 * 2.0 - 1.0);
+        (x, y) => blendNode0.gen(x, -y, y * 400 + x),
+        {
+            heightMapResolution: 1,
+            gridN: 400
+        }
+    );
+    baseNode0Renderer.flush();
+    baseNode1Renderer.flush();
+    baseNodePlateauRenderer.flush();
+    baseNode2Renderer.flush();
+    baseNode3Renderer.flush();
+    blendNode0Renderer.flush();
+    blendNode1Renderer.flush();
 }
