@@ -25,13 +25,13 @@ export function renderTerrain(canvas, startX, startY, width, height, getH, param
     const worldSize = params.worldSize ?? 2.0; // plane spans [-worldSize/2 .. +worldSize/2]
 
     // Height scale in world units
-    const heightAmp = params.heightAmp ?? 0.3;
-    const bottomY = params.bottomY ?? (-heightAmp * 2.0); // albo -50, zależnie od skali
+    const heightAmp = params.heightAmp ?? 1;
+    const bottomY = params.bottomY ?? (-heightAmp * 1); // albo -50, zależnie od skali
 
 
     // Lighting
     const ambient = params.ambient ?? 0.5;
-    const lightDir = params.lightDir ?? [0.8, 0.5, 0.5]; // world-space
+    const lightDir = params.lightDir ?? [2, 1.1, 0.5]; // world-space
     const toLightVector = fvec3(...lightDir).normalizeIn();
 
     const bg = params.bg ?? [11 / 255, 15 / 255, 20 / 255];
@@ -42,7 +42,7 @@ export function renderTerrain(canvas, startX, startY, width, height, getH, param
 
     const water = {
         enabled: params.water?.enabled ?? true,
-        level: params.water?.level ?? -0.2,          // world Y
+        level: params.water?.level ?? -0.7,          // world Y
         alpha: params.water?.alpha ?? 0.3,
         color: params.water?.color ?? [0.08, 0.19, 0.80],
     }; 
