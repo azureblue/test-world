@@ -1,11 +1,11 @@
-import { blend, BLEND_MODE } from "../blend.js";
+import { blend, BLEND_FUNCTION } from "../blend.js";
 import { BLOCK_IDS } from "../blocks.js";
 import { CHUNK_SIZE, ChunkBlockData, ChunkData } from "../chunk/chunk.js";
 import { Vec2, Vec3 } from "../geom.js";
 import { hash01, hash32 } from "../noise/hash.js";
 import { Generator } from "../noise/noise.js";
 import { SimplexNoiseGenerator } from "../noise/opensimplex2.js";
-import { ImagePixels } from "../utils.js";
+import { Array2D, ImagePixels } from "../utils.js";
 import { LinearCurve, point } from "./curve.js";
 import { testgen } from "./generators.js";
 import { CurveNode, GenericNode, GenNode } from "./node.js";
@@ -477,59 +477,7 @@ export class NoiseChunkGenerator extends ChunkGenerator {
         octaves: 5
     });
 
-    #iter = 0;
-
-    // goodNoise0 = new Noise(
-    //     SimplexNoise.seed(1192),
-    //     {
-    //         preprocessors: [
-    //             DomainWrap.basic({
-    //                 noiseGenerator: new Noise(
-    //                     SimplexNoise.seed(1234), { reducer: FBM.reducer({ octaves: 10, frequency: 0.005 }) }
-    //                 ),
-    //                 warpFreq: 1,
-    //                 warpAmp: 200
-    //             })
-    //         ],
-    //         reducer: FBM.reducer({
-    //             octaves: 1,
-    //             frequency: 0.002,
-    //             lacunarity: 2,
-    //             gain: 0.8
-    //         }
-    //             , CellularNoise.worleyReducer(123111, (f1, f2) => {
-    //                 const a = unnormalize(1 - Math.sqrt(f1)) / 2;
-    //                 return spreadSin11(a );
-    //             })
-    //         )
-    //     });
     goodNoise0 = testgen();
-
-    // goodNoise0 = new Noise(
-    //         SimplexNoise.seed(1),
-    //         {
-    //             preprocessors: [
-    //                 DomainWrap.basic({
-    //                     noiseGenerator: new Noise(
-    //                         SimplexNoise.seed(1234), { reducer: FBM.reducer({ octaves: 10, frequency: 0.005 })}
-    //                     ),
-    //                     warpFreq: 1,
-    //                     warpAmp: 200
-    //                 })
-    //             ],
-    //             reducer: FBM.reducer({
-    //                 octaves: 1,
-    //                 frequency: 0.002,
-    //                 lacunarity: 2,
-    //                 gain: 0.4
-    //             }, CellularNoise.worleyReducer(11, (f1, f2) => {
-    //                 const a = unnormalize(1 - Math.sqrt(f1));
-    //                 return spreadSin11(a / 2 - 0.5) + 0.5;
-
-    //             })
-    //                 // , (v) => Math.abs(2.0 * v - 1)
-    //             )
-    //         });
 
 
     #rigedNoise = new RidgeNoiseNode(SimplexNoiseGenerator.rawNoise, {
@@ -540,10 +488,11 @@ export class NoiseChunkGenerator extends ChunkGenerator {
 
     constructor() {
         super();
-        this.goodNoise0.seedSet(1234562);
-        this.#offests = seedOffset(this.#noise.seed);        
+        // this.goodNoise0.seedSet(1234562);
+        this.#offests = seedOffset(this.#noise.seed);
         this.#offests.ox = 0;
         this.#offests.oy = 0;
+        this.localHeightMap = new Array2D(CHUNK_SIZE + 8, CHUNK_SIZE + 8, Int32Array);
     }
 
     /**
@@ -557,32 +506,56 @@ export class NoiseChunkGenerator extends ChunkGenerator {
         const startY = (chunkPos.y * CHUNK_SIZE);
 
 
+        for (let y = -4; y < CHUNK_SIZE + 4; y++)
+            for (let x = -4; x < CHUNK_SIZE + 4; x++) {
+                this.localHeightMap.set(
+                    x + 4, y + 4,
+                    Math.floor(this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy, y * 32 + x) * MAX_HEIGHT)
+                );
+            }
         for (let y = 0; y < CHUNK_SIZE; y++)
             for (let x = 0; x < CHUNK_SIZE; x++) {
-                const noiseOutput = this.goodNoise0.gen(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
-                // ridgeFbm01(x + startX + this.#offests.ox, y + startY + this.#offests.oy, (x, y) => this.#noise.gen(x, y));
-                //this.#noise.octaveNoise(x + startX + this.#offests.ox, y + startY + this.#offests.oy);
-                const noiseImproved = noiseOutput; //spreadTanh(noiseOutput, 2);
-                let height = Math.floor(noiseImproved * MAX_HEIGHT);
+
+                const height = this.localHeightMap.get(x + 4, y + 4);
+                const waterLevel = 0;
 
 
                 const chunkStartH = chunkPos.z * CHUNK_SIZE;
                 const chunkEndH = chunkStartH + CHUNK_SIZE;
                 let r = chunkStartH;
                 for (; r < Math.min(height - 1, chunkEndH); r++) {
-                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT);
+                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
                 }
 
                 if (r < chunkEndH && r < height) {
-                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT_GRASS);
-                }
-                r++;
-                if (r < chunkEndH && r === height) {
-                    if (Math.random() < 0.05)
-                        blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT);
+                    if (r == height - 1 && Math.abs(height) < 1) {
+                        let distToWater = 255;
+                        for (let j = -4; j <= 4; j++) {
+                            for (let i = -4; i <= 4; i++) {
+                                const h = this.localHeightMap.get(x + 4 + i, y + 4 + j);
+                                if (h < 0) {
+                                    const d = Math.abs(i) + Math.abs(j);
+                                    if (d < distToWater)
+                                        distToWater = d;
+                                }
+                            }
+                        }
+                        if (distToWater <= 4)
+                            blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.SAND);
+                        else
+                            blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
+                    }
+                    else
+                        blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
                 }
 
-                for (let w = r; w < Math.min(-55, chunkEndH); w++) {
+                r++;
+                if (r < chunkEndH && r === height) {
+                    // if (Math.random() < 0.05)
+                    // blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT);
+                }
+
+                for (let w = r; w < Math.min(waterLevel, chunkEndH); w++) {
                     if (blockData.getHXY(w - chunkStartH, x, y) == BLOCK_IDS.EMPTY)
                         blockData.setHXY(w - chunkStartH, x, y, BLOCK_IDS.WATER);
                 }
@@ -721,7 +694,7 @@ export class Generator02 extends FunctionChunkGenerator {
                 frequency: 0.003 * scale,
                 octaves: 4
             })
-        }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_MODE.NORMAL, 0.5));
+        }, (values, data, x, y) => blend(values[0], data.gen.gen(x, y), BLEND_FUNCTION.NORMAL, 0.5));
 
 
         const riverNode = new GenNode(
@@ -904,7 +877,7 @@ export class TestGenerator2 {
     generateChunk(chunkPos) {
         const chunkData = new ChunkBlockData();
         if (chunkPos.z == 0) {
-        // if (Math.max(Math.abs(chunkPos.x), Math.abs(chunkPos.y), Math.abs(chunkPos.z)) <= 2) {
+            // if (Math.max(Math.abs(chunkPos.x), Math.abs(chunkPos.y), Math.abs(chunkPos.z)) <= 2) {
             GeneratorPatterns.fullSolid(chunkData);
         }
         return chunkData;
