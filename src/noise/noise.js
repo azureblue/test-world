@@ -4,17 +4,7 @@
  */
 
 export class SeedStream {
-    #state;
-    constructor(seed) { this.#state = seed | 0; }
-
-    next() {
-        let x = (this.#state = (this.#state + 0x9E3779B9) | 0);
-        x ^= x >>> 16; x = Math.imul(x, 0x85EBCA6B) | 0;
-        x ^= x >>> 13; x = Math.imul(x, 0xC2B2AE35) | 0;
-        x ^= x >>> 16;
-        return x | 0;
-    }
-
+  
     static nextSeed(seed) {
         let x = (seed + 0x9E3779B9) | 0;
         x ^= x >>> 16; x = Math.imul(x, 0x85EBCA6B) | 0;
@@ -22,7 +12,6 @@ export class SeedStream {
         x ^= x >>> 16;
         return x | 0;
     }
-
 }
 
 export class Generator {
@@ -35,23 +24,8 @@ export class Generator {
         gen(x, y) {
             return 0;
         }
-
-        seedGet() {
-            return 0;
-        }
-
-        seedSet(seed) {
-            // do nothing
-        }
     };
 
-    seedSet(seed) {
-        throw "not implemented";
-    }
-
-    seedGet() {
-        throw "not implemented";
-    }
 }
 
 export class SeededGenerator extends Generator {
@@ -63,21 +37,18 @@ export class SeededGenerator extends Generator {
         this.#seed = seed
     }
 
-    seedGet() {
+    get seed() {
         return this.#seed;
     }
 
-    seedSet(seed) {
+    set seed(seed) {
         this.#seed = seed;
+        this.onSeedChange();
     }
 
-    /**     
-     * @param {SeededGenerator} gen 
-     * @returns {SeededGenerator}
-     */
-    static wrap(gen) {
-
+    onSeedChange() {
     }
+
 }
 
 export class Processor {
@@ -85,7 +56,6 @@ export class Processor {
     apply(value) {
         return value;
     }
-
 
     /**
      * @param {(v: number) => number} func 
@@ -181,7 +151,7 @@ export class NoiseSource extends SeededGenerator {
     }
 
     gen(x, y) {
-        return this.#rawNoise(this.seedGet(), x * this.#freq, y * this.#freq);
+        return this.#rawNoise(this.seed, x * this.#freq, y * this.#freq);
     }
 
     rawNoise(seed, x, y) {

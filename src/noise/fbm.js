@@ -1,4 +1,4 @@
-import { Generator, Extractor, SeededGenerator, SeedStream as SeedGen, Processor } from "./noise.js";
+import { Extractor, Generator, Processor, SeededGenerator, SeedStream } from "./noise.js";
 
 
 export class FBM extends Extractor {
@@ -6,6 +6,7 @@ export class FBM extends Extractor {
     #frequency;
     #lacunarity;
     #gain;
+    #differentSeedPerOctave;
     #processor;
 
     /**
@@ -16,12 +17,19 @@ export class FBM extends Extractor {
      * @param {number} [fbmOptions.gain=0.5]
      * @param {Processor} [processor]
      */
-    constructor({ octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5, processor = Processor.default } = {}) {
+    constructor({
+        octaves = 5,
+        frequency = 1.0,
+        lacunarity = 2.0,
+        gain = 0.5,
+        differentSeedPerOctave = false,
+        processor = Processor.default } = {}) {
         super();
         this.#octaves = octaves;
         this.#frequency = frequency;
         this.#lacunarity = lacunarity;
         this.#gain = gain;
+        this.#differentSeedPerOctave = differentSeedPerOctave;
         this.#processor = processor;
     }
 
@@ -36,12 +44,14 @@ export class FBM extends Extractor {
         let amp = 1.0;
         let freq = this.#frequency;
         let ampSum = 0;
-        const seed = gen.seedGet();
+        const seed = gen.seed;
         let octaveSeed = seed;
         try {
             for (let i = 0; i < this.#octaves; i++) {
-                octaveSeed = SeedGen.nextSeed(octaveSeed);
-                gen.seedSet(octaveSeed);
+                if (this.#differentSeedPerOctave) {
+                    octaveSeed = SeedStream.nextSeed(octaveSeed);
+                    gen.seed = octaveSeed;
+                }
                 const v = this.#processor.apply(gen.gen(x * freq, y * freq));
                 sum += v * amp;
                 ampSum += amp;
@@ -49,32 +59,26 @@ export class FBM extends Extractor {
                 amp *= this.#gain;
             }
         } finally {
-            gen.seedSet(seed);
+            if (this.#differentSeedPerOctave) {
+                gen.seed = seed;
+            }
         }
         return sum / ampSum;
     }
 
-    static reducer({ octaves = 4, frequency = 1.0, lacunarity = 2.0, gain = 0.5, processor = Processor.default } = {}) {
-        return new FBM({ octaves, frequency, lacunarity, gain, processor });
+    static reducer({ octaves = 4, frequency = 1.0, lacunarity = 2.0, gain = 0.5, differentSeedPerOctave = false, processor = Processor.default } = {}) {
+        return new FBM({ octaves, frequency, lacunarity, gain, differentSeedPerOctave, processor });
     }
 
     /**
      * @param {SeededGenerator} gen 
      * @returns 
      */
-    static generator(gen, { octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5, processor = Processor.default } = {}) {
-        const fbm = new FBM({ octaves, frequency, lacunarity, gain, processor });
+    static generator(gen, { octaves = 5, frequency = 1.0, lacunarity = 2.0, gain = 0.5, differentSeedPerOctave = false, processor = Processor.default } = {}) {
+        const fbm = new FBM({ octaves, frequency, lacunarity, gain, differentSeedPerOctave, processor });
         return new class extends Generator {
             constructor() {
                 super();
-            }
-
-            seedGet() {
-                return gen.seedGet();
-            }
-
-            seedSet(seed) {
-                gen.seedSet(seed);
             }
 
             gen(x, y) {
