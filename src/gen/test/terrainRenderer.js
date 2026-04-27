@@ -42,7 +42,7 @@ export function renderTerrain(canvas, startX, startY, width, height, getH, param
 
     const water = {
         enabled: params.water?.enabled ?? true,
-        level: params.water?.level ?? -0.7,          // world Y
+        level: params.water?.level ?? 0,          // world Y
         alpha: params.water?.alpha ?? 0.3,
         color: params.water?.color ?? [0.08, 0.19, 0.80],
     }; 

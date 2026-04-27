@@ -14,8 +14,8 @@
 #define b_1111_1111_1111 4095u
 
 // consider calculating uvs in js
-// loshttttTTTTnnn_zzzzzyyyyyxxxxx
-//                   yyyyyyyxxxxxx
+//xxxxxxxxxyyyyyyyyyzzzzzzzzz   
+//xxxxxxxxxyyyyyyyyynnntttttttttsh
 //01234567890123456789012345678901
 layout (location = 0) in uvec2 a_in;
 layout (std140) uniform Camera {
@@ -24,7 +24,7 @@ layout (std140) uniform Camera {
 };
 uniform vec3 m_translation;
 
-const float pixh = 1.0f / 16.0f;
+const float UNIT = 1.0f / 8.0f;
 const float INV_VIEW_DISTANCE_SQ = 1.0f / VIEW_DISTANCE_SQ;
 
 const float[4] shadow_values = float[4](0.0f, 0.3f, 0.4f, 0.5f);
@@ -38,18 +38,17 @@ void main() {
     uint a_in_bits = a_in.x;
     uint a_in_aux_bits = a_in.y;
 
-    uint x = (a_in_bits >> 0) & b_0111_1111;
-    uint y = (a_in_bits >> 7) & b_0111_1111;
-    uint z = (a_in_bits >> 14) & b_0111_1111;
-    uint normal_idx = (a_in_aux_bits >> 16) & b_0000_0111;
-    uint tex_idx = (a_in_aux_bits >> 19) & b_1111_1111;
-    uint shadow = (a_in_aux_bits >> 27) & b_0000_0011;
-    uint lowered = (a_in_aux_bits >> 29) & b_0000_0011;
+    uint x = (a_in_bits >> 0) & b_1_1111_1111;
+    uint y = (a_in_bits >> 9) & b_1_1111_1111;
+    uint z = (a_in_bits >> 18) & b_1_1111_1111;
 
-    float m_x = float(a_in_aux_bits & b_0011_1111);
-    float m_y = float(a_in_aux_bits >> 7 & b_0011_1111);
+    float m_x = float(a_in_aux_bits & b_1_1111_1111);
+    float m_y = float(a_in_aux_bits >> 9 & b_1_1111_1111);
+    uint normal_idx = (a_in_aux_bits >> 18) & b_0000_0111;
+    uint tex_idx = (a_in_aux_bits >> 21) & b_1111_1111;
+    uint shadow = (a_in_aux_bits >> 29) & b_0000_0011;    
 
-    vec3 pos = vec3(float(x), float(z) - float(lowered) * pixh, -float(y)) + m_translation;
+    vec3 pos = vec3(float(x) , float(z), -float(y)) * UNIT + m_translation;
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 
@@ -58,6 +57,6 @@ void main() {
 
     fading = clamp(cam_to_pos_dist_sq * INV_VIEW_DISTANCE_SQ, 0.0f, 1.0f);
     v_shadow = shadow_values[shadow];
-    v_tex_coord = vec3(m_x, m_y, float(tex_idx));
+    v_tex_coord = vec3(m_x * UNIT, m_y * UNIT, float(tex_idx));
     o_norm = normal_idx;
 }

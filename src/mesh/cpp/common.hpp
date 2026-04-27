@@ -26,6 +26,8 @@ constexpr uint HEADER_SIZE_IN_UINT64 = 4;
 constexpr int SY = 34;
 constexpr int PS = 1156;
 
+constexpr int POS_UNIT = 8;
+
 constexpr uint X = 0;
 constexpr uint Y = 1;
 constexpr uint Z = 2;
@@ -34,11 +36,13 @@ constexpr uint BLOCK_WATER = 6;
 constexpr uint BLOCK_EMPTY = 0;
 
 constexpr int64 VERTEX_OFFSETS[8][3] = {{0, 0, 1}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 0}, {0, 1, 0}};
-constexpr int64 MERGE_VECTOR_W[8][3] = {{1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {-1, 0, 0}, {0, 1, 0}, {1, 0, 0}, {1, 1, 0}, {1, -1, 0}};
-constexpr int64 MERGE_VECTOR_H[8][3] = {{0, 1, 0}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, -1, 0}, {0, 0, 1}, {0, 0, 1}};
+constexpr int64 MERGE_VECTOR_W[8][3] = {{POS_UNIT, 0, 0}, {POS_UNIT, 0, 0}, {0, -POS_UNIT, 0}, {-POS_UNIT, 0, 0}, {0, POS_UNIT, 0}, {POS_UNIT, 0, 0}, {POS_UNIT, POS_UNIT, 0}, {POS_UNIT, -POS_UNIT, 0}};
+constexpr int64 MERGE_VECTOR_H[8][3] = {{0, POS_UNIT, 0}, {0, 0, POS_UNIT}, {0, 0, POS_UNIT}, {0, 0, POS_UNIT}, {0, 0, POS_UNIT}, {0, -POS_UNIT, 0}, {0, 0, POS_UNIT}, {0, 0, POS_UNIT}};
 constexpr uint WINDING[4][6] = {{0, 1, 2, 0, 2, 3}, {3, 2, 0, 2, 1, 0}, {1, 2, 3, 1, 3, 0}, {0, 3, 1, 3, 2, 1}};
 constexpr uint MERGE_MASKS_W[4] = {0, 1, 1, 0};
 constexpr uint MERGE_MASKS_H[4] = {0, 0, 1, 1};
+
+constexpr uint POS_COORD_BIT_SIZE = 9;
 
 inline constexpr uint BLOCKS_TEXTURES[9][6] = {
     {0, 0, 0, 0, 0, 0},
@@ -56,15 +60,15 @@ constexpr uint WATER_TEXTURE = BLOCKS_TEXTURES[BLOCK_WATER][0];
 
 
 __attribute__((always_inline)) static inline uint64 encode_pos_bits(uint h, uint x, uint y) {
-    return h << 14 | y << 7 | x;
+    return (h * POS_UNIT) << (2 * POS_COORD_BIT_SIZE) | (y * POS_UNIT) << POS_COORD_BIT_SIZE | (x * POS_UNIT);
 }
 
 __attribute__((always_inline)) static inline uint64 encode_tex_bits(uint tex_id) {
-    return static_cast<uint64>(tex_id) << 51;
+    return static_cast<uint64>(tex_id) << 53;
 }
 
 __attribute__((always_inline)) constexpr uint64 encode_dir_bits(Direction dir) {
-    return static_cast<uint64>(dir) << 48;
+    return static_cast<uint64>(dir) << 50;
 }
 
 __attribute__((always_inline)) static inline uint64 encode_dir_tex_bits(Direction dir, const uint (&block_textures)[6]) {
@@ -72,7 +76,7 @@ __attribute__((always_inline)) static inline uint64 encode_dir_tex_bits(Directio
 }
 
 __attribute__((always_inline)) static inline uint64 encode_pos_tex_bits(uint h, uint y, uint x, uint tex_id) {
-    return h << 14 | y << 7 | x | encode_tex_bits(tex_id);
+    return encode_pos_bits(h, y, x) | encode_tex_bits(tex_id);
 }
 
 
@@ -165,20 +169,20 @@ struct array_3d {
     }
 };
 
-constexpr uint64 POS_BITS_PLUS_1X = 1;
-constexpr uint64 POS_BITS_PLUS_1Y = (1 << 7);
-constexpr uint64 POS_BITS_PLUS_1Z = (1 << 14);
+constexpr uint64 POS_BITS_PLUS_1X = POS_UNIT;
+constexpr uint64 POS_BITS_PLUS_1Y = (POS_UNIT << POS_COORD_BIT_SIZE);
+constexpr uint64 POS_BITS_PLUS_1Z = (POS_UNIT << (2 * POS_COORD_BIT_SIZE));
 
 constexpr uint64 MERGE_BITS_WIDTH = 1ull << 32;
-constexpr uint64 MERGE_BITS_HEIGHT = 1ull << 39;
+constexpr uint64 MERGE_BITS_HEIGHT = 1ull << 41;
 constexpr uint64 MERGE_BITS_WIDTH_HEIGHT = MERGE_BITS_WIDTH | MERGE_BITS_HEIGHT;
 
 consteval uint64 merge_vector_w_bits(Direction dir) {
-    return (static_cast<uint64>(MERGE_VECTOR_W[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[dir][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_W[dir][2]) << 14);
+    return (static_cast<uint64>(MERGE_VECTOR_W[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[dir][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(MERGE_VECTOR_W[dir][2]) << (2 * POS_COORD_BIT_SIZE));
 };
 
 consteval uint64 merge_vector_h_bits(Direction dir) {
-    return (static_cast<uint64>(MERGE_VECTOR_H[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[dir][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_H[dir][2]) << 14);
+    return (static_cast<uint64>(MERGE_VECTOR_H[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[dir][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(MERGE_VECTOR_H[dir][2]) << (2 * POS_COORD_BIT_SIZE));
 };
 
 consteval uint64 merge_vector_wh_bits(Direction dir) {
@@ -186,7 +190,7 @@ consteval uint64 merge_vector_wh_bits(Direction dir) {
 };
 
 consteval uint64 vertex_offset_bits(Direction dir) {
-    return (static_cast<uint64>(VERTEX_OFFSETS[dir][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[dir][1]) << 7) + (static_cast<uint64>(VERTEX_OFFSETS[dir][2]) << 14);
+    return (static_cast<uint64>(VERTEX_OFFSETS[dir][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[dir][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(VERTEX_OFFSETS[dir][2]) << (2 * POS_COORD_BIT_SIZE));
 };
 
 static inline uint offset_to_dir27(int x, int y, int z) {

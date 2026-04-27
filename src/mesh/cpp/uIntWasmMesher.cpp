@@ -11,16 +11,20 @@ constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
 template <Direction DIR>
 __attribute__((always_inline)) static inline void encode_face(uint64* __restrict& out, uint64 bits, uint64 w, uint64 h, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
+    uint64 cs0 = (shadows & 0b00000011) << 61;
+    uint64 cs1 = (shadows & 0b00001100) << 59;
+    uint64 cs2 = (shadows & 0b00110000) << 57;
+    uint64 cs3 = (shadows & 0b11000000) << 55;
+    
+    if (DIR == Direction::Up && ((bits >> 53) & 0x1FFFF) == 6) {
+        bits -= (POS_BITS_PLUS_1Z / 8 * 1);
+    }
 
     uint64 mw = merge_vector_w_bits(DIR) * w;
     uint64 mh = merge_vector_h_bits(DIR) * h;
-    uint64 mwh = mw + mh;
-    uint64 mbw = MERGE_BITS_WIDTH * w;
-    uint64 mbh = MERGE_BITS_HEIGHT * h;
+    uint64 mwh = mw + mh;    
+    uint64 mbw = MERGE_BITS_WIDTH * w * POS_UNIT;
+    uint64 mbh = MERGE_BITS_HEIGHT * h * POS_UNIT;
 
     uint64 v0 = bits | cs0;
     uint64 v1 = bits + mw | cs1 | mbw;

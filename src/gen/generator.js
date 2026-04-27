@@ -524,7 +524,7 @@ export class NoiseChunkGenerator extends ChunkGenerator {
                 const chunkEndH = chunkStartH + CHUNK_SIZE;
                 let r = chunkStartH;
                 for (; r < Math.min(height - 1, chunkEndH); r++) {
-                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
+                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT);
                 }
 
                 if (r < chunkEndH && r < height) {
@@ -543,10 +543,10 @@ export class NoiseChunkGenerator extends ChunkGenerator {
                         if (distToWater <= 4)
                             blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.SAND);
                         else
-                            blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
+                            blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT);
                     }
                     else
-                        blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
+                        blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT_GRASS);
                 }
 
                 r++;
