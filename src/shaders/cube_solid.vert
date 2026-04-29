@@ -1,17 +1,5 @@
 #version 300 es
 #define VIEW_DISTANCE_SQ 409600.0 /* @viewDistanceSq */
-#define b_0000_0001 1u
-#define b_0000_0011 3u
-#define b_0000_0111 7u
-#define b_0000_1111 15u
-#define b_0001_1111 31u
-#define b_0011_1111 63u
-#define b_0111_1111 127u
-#define b_1111_1111 255u
-#define b_1_1111_1111 511u
-#define b_11_1111_1111 1023u
-#define b_113_1111_1111 2047u
-#define b_1111_1111_1111 4095u
 
 // consider calculating uvs in js
 //xxxxxxxxxyyyyyyyyyzzzzzzzzz   
@@ -38,17 +26,17 @@ void main() {
     uint a_in_bits = a_in.x;
     uint a_in_aux_bits = a_in.y;
 
-    uint x = (a_in_bits >> 0) & b_1_1111_1111;
-    uint y = (a_in_bits >> 9) & b_1_1111_1111;
-    uint z = (a_in_bits >> 18) & b_1_1111_1111;
+    float x = float((a_in_bits >> 0) & 0x1FFu);
+    float y = float((a_in_bits >> 9) & 0x1FFu);
+    float z = float((a_in_bits >> 18) & 0x1FFu);
 
-    float m_x = float(a_in_aux_bits & b_1_1111_1111);
-    float m_y = float(a_in_aux_bits >> 9 & b_1_1111_1111);
-    uint normal_idx = (a_in_aux_bits >> 18) & b_0000_0111;
-    uint tex_idx = (a_in_aux_bits >> 21) & b_1111_1111;
-    uint shadow = (a_in_aux_bits >> 29) & b_0000_0011;    
+    float m_x = float(a_in_aux_bits & 0x1FFu);
+    float m_y = float((a_in_aux_bits >> 9) & 0x1FFu);
+    uint normal_idx = (a_in_aux_bits >> 18) & 0x7u;
+    uint tex_idx = (a_in_aux_bits >> 21) & 0xFFu;
+    uint shadow = (a_in_aux_bits >> 29) & 0x3u;    
 
-    vec3 pos = vec3(float(x) , float(z), -float(y)) * UNIT + m_translation;
+    vec3 pos = vec3(x, z, -y) * UNIT + m_translation;
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 

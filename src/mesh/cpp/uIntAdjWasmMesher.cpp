@@ -17,8 +17,8 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    uint64 mw = merge_vector_w_bits(DIR) * w;
-    uint64 mh = merge_vector_h_bits(DIR) * h;
+    uint64 mw = encode_cube_solid_w_bits<DIR>(w);
+    uint64 mh = encode_cube_solid_h_bits<DIR>(h);
     uint64 mwh = mw + mh;
     uint64 mbw = MERGE_BITS_WIDTH * w;
     uint64 mbh = MERGE_BITS_HEIGHT * h;
@@ -60,7 +60,7 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     uint y = dir_yy_add + dir_yx_mul * layer_x + dir_yy_mul * layer_y + VERTEX_OFFSETS[DIR][Y];
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(DIR);
+    uint64 bits = encode_cube_solid_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(DIR);
     if (texture_id == WATER_TEXTURE) {
         encode_face<DIR>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
@@ -75,7 +75,7 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     uint h = layer_h + 1;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Up);
+    uint64 bits = encode_cube_solid_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Up);
     if (texture_id == WATER_TEXTURE) {
         encode_face<Direction::Up>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {
@@ -90,7 +90,7 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Down);
+    uint64 bits = encode_cube_solid_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Down);
     if (texture_id == WATER_TEXTURE) {
         encode_face<Direction::Down>(buffers.mesh_water_cur, bits, width, height, shadows);
     } else {

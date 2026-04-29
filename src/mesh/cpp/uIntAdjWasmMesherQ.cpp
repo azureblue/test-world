@@ -9,13 +9,13 @@ __attribute__((always_inline)) static inline void encode_face(uint64* __restrict
     uint64 cs2 = (shadows << 55) & 0x1800000000000000;
     uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    constexpr uint64 mw = merge_vector_w_bits(DIR);
-    constexpr uint64 mh = merge_vector_h_bits(DIR);
-    constexpr uint64 mwh = merge_vector_wh_bits(DIR);
+    constexpr uint64 mw = encode_cube_solid_w_bits<DIR>();
+    constexpr uint64 mh = encode_cube_solid_h_bits<DIR>();
+    constexpr uint64 mwh = mw + mh;
 
     uint64 v0 = bits | cs0;
     uint64 v1 = bits + mw | cs1 | MERGE_BITS_WIDTH;
-    uint64 v2 = bits + mwh | cs2 | MERGE_BITS_WIDTH_HEIGHT;
+    uint64 v2 = bits + mwh | cs2 | MERGE_BITS_WIDTH | MERGE_BITS_HEIGHT;
     uint64 v3 = bits + mh | cs3 | MERGE_BITS_HEIGHT;
 
     if (cs0 + cs2 > cs1 + cs3) {
@@ -57,7 +57,7 @@ extern "C"
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
-                uint64 pos_bits = encode_pos_bits(h, x, y);
+                uint64 pos_bits = encode_cube_solid_pos_bits(h, x, y);
 
                 const uint(&block_textures)[6] = BLOCKS_TEXTURES[block_id];
                 uint is_water = block_id == BLOCK_WATER;
