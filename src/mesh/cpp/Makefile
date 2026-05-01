@@ -1,6 +1,8 @@
-all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../uIntAdjWasmMesher.wasm ../uIntAdjWasmMesherQ.wasm
+all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm 
 
-../uIntWasmMesher.wasm: uIntWasmMesher.cpp
+headers := int.h blocks.hpp common.hpp quad_encode.hpp
+
+../uIntWasmMesher.wasm: uIntWasmMesher.cpp $(headers)
 	clang --target=wasm32 \
 	-O3 \
 	-std=c++20 \
@@ -16,7 +18,7 @@ all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../uIntAdjWasmMesher.wasm ..
 	-Wl,--strip-all \
 	uIntWasmMesher.cpp -o ../uIntWasmMesher.wasm
 
-../uIntWasmMesherQ.wasm: uIntWasmMesherQ.cpp
+../uIntWasmMesherQ.wasm: uIntWasmMesherQ.cpp $(headers)
 	clang --target=wasm32 \
 	-O3 \
 	-std=c++20 \
@@ -32,38 +34,5 @@ all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../uIntAdjWasmMesher.wasm ..
 	-Wl,--strip-all \
 	uIntWasmMesherQ.cpp -o ../uIntWasmMesherQ.wasm
 
-../uIntAdjWasmMesherQ.wasm: uIntAdjWasmMesherQ.cpp
-	clang --target=wasm32 \
-	-O3 \
-	-std=c++20 \
-	-ffreestanding -fno-builtin \
-	-fno-exceptions -fno-rtti \
-	-fno-threadsafe-statics \
-	-fno-stack-protector \
-	-nostdlib -nostdinc++ \
-	-Wl,--import-memory \
-	-Wl,--export=create_mesh \
-	-Wl,--export=__heap_base \
-	-Wl,--no-entry \
-	-Wl,--strip-all \
-	uIntAdjWasmMesherQ.cpp -o ../uIntAdjWasmMesherQ.wasm
-
-../uIntAdjWasmMesher.wasm: uIntAdjWasmMesher.cpp
-	clang --target=wasm32 \
-	-O3 \
-	-std=c++20 \
-	-ffreestanding -fno-builtin \
-	-fno-exceptions -fno-rtti \
-	-fno-threadsafe-statics \
-	-fno-stack-protector \
-	-nostdlib -nostdinc++ \
-	-Wl,--import-memory \
-	-Wl,--export=create_mesh \
-	-Wl,--export=__heap_base \
-	-Wl,--no-entry \
-	-Wl,--strip-all \
-	uIntAdjWasmMesher.cpp -o ../uIntAdjWasmMesher.wasm
-
-
 clean:
-	rm ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../uIntAdjWasmMesher.wasm ../uIntAdjWasmMesherQ.wasm
+	rm ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm
