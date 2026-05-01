@@ -26,6 +26,8 @@ constexpr uint HEADER_SIZE_IN_UINT64 = 4;
 constexpr int SY = 34;
 constexpr int PS = 1156;
 
+constexpr int POS_UNIT = 8;
+
 constexpr uint X = 0;
 constexpr uint Y = 1;
 constexpr uint Z = 2;
@@ -40,6 +42,8 @@ constexpr uint WINDING[4][6] = {{0, 1, 2, 0, 2, 3}, {3, 2, 0, 2, 1, 0}, {1, 2, 3
 constexpr uint MERGE_MASKS_W[4] = {0, 1, 1, 0};
 constexpr uint MERGE_MASKS_H[4] = {0, 0, 1, 1};
 
+constexpr uint POS_COORD_BIT_SIZE = 9;
+
 inline constexpr uint BLOCKS_TEXTURES[9][6] = {
     {0, 0, 0, 0, 0, 0},
     {1, 1, 1, 1, 1, 1},
@@ -52,19 +56,79 @@ inline constexpr uint BLOCKS_TEXTURES[9][6] = {
     {0, 9, 9, 9, 9, 0},
 };
 
+template<Direction DIR>
+struct QuadFace8 {
+    uint64 base_bits;
+    uint64 ao_shadows;
+    uint w, h;
+    QuadFace8(uint x, uint y, uint z, uint w, uint h, uint tex_id, uint ao_shadows): 
+    base_bits(encode_pos_bits(x, y, z) | encode_tex_bits(tex_id) | encode_dir_bits()), w(w), h(h), ao_shadows(ao_shadows) {}
+
+    __attribute__((always_inline)) static inline uint64 encode_pos_bits(uint64 x, uint64 y, uint64 z) {
+        return ((z + VERTEX_OFFSETS[DIR][Z]) * POS_UNIT) << (2 * POS_COORD_BIT_SIZE) | ((y + VERTEX_OFFSETS[DIR][Y]) * POS_UNIT) << POS_COORD_BIT_SIZE | ((x + VERTEX_OFFSETS[DIR][X]) * POS_UNIT);
+    }
+
+    __attribute__((always_inline)) static inline uint64 encode_tex_bits(uint tex_id) {
+        return static_cast<uint64>(tex_id) << 53;
+    }
+
+    static constexpr uint64 encode_dir_bits() {
+        return static_cast<uint64>(DIR) << 50;
+    }
+
+    static constexpr uint64 merge_vector_w_bits() {
+        return (static_cast<uint64>(MERGE_VECTOR_W[DIR][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[DIR][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(MERGE_VECTOR_W[DIR][2]) << (2 * POS_COORD_BIT_SIZE));
+    }
+
+    static constexpr uint64 merge_vector_h_bits() {
+        return (static_cast<uint64>(MERGE_VECTOR_H[DIR][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[DIR][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(MERGE_VECTOR_H[DIR][2]) << (2 * POS_COORD_BIT_SIZE));
+    }
+
+    static constexpr uint64 merge_bits_width() {
+        return static_cast<uint64>(POS_UNIT) << 32;
+    }
+    static constexpr uint64 merge_bits_height() {
+        return static_cast<uint64>(POS_UNIT) << 41;
+    }
+
+    uint64 v0() const {
+        return base_bits | ((ao_shadows & 0b00000011) << 61);
+    }
+
+    uint64 v1() const {
+        return base_bits + merge_vector_w_bits() * POS_UNIT * w | merge_bits_width() * w | ((ao_shadows & 0b00001100) << 59);
+    }
+
+    uint64 v2() const {
+        return base_bits + merge_vector_w_bits() * POS_UNIT * w + merge_vector_h_bits() * POS_UNIT * h | merge_bits_width() * w| merge_bits_height() * h | ((ao_shadows & 0b00110000) << 57);
+    }
+
+    uint64 v3() const {
+        return base_bits + merge_vector_h_bits() * POS_UNIT * h | merge_bits_height() * h | ((ao_shadows & 0b11000000) << 55);
+    }
+};
+
+/**
+ *     uint64 cs0 = (shadows & 0b00000011) << 61;
+    uint64 cs1 = (shadows & 0b00001100) << 59;
+    uint64 cs2 = (shadows & 0b00110000) << 57;
+    uint64 cs3 = (shadows & 0b11000000) << 55;
+ */
+
+
 constexpr uint WATER_TEXTURE = BLOCKS_TEXTURES[BLOCK_WATER][0];
 
 
 __attribute__((always_inline)) static inline uint64 encode_pos_bits(uint h, uint x, uint y) {
-    return h << 14 | y << 7 | x;
+    return (h * POS_UNIT) << (2 * POS_COORD_BIT_SIZE) | (y * POS_UNIT) << POS_COORD_BIT_SIZE | (x * POS_UNIT);
 }
 
 __attribute__((always_inline)) static inline uint64 encode_tex_bits(uint tex_id) {
-    return static_cast<uint64>(tex_id) << 51;
+    return static_cast<uint64>(tex_id) << 53;
 }
 
 __attribute__((always_inline)) constexpr uint64 encode_dir_bits(Direction dir) {
-    return static_cast<uint64>(dir) << 48;
+    return static_cast<uint64>(dir) << 50;
 }
 
 __attribute__((always_inline)) static inline uint64 encode_dir_tex_bits(Direction dir, const uint (&block_textures)[6]) {
@@ -72,7 +136,7 @@ __attribute__((always_inline)) static inline uint64 encode_dir_tex_bits(Directio
 }
 
 __attribute__((always_inline)) static inline uint64 encode_pos_tex_bits(uint h, uint y, uint x, uint tex_id) {
-    return h << 14 | y << 7 | x | encode_tex_bits(tex_id);
+    return encode_pos_bits(h, y, x) | encode_tex_bits(tex_id);
 }
 
 
@@ -165,20 +229,20 @@ struct array_3d {
     }
 };
 
-constexpr uint64 POS_BITS_PLUS_1X = 1;
-constexpr uint64 POS_BITS_PLUS_1Y = (1 << 7);
-constexpr uint64 POS_BITS_PLUS_1Z = (1 << 14);
+constexpr uint64 POS_BITS_PLUS_1X = POS_UNIT;
+constexpr uint64 POS_BITS_PLUS_1Y = (POS_UNIT << POS_COORD_BIT_SIZE);
+constexpr uint64 POS_BITS_PLUS_1Z = (POS_UNIT << (2 * POS_COORD_BIT_SIZE));
 
 constexpr uint64 MERGE_BITS_WIDTH = 1ull << 32;
-constexpr uint64 MERGE_BITS_HEIGHT = 1ull << 39;
+constexpr uint64 MERGE_BITS_HEIGHT = 1ull << 41;
 constexpr uint64 MERGE_BITS_WIDTH_HEIGHT = MERGE_BITS_WIDTH | MERGE_BITS_HEIGHT;
 
 consteval uint64 merge_vector_w_bits(Direction dir) {
-    return (static_cast<uint64>(MERGE_VECTOR_W[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[dir][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_W[dir][2]) << 14);
+    return (static_cast<uint64>(MERGE_VECTOR_W[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_W[dir][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(MERGE_VECTOR_W[dir][2]) << (2 * POS_COORD_BIT_SIZE));
 };
 
 consteval uint64 merge_vector_h_bits(Direction dir) {
-    return (static_cast<uint64>(MERGE_VECTOR_H[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[dir][1]) << 7) + (static_cast<uint64>(MERGE_VECTOR_H[dir][2]) << 14);
+    return (static_cast<uint64>(MERGE_VECTOR_H[dir][0]) << 0) + (static_cast<uint64>(MERGE_VECTOR_H[dir][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(MERGE_VECTOR_H[dir][2]) << (2 * POS_COORD_BIT_SIZE));
 };
 
 consteval uint64 merge_vector_wh_bits(Direction dir) {
@@ -186,7 +250,7 @@ consteval uint64 merge_vector_wh_bits(Direction dir) {
 };
 
 consteval uint64 vertex_offset_bits(Direction dir) {
-    return (static_cast<uint64>(VERTEX_OFFSETS[dir][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[dir][1]) << 7) + (static_cast<uint64>(VERTEX_OFFSETS[dir][2]) << 14);
+    return (static_cast<uint64>(VERTEX_OFFSETS[dir][0]) << 0) + (static_cast<uint64>(VERTEX_OFFSETS[dir][1]) << POS_COORD_BIT_SIZE) + (static_cast<uint64>(VERTEX_OFFSETS[dir][2]) << (2 * POS_COORD_BIT_SIZE));
 };
 
 static inline uint offset_to_dir27(int x, int y, int z) {
@@ -365,132 +429,3 @@ static uint complete_buffers(face_buffers& buffers) {
 
     return (n_solid + n_water + n_cutout_x) * 2 + HEADER_SIZE_IN_UINT64 * 2;
 }
-
-// template <Direction DIR>
-// __attribute__((always_inline)) static inline uint compute_ao_shadows(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y);
-
-// template <>
-// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Up>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
-//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
-//     int shadows = 0;
-
-//     c02 = is_solid_01(base[1121]);
-//     c01 = c10 = is_solid_01(base[1122]);
-//     c12 = is_solid_01(base[1123]);
-//     c00 = c31 = is_solid_01(base[1155]);
-//     c11 = c20 = is_solid_01(base[1157]);
-//     c32 = is_solid_01(base[1189]);
-//     c21 = c30 = is_solid_01(base[1190]);
-//     c22 = is_solid_01(base[1191]);
-//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
-//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
-//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
-//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
-//     return shadows;
-// }
-
-// template <>
-// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Front>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
-//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
-//     int shadows = 0;
-
-//     c02 = is_solid_01(base[-1191]);
-//     c01 = c10 = is_solid_01(base[-1190]);
-//     c12 = is_solid_01(base[-1189]);
-//     c00 = c31 = is_solid_01(base[-35]);
-//     c11 = c20 = is_solid_01(base[-33]);
-//     c32 = is_solid_01(base[1121]);
-//     c21 = c30 = is_solid_01(base[1122]);
-//     c22 = is_solid_01(base[1123]);
-//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
-//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
-//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
-//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
-//     return shadows;
-// }
-
-// template <>
-// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Left>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
-//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
-//     int shadows = 0;
-
-//     c12 = is_solid_01(base[-1191]);
-//     c01 = c10 = is_solid_01(base[-1157]);
-//     c02 = is_solid_01(base[-1123]);
-//     c11 = c20 = is_solid_01(base[-35]);
-//     c00 = c31 = is_solid_01(base[33]);
-//     c22 = is_solid_01(base[1121]);
-//     c21 = c30 = is_solid_01(base[1155]);
-//     c32 = is_solid_01(base[1189]);
-//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
-//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
-//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
-//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
-//     return shadows;
-// }
-
-// template <>
-// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Back>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
-//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
-//     int shadows = 0;
-
-//     c12 = is_solid_01(base[-1123]);
-//     c01 = c10 = is_solid_01(base[-1122]);
-//     c02 = is_solid_01(base[-1121]);
-//     c11 = c20 = is_solid_01(base[33]);
-//     c00 = c31 = is_solid_01(base[35]);
-//     c22 = is_solid_01(base[1189]);
-//     c21 = c30 = is_solid_01(base[1190]);
-//     c32 = is_solid_01(base[1191]);
-//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
-//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
-//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
-//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
-//     return shadows;
-// }
-
-// template <>
-// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Right>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
-//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
-//     int shadows = 0;
-
-//     c02 = is_solid_01(base[-1189]);
-//     c01 = c10 = is_solid_01(base[-1155]);
-//     c12 = is_solid_01(base[-1121]);
-//     c00 = c31 = is_solid_01(base[-33]);
-//     c11 = c20 = is_solid_01(base[35]);
-//     c32 = is_solid_01(base[1123]);
-//     c21 = c30 = is_solid_01(base[1157]);
-//     c22 = is_solid_01(base[1191]);
-//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
-//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
-//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
-//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
-//     return shadows;
-// }
-
-// template <>
-// __attribute__((always_inline)) inline uint compute_ao_shadows<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-//     uint* __restrict base = data.get_ptr_hxy(h, x, y);
-//     int c00, c01, c02, c10, c11, c12, c20, c21, c22, c30, c31, c32;
-//     int shadows = 0;
-
-//     c32 = is_solid_01(base[-1191]);
-//     c21 = c30 = is_solid_01(base[-1190]);
-//     c22 = is_solid_01(base[-1189]);
-//     c00 = c31 = is_solid_01(base[-1157]);
-//     c11 = c20 = is_solid_01(base[-1155]);
-//     c02 = is_solid_01(base[-1123]);
-//     c01 = c10 = is_solid_01(base[-1122]);
-//     c12 = is_solid_01(base[-1121]);
-//     shadows |= ((c00 + c01 == 2) ? 3 : (c00 + c01 + c02)) << 0;
-//     shadows |= ((c10 + c11 == 2) ? 3 : (c10 + c11 + c12)) << 2;
-//     shadows |= ((c20 + c21 == 2) ? 3 : (c20 + c21 + c22)) << 4;
-//     shadows |= ((c30 + c31 == 2) ? 3 : (c30 + c31 + c32)) << 6;
-//     return shadows;
-// }

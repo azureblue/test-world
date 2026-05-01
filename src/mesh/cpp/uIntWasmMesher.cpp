@@ -10,24 +10,15 @@ constexpr int DIRECTION_ENCODE[40] = {
 constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
 template <Direction DIR>
-__attribute__((always_inline)) static inline void encode_face(uint64* __restrict& out, uint64 bits, uint64 w, uint64 h, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
+__attribute__((always_inline)) static inline void encode_face(uint64* __restrict& out, uint x, uint y, uint z, uint w, uint h, uint tex, uint ao_shadows) {
 
-    uint64 mw = merge_vector_w_bits(DIR) * w;
-    uint64 mh = merge_vector_h_bits(DIR) * h;
-    uint64 mwh = mw + mh;
-    uint64 mbw = MERGE_BITS_WIDTH * w;
-    uint64 mbh = MERGE_BITS_HEIGHT * h;
+    QuadFace8<DIR> face(x, y, z, w, h, tex, ao_shadows);
+    uint64 v0 = face.v0();
+    uint64 v1 = face.v1();
+    uint64 v2 = face.v2();
+    uint64 v3 = face.v3();
 
-    uint64 v0 = bits | cs0;
-    uint64 v1 = bits + mw | cs1 | mbw;
-    uint64 v2 = bits + mwh | cs2 | mbw | mbh;
-    uint64 v3 = bits + mh | cs3 | mbh;
-
-    if (cs0 + cs2 > cs1 + cs3) {
+    if (1) {
         out[0] = v1;
         out[1] = v2;
         out[2] = v3;
@@ -75,15 +66,14 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     constexpr int dir_yx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 3];
     constexpr int dir_yy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 4];
     constexpr int dir_yy_add = DIRECTION_ENCODE[dir_encode_base_idx + 5];
-    uint x = dir_xx_add + dir_xx_mul * layer_x + dir_xy_mul * layer_y + VERTEX_OFFSETS[DIR][X];
-    uint y = dir_yy_add + dir_yx_mul * layer_x + dir_yy_mul * layer_y + VERTEX_OFFSETS[DIR][Y];
+    uint x = dir_xx_add + dir_xx_mul * layer_x + dir_xy_mul * layer_y;
+    uint y = dir_yy_add + dir_yx_mul * layer_x + dir_yy_mul * layer_y;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(DIR);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<DIR>(buffers.mesh_water_cur, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
     } else {
-        encode_face<DIR>(buffers.mesh_solid_cur, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -91,14 +81,13 @@ template <>
 inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     uint x = layer_x;
     uint y = layer_y;
-    uint h = layer_h + 1;
+    uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Up);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Up>(buffers.mesh_water_cur, bits, width, height, shadows);
+        encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
     } else {
-        encode_face<Direction::Up>(buffers.mesh_solid_cur, bits, width, height, shadows);
+        encode_face<Direction::Up>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -109,11 +98,10 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Down);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Down>(buffers.mesh_water_cur, bits, width, height, shadows);
+        encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
     } else {
-        encode_face<Direction::Down>(buffers.mesh_solid_cur, bits, width, height, shadows);
+        encode_face<Direction::Down>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
 }
 
