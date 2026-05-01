@@ -1,4 +1,4 @@
-#include "common.hpp"
+#include "quad_encode.hpp"
 
 constexpr int DIRECTION_ENCODE[40] = {
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -9,60 +9,18 @@ constexpr int DIRECTION_ENCODE[40] = {
 
 constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
-template <Direction DIR>
-__attribute__((always_inline)) static inline void encode_face(uint64* __restrict& out, uint64 bits, uint64 w, uint64 h, uint64 shadows) {
-    uint64 cs0 = (shadows << 59) & 0x1800000000000000;
-    uint64 cs1 = (shadows << 57) & 0x1800000000000000;
-    uint64 cs2 = (shadows << 55) & 0x1800000000000000;
-    uint64 cs3 = (shadows << 53) & 0x1800000000000000;
 
-    uint64 mw = merge_vector_w_bits(DIR) * w;
-    uint64 mh = merge_vector_h_bits(DIR) * h;
-    uint64 mwh = mw + mh;
-    uint64 mbw = MERGE_BITS_WIDTH * w;
-    uint64 mbh = MERGE_BITS_HEIGHT * h;
-
-    uint64 v0 = bits | cs0;
-    uint64 v1 = bits + mw | cs1 | mbw;
-    uint64 v2 = bits + mwh | cs2 | mbw | mbh;
-    uint64 v3 = bits + mh | cs3 | mbh;
-
-    if (cs0 + cs2 > cs1 + cs3) {
-        out[0] = v1;
-        out[1] = v2;
-        out[2] = v3;
-        out[3] = v1;
-        out[4] = v3;
-        out[5] = v0;
-    } else {
-        out[0] = v0;
-        out[1] = v1;
-        out[2] = v2;
-        out[3] = v0;
-        out[4] = v2;
-        out[5] = v3;
-    }
-    out += 6;
-}
 
 //       ttttTTTThwzzzzzyyyyyxxxxx
 //10987654321098765432109876543210
 template <Direction DIR>
-__attribute__((always_inline)) static inline void encode_quad(uint64* __restrict& out, uint h, uint x, uint y, uint tex) {
-    uint64 bits = encode_pos_bits(h, x + VERTEX_OFFSETS[DIR][X], y + VERTEX_OFFSETS[DIR][Y]) | tex << 23;    
-    uint mw = static_cast<uint>(merge_vector_w_bits(DIR));
-    uint mh = static_cast<uint>(merge_vector_h_bits(DIR));
-    uint mwh = mw + mh;
-    uint mbw = 1 << 21;
-    uint mbh = 1 << 22;
+inline_always static inline void encode_quad(uint64* __restrict& out, uint h, uint x, uint y, uint tex) {
+    uint v0, v1, v2, v3;
+    x_quads_encoder::encode_x_quad<DIR>(v0, v1, v2, v3, x, y, h, tex);
 
-    uint64 v0 = bits;
-    uint64 v1 = bits + mw | mbw;
-    uint64 v2 = bits + mwh | mbw | mbh;
-    uint64 v3 = bits + mh | mbh;
-    out[0] = v0 | (v1 << 32);
-    out[1] = v2 | (v0 << 32);
-    out[2] = v2 | (v3 << 32);
+    out[0] = static_cast<uint64>(v0) | (static_cast<uint64>(v1) << 32);
+    out[1] = static_cast<uint64>(v2) | (static_cast<uint64>(v0) << 32);
+    out[2] = static_cast<uint64>(v2) | (static_cast<uint64>(v3) << 32);
     out += 3;
 }
 
@@ -75,15 +33,14 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     constexpr int dir_yx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 3];
     constexpr int dir_yy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 4];
     constexpr int dir_yy_add = DIRECTION_ENCODE[dir_encode_base_idx + 5];
-    uint x = dir_xx_add + dir_xx_mul * layer_x + dir_xy_mul * layer_y + VERTEX_OFFSETS[DIR][X];
-    uint y = dir_yy_add + dir_yx_mul * layer_x + dir_yy_mul * layer_y + VERTEX_OFFSETS[DIR][Y];
+    uint x = dir_xx_add + dir_xx_mul * layer_x + dir_xy_mul * layer_y;
+    uint y = dir_yy_add + dir_yx_mul * layer_x + dir_yy_mul * layer_y;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(DIR);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<DIR>(buffers.mesh_water_cur, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
     } else {
-        encode_face<DIR>(buffers.mesh_solid_cur, bits, width, height, shadows);
+        encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -91,14 +48,13 @@ template <>
 inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     uint x = layer_x;
     uint y = layer_y;
-    uint h = layer_h + 1;
+    uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Up);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Up>(buffers.mesh_water_cur, bits, width, height, shadows);
+        quad_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
     } else {
-        encode_face<Direction::Up>(buffers.mesh_solid_cur, bits, width, height, shadows);
+        quad_encoder::encode_face<Direction::Up>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -109,11 +65,10 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    uint64 bits = encode_pos_bits(h, x, y) | encode_tex_bits(texture_id) | encode_dir_bits(Direction::Down);
     if (texture_id == WATER_TEXTURE) {
-        encode_face<Direction::Down>(buffers.mesh_water_cur, bits, width, height, shadows);
+        quad_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
     } else {
-        encode_face<Direction::Down>(buffers.mesh_solid_cur, bits, width, height, shadows);
+        quad_encoder::encode_face<Direction::Down>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -306,7 +261,7 @@ extern "C"
                     }
                     uint shadows = 0;
                     if (!is_water) {
-                        shadows = compute_ao_shadows<Direction::Up>(data, h, x, y);
+                        shadows = aos::compute<Direction::Up>(data, h, x, y);
                     }
                     layers.set_hxy(0, real_x, real_y, (block_textures[0] << 8) | (shadows));
                 }
@@ -316,17 +271,17 @@ extern "C"
                 }
 
                 if (!is_solid(data.get_hxy(h - 1, x, y))) {
-                    uint shadows = compute_ao_shadows<Direction::Down>(data, h, x, y);
+                    uint shadows = aos::compute<Direction::Down>(data, h, x, y);
                     layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, (block_textures[5] << 8) | (shadows));
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y - 1))) {
-                    uint shadows = compute_ao_shadows<Direction::Front>(data, h, x, y);
+                    uint shadows = aos::compute<Direction::Front>(data, h, x, y);
                     layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, (block_textures[1] << 8) | shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x - 1, y))) {
-                    uint shadows = compute_ao_shadows<Direction::Left>(data, h, x, y);
+                    uint shadows = aos::compute<Direction::Left>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Left,
                         CHUNK_SIZE - 1 - real_y,
@@ -335,7 +290,7 @@ extern "C"
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y + 1))) {
-                    uint shadows = compute_ao_shadows<Direction::Back>(data, h, x, y);
+                    uint shadows = aos::compute<Direction::Back>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Back,
                         CHUNK_SIZE - 1 - real_x,
@@ -344,7 +299,7 @@ extern "C"
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
-                    uint shadows = compute_ao_shadows<Direction::Right>(data, h, x, y);
+                    uint shadows = aos::compute<Direction::Right>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Right,
                         real_y,
