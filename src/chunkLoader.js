@@ -1,9 +1,8 @@
-import { ChunkAdjDataFactory } from "./chunk/adjChunk.js";
 import { ChunkDataLoader } from "./chunk/chunk.js";
-import { ChunkExtDataFactory as ChunkDataExtFactory, ChunkExtDataFactory } from "./chunk/extChunk.js";
+import { ChunkExtDataFactory } from "./chunk/extChunk.js";
 import { createGenerator } from "./gen/generator.js";
 import { Logger } from "./logging.js";
-import { UIntAdjWasmMesher, UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
+import { UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
 import { perfDiff } from "./utils.js";
 import { ChunkRequest, ChunkResponse } from "./worker/common.js";
 import { WorkerConnection, WorkerServer } from "./worker/worker.js";
@@ -11,7 +10,6 @@ import { WorkerConnection, WorkerServer } from "./worker/worker.js";
 
 const params = new URL(self.location.href).searchParams;
 const WORKER_ID = params.get("workerId");
-
 
 const logger = new Logger("chunk load worker " + WORKER_ID);
 
