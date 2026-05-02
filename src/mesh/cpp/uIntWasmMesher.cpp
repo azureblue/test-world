@@ -38,9 +38,9 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == WATER_TEXTURE) {
-        encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
+        water_encoder::encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
     } else {
-        encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
+        quad_encoder::encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -52,7 +52,7 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == WATER_TEXTURE) {
-        quad_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
+        water_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
     } else {
         quad_encoder::encode_face<Direction::Up>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
@@ -66,7 +66,7 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == WATER_TEXTURE) {
-        quad_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, texture_id, shadows);
+        water_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
     } else {
         quad_encoder::encode_face<Direction::Down>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
     }
@@ -77,13 +77,6 @@ void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& 
     uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
     uint layer_start_top = layers.plane_idx(DIR + top_layer_offset);
     uint layer_end_idx = layer_start_current + PLANE_SIZE;
-    constexpr uint dir_encode_base_idx = (DIR << 3);
-    constexpr int dir_xx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 0];
-    constexpr int dir_xy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 1];
-    constexpr int dir_xx_add = DIRECTION_ENCODE[dir_encode_base_idx + 2];
-    constexpr int dir_yx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 3];
-    constexpr int dir_yy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 4];
-    constexpr int dir_yy_add = DIRECTION_ENCODE[dir_encode_base_idx + 5];
 
     for (uint y = layer_start_current; y < layer_end_idx; y += CHUNK_SIZE) {
         uint row_end = y + CHUNK_SIZE;
@@ -192,13 +185,6 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, ui
 template <Direction DIR>
 void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset) {
     const uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
-    constexpr uint dir_encode_base_idx = (DIR << 3);
-    constexpr int dir_xx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 0];
-    constexpr int dir_xy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 1];
-    constexpr int dir_xx_add = DIRECTION_ENCODE[dir_encode_base_idx + 2];
-    constexpr int dir_yx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 3];
-    constexpr int dir_yy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 4];
-    constexpr int dir_yy_add = DIRECTION_ENCODE[dir_encode_base_idx + 5];
 
     for (uint i = 0; i < layer_len;) {
         uint top = layers.get_idx((layer_start_current + i));

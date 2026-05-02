@@ -23,46 +23,22 @@ class quad_encoder {
         uint64 v0, v1, v2, v3;
 
         bool reverse_winding = encode_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, tex, ao_shadows);
-        if (reverse_winding) {
-            out[0] = v1;
-            out[1] = v2;
-            out[2] = v3;
-            out[3] = v1;
-            out[4] = v3;
-            out[5] = v0;
-        } else {
-            out[0] = v0;
-            out[1] = v1;
-            out[2] = v2;
-            out[3] = v0;
-            out[4] = v2;
-            out[5] = v3;
-        }
-        out += 6;
+        encode(out, v0, v1, v2, v3, reverse_winding);
+    }
+
+    template <Direction DIR>
+    inline_always static inline void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex) {
+        uint64 v0, v1, v2, v3;
+
+        bool reverse_winding = encode_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, tex);
+        encode(out, v0, v1, v2, v3, reverse_winding);
     }
 
     template <Direction DIR>
     inline_always static inline void encode_face_q(uint64* __restrict& out, uint64 pos_bits, uint tex, uint shadows) {
         uint64 v0, v1, v2, v3;
-
-        bool invert = quad_encoder::encode_quad_form_vx_pos_bits<DIR>(v0, v1, v2, v3, pos_bits, tex, shadows);
-
-        if (invert) {
-            out[0] = v1;
-            out[1] = v2;
-            out[2] = v3;
-            out[3] = v1;
-            out[4] = v3;
-            out[5] = v0;
-        } else {
-            out[0] = v0;
-            out[1] = v1;
-            out[2] = v2;
-            out[3] = v0;
-            out[4] = v2;
-            out[5] = v3;
-        }
-        out += 6;
+        bool reverse_winding = quad_encoder::encode_quad_form_vx_pos_bits<DIR>(v0, v1, v2, v3, pos_bits, tex, shadows);
+        encode(out, v0, v1, v2, v3, reverse_winding);
     }
 
     template <Direction DIR>
@@ -136,6 +112,85 @@ class quad_encoder {
 
     static inline uint64 encode_dir_bits(Direction dir) {
         return encode_value<uint64, 48>(dir);
+    }
+
+    inline_always static inline void encode(uint64* __restrict& out, uint64& v0, uint64& v1, uint64& v2, uint64& v3, bool reverse_winding) {
+        if (reverse_winding) {
+            out[0] = v1;
+            out[1] = v2;
+            out[2] = v3;
+            out[3] = v1;
+            out[4] = v3;
+            out[5] = v0;
+        } else {
+            out[0] = v0;
+            out[1] = v1;
+            out[2] = v2;
+            out[3] = v0;
+            out[4] = v2;
+            out[5] = v3;
+        }
+        out += 6;
+    }
+};
+
+class water_encoder {
+   public:
+    template <Direction DIR>
+    inline_always static inline void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex) {
+        uint64 v0, v1, v2, v3;
+        encode_water_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, 7, tex);
+        out[0] = v0;
+        out[1] = v1;
+        out[2] = v2;
+        out[3] = v0;
+        out[4] = v2;
+        out[5] = v3;
+        out += 6;
+    }
+
+    template <Direction DIR>
+    inline_always static inline void encode_water_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint level, uint tex_id) {
+        uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, level, tex_id);
+        // TODO: handle merge bits for non top faces
+        v0 = base_bits;
+        v1 = base_bits + pos_offset_w<DIR>(level) * w | MERGE_BIT_W * w;
+        v2 = base_bits + pos_offset_w<DIR>(level) * w + pos_offset_h<DIR>(level) * h | MERGE_BIT_W * w | MERGE_BIT_H * h;
+        v3 = base_bits + pos_offset_h<DIR>(level) * h | MERGE_BIT_H * h;
+    }
+
+   private:
+    template <Direction DIR>
+    inline_always static inline uint64 encode_base_bits(uint vx_x, uint vx_y, uint vx_z, uint level, uint tex_id) {
+        int x = vx_x + quad_encoding::VERTEX_OFFSETS[DIR][X];
+        int y = vx_y + quad_encoding::VERTEX_OFFSETS[DIR][Y];
+        int z = vx_z * 8 + quad_encoding::VERTEX_OFFSETS[DIR][Z] * level;
+        return encode_pos_bits(x, y, z) | encode_tex_bits(tex_id);
+    }
+
+    static inline uint64 encode_pos_bits(uint x, uint y, uint z) {
+        return encode_value<uint64, 0>(x) | encode_value<uint64, 7>(y) | encode_value<uint64, 14>(z);
+    }
+
+    static inline uint64 encode_tex_bits(uint tex_id) {
+        return encode_value<uint64, 57>(6);
+    }
+
+    static inline uint64 encode_dir_bits(Direction dir) {
+        return encode_value<uint64, 61>(dir);
+    }
+
+    constexpr static uint64 MERGE_BIT_W = 8ull << 32;
+    constexpr static uint64 MERGE_BIT_H = 8ull << 41;
+
+    template <Direction DIR>
+    inline_always constexpr static inline uint64 pos_offset_w(uint level) {
+        return encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_W[DIR][0]) + encode_value<uint64, 7>(quad_encoding::MERGE_VECTOR_W[DIR][1]) + encode_value<uint64, 14>(quad_encoding::MERGE_VECTOR_W[DIR][Z] * level);
+    }
+
+    template <Direction DIR>
+    inline_always constexpr static inline uint64 pos_offset_h(uint level) {
+        return encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_H[DIR][0]) + encode_value<uint64, 7>(quad_encoding::MERGE_VECTOR_H[DIR][1]) + encode_value<uint64, 14>(quad_encoding::MERGE_VECTOR_H[DIR][Z] * level);
     }
 };
 

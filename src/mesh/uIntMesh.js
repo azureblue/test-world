@@ -59,17 +59,21 @@ export class UIntMeshHandler extends MeshHandler {
     #aIn;
     /** @type {number} */
     #aInXQuads;
+    /** @type {number} */
+    #aInWater;
 
     /**
      * @param {WebGL2RenderingContext} gl 
      * @param {number} aIn 
      * @param {number} aInXQuads
+     * @param {number} aInWater
      */
-    constructor(gl, aIn, aInXQuads) {
+    constructor(gl, aIn, aInXQuads, aInWater) {
         super();
         this.#gl = gl;
         this.#aIn = aIn;
         this.#aInXQuads = aInXQuads;
+        this.#aInWater = aInWater;
     }
 
     /**
@@ -86,10 +90,21 @@ export class UIntMeshHandler extends MeshHandler {
         gl.bindVertexArray(va);
         gl.enableVertexAttribArray(this.#aIn);
         gl.bindBuffer(gl.ARRAY_BUFFER, vb);
-        gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW, 0, meshData.solidEnd);
         gl.vertexAttribIPointer(this.#aIn, 2, gl.UNSIGNED_INT, false, 0, 0);
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        const vaWater = gl.createVertexArray();
+        const vbWater = gl.createBuffer();
+        gl.bindVertexArray(vaWater);
+        gl.enableVertexAttribArray(this.#aInWater);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbWater);
+        gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW, meshData.solidEnd, meshData.liquidEnd - meshData.solidEnd);
+        gl.vertexAttribIPointer(this.#aInWater, 2, gl.UNSIGNED_INT, false, 0, 0);
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
 
         const vaXQuads = gl.createVertexArray();
         const vbXQuads = gl.createBuffer();
@@ -101,7 +116,7 @@ export class UIntMeshHandler extends MeshHandler {
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
         
-        return new UIntMesh(va, vb, vaXQuads, vbXQuads, meshData.mTranslation, solidLen, liquidLen, xQuadLen);
+        return new UIntMesh(va, vb, vaWater, vbWater, vaXQuads, vbXQuads, meshData.mTranslation, solidLen, liquidLen, xQuadLen);
     }
 
     /**
@@ -124,9 +139,13 @@ export class UIntMesh extends ChunkMesh {
     /** @type {WebGLVertexArrayObject} */
     va;
     /** @type {WebGLVertexArrayObject} */
-    vaXQuads;
+    vaWater;
     /** @type {WebGLBuffer} */
+    vaXQuads;
+        /** @type {WebGLVertexArrayObject} */
     vb;
+    /** @type {WebGLBuffer} */
+    vbWater;
     /** @type {WebGLBuffer} */
     vbXQuads;
     mTranslation;
@@ -134,6 +153,8 @@ export class UIntMesh extends ChunkMesh {
     /**
      * @param {WebGLVertexArrayObject} va 
      * @param {WebGLBuffer} vb 
+     * @param {WebGLVertexArrayObject} vaWater
+     * @param {WebGLBuffer} vbWater
      * @param {WebGLVertexArrayObject} vaXQuads
      * @param {WebGLBuffer} vbXQuads
      * @param {FVec3} translation 
@@ -141,10 +162,12 @@ export class UIntMesh extends ChunkMesh {
      * @param {number} liquidLen
      * @param {number} xQuadLen
      */
-    constructor(va, vb, vaXQuads, vbXQuads, translation, solidLen, liquidLen, xQuadLen) {
+    constructor(va, vb, vaWater, vbWater, vaXQuads, vbXQuads, translation, solidLen, liquidLen, xQuadLen) {
         super();
         this.va = va;
         this.vb = vb;
+        this.vaWater = vaWater;
+        this.vbWater = vbWater;
         this.vaXQuads = vaXQuads;
         this.vbXQuads = vbXQuads;
         this.mTranslation = translation;
@@ -193,15 +216,18 @@ export class UIntMeshDrawer {
     #gl;
     #uTranslation;
     #uXQuadsTranslation;
+    #uWaterTranslation;
     /**
      * @param {WebGL2RenderingContext} gl
      * @param {WebGLUniformLocation} uTranslation
      * @param {WebGLUniformLocation} uXQuadsTranslation
+     * @param {WebGLUniformLocation} uWaterTranslation
      */
-    constructor(gl, uTranslation, uXQuadsTranslation) {
+    constructor(gl, uTranslation, uXQuadsTranslation, uWaterTranslation) {
         this.#gl = gl;
         this.#uTranslation = uTranslation;
         this.#uXQuadsTranslation = uXQuadsTranslation;
+        this.#uWaterTranslation = uWaterTranslation;
     }
     
     /**
@@ -220,10 +246,10 @@ export class UIntMeshDrawer {
      */
     drawNonSolids(mesh) {
         const gl = this.#gl;
-        gl.bindVertexArray(mesh.va);        
+        gl.bindVertexArray(mesh.vaWater);        
         const modelTranslation = mesh.modelTranslation;
-        gl.uniform3f(this.#uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
-        gl.drawArrays(gl.TRIANGLES, mesh.solidLen, mesh.liquidLen);
+        gl.uniform3f(this.#uWaterTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+        gl.drawArrays(gl.TRIANGLES, 0, mesh.liquidLen);
     }
 
     /**

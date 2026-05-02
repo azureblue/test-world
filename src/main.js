@@ -51,6 +51,16 @@ export async function start() {
         await Resources.loadText("shaders/x_quads.frag")
     );
 
+        const waterProgram = new Program(
+        gl,
+        Replacer.replace(await Resources.loadText("shaders/water.vert"),
+            {
+                "viewDistanceSq": VIEW_DISTANCE_SQ.toFixed(1)
+            }
+        ),
+        await Resources.loadText("shaders/water.frag")
+    );
+
     const blockHighlightProgram = new Program(
         gl,
         await Resources.loadText("shaders/blockhighlight.vert"),
@@ -70,6 +80,7 @@ export async function start() {
 
     const aIn = cubeSolidProgram.getAttribLocation("a_in");
     const aInXQuads = xQuadsProgram.getAttribLocation("a_in");
+    const aInWater = waterProgram.getAttribLocation("a_in");
     const aInBH = blockHighlightProgram.getAttribLocation("a_in");
     const bhBuffer = gl.createBuffer();
     gl.useProgram(blockHighlightProgram.program);
@@ -124,9 +135,10 @@ export async function start() {
 
     const cubeSolidTranslation = cubeSolidProgram.getUniformLocation("m_translation");
     const xQuadsTranslation = xQuadsProgram.getUniformLocation("m_translation");
+    const waterTranslation = waterProgram.getUniformLocation("m_translation");
 
-    const meshHandler = new UIntMeshHandler(gl, aIn, aInXQuads);
-    const meshDrawer = new UIntMeshDrawer(gl, cubeSolidTranslation, xQuadsTranslation);
+    const meshHandler = new UIntMeshHandler(gl, aIn, aInXQuads, aInWater);
+    const meshDrawer = new UIntMeshDrawer(gl, cubeSolidTranslation, xQuadsTranslation, waterTranslation);
 
     const world = new World(meshHandler);
 
@@ -236,20 +248,17 @@ export async function start() {
             // gl.enable(gl.DEPTH_TEST);
         }
 
-        cubeSolidProgram.use();
+        waterProgram.use();
         gl.disable(gl.CULL_FACE);
         for (let chunk of visibleChunks) {
             meshDrawer.drawNonSolids(chunk.mesh);
         }
-
         
         xQuadsProgram.use();
         for (let chunk of visibleChunks) {
             meshDrawer.drawXQuads(chunk.mesh);
         }
         gl.enable(gl.CULL_FACE);
-
-
 
         if (fpsCounter.getCurrentFrame() % 5 === 0) {
             const block = world.blockAt(pos.ix, pos.iy, pos.iz);
