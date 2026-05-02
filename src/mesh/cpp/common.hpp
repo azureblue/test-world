@@ -1,7 +1,7 @@
 #pragma once
 #include "blocks.hpp"
 #include "int.h"
-#define inline_always __attribute__((always_inline))
+#define inline_always __attribute__((always_inline)) inline
 
 enum Direction : uint {
     Up = 0,
@@ -31,26 +31,6 @@ constexpr uint MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
 constexpr uint MAX_OUTPUT_UINTS64 = MAX_FACES * 6;
 constexpr uint HEADER_SIZE_IN_UINT64 = 4;
 }  // namespace data_size
-
-inline_always static inline uint64 encode_pos_bits(uint h, uint x, uint y) {
-    return h << 14 | y << 7 | x;
-}
-
-inline_always static inline uint64 encode_tex_bits(uint tex_id) {
-    return static_cast<uint64>(tex_id) << 51;
-}
-
-inline_always constexpr uint64 encode_dir_bits(Direction dir) {
-    return static_cast<uint64>(dir) << 48;
-}
-
-inline_always static inline uint64 encode_dir_tex_bits(Direction dir, const uint (&block_textures)[6]) {
-    return encode_dir_bits(dir) | encode_tex_bits(block_textures[dir]);
-}
-
-inline_always static inline uint64 encode_pos_tex_bits(uint h, uint y, uint x, uint tex_id) {
-    return h << 14 | y << 7 | x | encode_tex_bits(tex_id);
-}
 
 struct dir_xy {
     int x;
@@ -136,10 +116,11 @@ static inline uint dir27_is_bit_set(uint dir27, int x, int y, int z) {
 static inline bool is_bit_set(uint value, uint bit) {
     return (value >> bit) & 1;
 }
+
 class aos {
    public:
     template <Direction DIR>
-    inline_always static inline uint compute(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    inline_always static uint compute(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
         dir_xy s_d0{-1, 0};
         dir_xy s_d1{0, -1};
         dir_xy c_d{-1, -1};
@@ -158,36 +139,36 @@ class aos {
 
    private:
     template <Direction dir>
-    inline_always static inline uint ao_get(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y);
+    inline_always static uint ao_get(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y);
 };
 
 template <>
-inline_always inline uint aos::ao_get<Direction::Up>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
+inline_always uint aos::ao_get<Direction::Up>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + 1), (x + d_xy.x), (y + d_xy.y));
 }
 
 template <>
-inline_always inline uint aos::ao_get<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
+inline_always uint aos::ao_get<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h - 1), (x + d_xy.x), (y - d_xy.y));
 }
 
 template <>
-inline_always inline uint aos::ao_get<Direction::Front>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
+inline_always uint aos::ao_get<Direction::Front>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x + d_xy.x), (y - 1));
 }
 
 template <>
-inline_always inline uint aos::ao_get<Direction::Left>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
+inline_always uint aos::ao_get<Direction::Left>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x - 1), (y - d_xy.x));
 }
 
 template <>
-inline_always inline uint aos::ao_get<Direction::Back>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
+inline_always uint aos::ao_get<Direction::Back>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x - d_xy.x), (y + 1));
 }
 
 template <>
-inline_always inline uint aos::ao_get<Direction::Right>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
+inline_always uint aos::ao_get<Direction::Right>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
     return data.get_hxy((h + d_xy.y), (x + 1), (y + d_xy.x));
 }
 
@@ -211,17 +192,6 @@ struct face_buffers {
         mesh_cutout_x_cur = mesh_cutout_x_base;
     }
 };
-
-static uint complete(uint64* out_data_ptr, uint64* mesh_data_solid_base, uint64* mesh_data_water_base, uint64* mesh_solid_ptr, uint64* mesh_water_ptr) {
-    uint nWater = mesh_water_ptr - mesh_data_water_base;
-    uint nSolid = mesh_solid_ptr - mesh_data_solid_base;
-    for (uint i = 0; i < nWater; i++) {
-        *(mesh_data_solid_base + nSolid + i) = *(mesh_data_water_base + i);
-    }
-    uint64 solidEnd = nSolid * 2;
-    out_data_ptr[0] = solidEnd;
-    return (nSolid + nWater) * 2 + data_size::HEADER_SIZE_IN_UINT64 * 2;
-}
 
 static uint complete_buffers(face_buffers& buffers) {
     uint n_cutout_x = static_cast<uint>(buffers.mesh_cutout_x_cur - buffers.mesh_cutout_x_base);
