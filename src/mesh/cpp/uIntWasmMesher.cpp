@@ -11,19 +11,6 @@ constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
 
 
-//       ttttTTTThwzzzzzyyyyyxxxxx
-//10987654321098765432109876543210
-template <Direction DIR>
-inline_always static inline void encode_quad(uint64* __restrict& out, uint h, uint x, uint y, uint tex) {
-    uint v0, v1, v2, v3;
-    x_quads_encoder::encode_x_quad<DIR>(v0, v1, v2, v3, x, y, h, tex);
-
-    out[0] = static_cast<uint64>(v0) | (static_cast<uint64>(v1) << 32);
-    out[1] = static_cast<uint64>(v2) | (static_cast<uint64>(v0) << 32);
-    out[2] = static_cast<uint64>(v2) | (static_cast<uint64>(v3) << 32);
-    out += 3;
-}
-
 template <Direction DIR>
 static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     constexpr uint dir_encode_base_idx = (DIR << 3);
@@ -234,8 +221,8 @@ extern "C"
                 const uint* block_textures = BLOCKS_TEXTURES[block_id];
 
                 if (is_x_quads(block_data)) {                    
-                    encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_h, real_x, real_y, block_textures[1]);
-                    encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, real_h, real_x, real_y, block_textures[2]);
+                    x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[1]);
+                    x_quads_encoder::encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[2]);
                     continue;
                 }
 

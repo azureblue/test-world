@@ -18,17 +18,24 @@ extern "C"
                 }
 
                 const uint(&block_textures)[6] = BLOCKS_TEXTURES[block_id];
+                if (is_x_quads(block_data)) {                    
+                    x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[1]);
+                    x_quads_encoder::encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[2]);
+                    continue;
+                }
+
                 uint is_water = block_id == BLOCK_WATER;
                 auto& face_buffer = is_water ? buffers.mesh_water_cur : buffers.mesh_solid_cur;
                 uint above = data.get_hxy(h + 1, x, y);
                 if (!is_solid(above)) {
-                    if (is_water && decode_block_id(above) == BLOCK_WATER) {
+                    if (is_water) {
+                        if (decode_block_id(above) == BLOCK_WATER) 
+                            continue;
+                        water_encoder::encode_face_q<Direction::Up>(face_buffer, x - 1, y - 1, h - 1, block_textures[Direction::Up]);
                         continue;
                     }
-                    uint shadows = 0;
-                    if (!is_water) {
-                        shadows = aos::compute<Direction::Up>(data, h, x, y);
-                    }
+                    
+                    uint shadows = aos::compute<Direction::Up>(data, h, x, y);
                     quad_encoder::encode_face_q<Direction::Up>(face_buffer, pos_bits, block_textures[Direction::Up], shadows);
                 }
 

@@ -73,7 +73,7 @@ class quad_encoder {
         return (ao0 + ao2) > (ao1 + ao3);
     }
 
-    inline_always static  uint64 encode_pos_bits(uint x, uint y, uint z) {
+    inline_always static uint64 encode_pos_bits(uint x, uint y, uint z) {
         return encode_value<uint64, 0>(x) | encode_value<uint64, 7>(y) | encode_value<uint64, 14>(z);
     }
 
@@ -148,6 +148,19 @@ class water_encoder {
     }
 
     template <Direction DIR>
+    inline_always static void encode_face_q(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint tex) {
+        uint64 v0, v1, v2, v3;
+        encode_water_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, 7, tex);
+        out[0] = v0;
+        out[1] = v1;
+        out[2] = v2;
+        out[3] = v0;
+        out[4] = v2;
+        out[5] = v3;
+        out += 6;
+    }
+
+    template <Direction DIR>
     inline_always static void encode_water_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint level, uint tex_id) {
         uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, level, tex_id);
         // TODO: handle merge bits for non top faces
@@ -155,6 +168,16 @@ class water_encoder {
         v1 = base_bits + pos_offset_w<DIR>(level) * w | MERGE_BIT_W * w;
         v2 = base_bits + pos_offset_w<DIR>(level) * w + pos_offset_h<DIR>(level) * h | MERGE_BIT_W * w | MERGE_BIT_H * h;
         v3 = base_bits + pos_offset_h<DIR>(level) * h | MERGE_BIT_H * h;
+    }
+
+    template <Direction DIR>
+    inline_always static void encode_water_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint level, uint tex_id) {
+        uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, level, tex_id);
+        // TODO: handle merge bits for non top faces
+        v0 = base_bits;
+        v1 = base_bits + pos_offset_w<DIR>(level) | MERGE_BIT_W;
+        v2 = base_bits + pos_offset_w<DIR>(level) + pos_offset_h<DIR>(level) | MERGE_BIT_W | MERGE_BIT_H;
+        v3 = base_bits + pos_offset_h<DIR>(level) | MERGE_BIT_H;
     }
 
    private:
@@ -194,6 +217,17 @@ class water_encoder {
 
 class x_quads_encoder {
    public:
+    template <Direction DIR>
+    inline_always static void encode_quad(uint64* __restrict& out, uint x, uint y, uint z, uint tex) {
+        uint v0, v1, v2, v3;
+        encode_x_quad<DIR>(v0, v1, v2, v3, x, y, z, tex);
+
+        out[0] = static_cast<uint64>(v0) | (static_cast<uint64>(v1) << 32);
+        out[1] = static_cast<uint64>(v2) | (static_cast<uint64>(v0) << 32);
+        out[2] = static_cast<uint64>(v2) | (static_cast<uint64>(v3) << 32);
+        out += 3;
+    }
+
     template <Direction DIR>
     inline_always static void encode_x_quad(uint& v0, uint& v1, uint& v2, uint& v3, uint vx_x, uint vx_y, uint vx_z, uint tex_id) {
         uint base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, tex_id);
