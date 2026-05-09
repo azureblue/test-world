@@ -1,6 +1,6 @@
 import { blend, BLEND_FUNCTION } from "../blend.js";
 import { BLOCK_IDS } from "../blocks.js";
-import { CHUNK_SIZE, ChunkBlockData, ChunkData } from "../chunk/chunk.js";
+import { CHUNK_SIZE, ChunkBlockData, ChunkData, ChunkGenerator } from "../chunk/chunk.js";
 import { Vec2, Vec3 } from "../geom.js";
 import { hash01, hash32 } from "../noise/hash.js";
 import { Generator } from "../noise/noise.js";
@@ -10,15 +10,7 @@ import { LinearCurve, point } from "./curve.js";
 import { testgen } from "./generators.js";
 import { CurveNode, GenericNode, GenNode } from "./node.js";
 
-export class ChunkGenerator {
 
-    /**
-     * @param {Vec3} chunkPos
-     * @return {ChunkBlockData}
-     */
-    generateChunk(chunkPos) {
-    }
-}
 
 export class PixelDataChunkGenerator {
     #pixels
@@ -543,16 +535,16 @@ export class NoiseChunkGenerator extends ChunkGenerator {
                         if (distToWater <= 4)
                             blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.SAND);
                         else
-                            blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
+                            blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT);
                     }
                     else
-                        blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.ROCK);
+                        blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.DIRT_GRASS);
                 }
 
                 r++;
                 if (r < chunkEndH && r === height) {
-                    // if (Math.random() < 0.05)
-                    // blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT);
+                    if (Math.random() < 0.05)
+                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT);
                 }
 
                 for (let w = r; w < Math.min(waterLevel, chunkEndH); w++) {

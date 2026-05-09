@@ -35,33 +35,27 @@ extern "C"
                 uint64 pos_bits = quad_encoder::encode_pos_bits(x - 1, y - 1, h - 1);
 
                 if (!is_solid(above)) {
-                    uint shadows = aos::compute<Direction::Up>(data, h, x, y);
-                    quad_encoder::encode_face_q<Direction::Up>(face_buffer, pos_bits, block_textures[Direction::Up], shadows);
+                    quad_encoder::encode_face_q<Direction::Up>(face_buffer, data, x, y, h, block_textures[Direction::Up]);
                 }
 
                 if (!is_solid(data.get_hxy(h - 1, x, y))) {
-                    uint shadows = aos::compute<Direction::Down>(data, h, x, y);
-                    quad_encoder::encode_face_q<Direction::Down>(face_buffer, pos_bits, block_textures[Direction::Down], shadows);
+                    quad_encoder::encode_face_q<Direction::Down>(face_buffer, data, x, y, h, block_textures[Direction::Down]);
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y - 1))) {
-                    uint shadows = aos::compute<Direction::Front>(data, h, x, y);
-                    quad_encoder::encode_face_q<Direction::Front>(face_buffer, pos_bits, block_textures[Direction::Front], shadows);
+                    quad_encoder::encode_face_q<Direction::Front>(face_buffer, data, x, y, h, block_textures[Direction::Front]);
                 }
 
                 if (!is_solid(data.get_hxy(h, x - 1, y))) {
-                    uint shadows = aos::compute<Direction::Left>(data, h, x, y);
-                    quad_encoder::encode_face_q<Direction::Left>(face_buffer, pos_bits, block_textures[Direction::Left], shadows);
+                    quad_encoder::encode_face_q<Direction::Left>(face_buffer, data, x, y, h, block_textures[Direction::Left]);
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y + 1))) {
-                    uint shadows = aos::compute<Direction::Back>(data, h, x, y);
-                    quad_encoder::encode_face_q<Direction::Back>(face_buffer, pos_bits, block_textures[Direction::Back], shadows);
+                    quad_encoder::encode_face_q<Direction::Back>(face_buffer, data, x, y, h, block_textures[Direction::Back]);
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
-                    uint shadows = aos::compute<Direction::Right>(data, h, x, y);
-                    quad_encoder::encode_face_q<Direction::Right>(face_buffer, pos_bits, block_textures[Direction::Right], shadows);
+                    quad_encoder::encode_face_q<Direction::Right>(face_buffer, data, x, y, h, block_textures[Direction::Right]);
                 }
             }
         }

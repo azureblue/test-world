@@ -92,7 +92,7 @@ struct array_3d {
         return data[idx];
     }
 
-    inline uint* __restrict get_ptr_hxy(uint h, uint x, uint y) const {
+    inline_always uint* __restrict get_ptr_hxy(uint h, uint x, uint y) const {
         return &data[h * plane_size + y * sy + x];
     }
 
@@ -117,59 +117,153 @@ static inline bool is_bit_set(uint value, uint bit) {
     return (value >> bit) & 1;
 }
 
-class aos {
+class ao_shadows {
    public:
+    struct vertex_data {
+        uint v0;
+        uint v1;
+        uint v2;
+        uint v3;
+    };
     template <Direction DIR>
-    inline_always static uint compute(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-        dir_xy s_d0{-1, 0};
-        dir_xy s_d1{0, -1};
-        dir_xy c_d{-1, -1};
-        uint shadows = 0;
-        for (uint v = 0; v < 4; v++) {
-            uint s0 = is_solid_01(ao_get<DIR>(data, s_d0, h, x, y));
-            uint s1 = is_solid_01(ao_get<DIR>(data, s_d1, h, x, y));
-            uint c = is_solid_01(ao_get<DIR>(data, c_d, h, x, y));
-            shadows |= ((s0 + s1 == 2) ? 3 : (s0 + s1 + c)) << (v * 2);
-            s_d0.rotate_ccw();
-            s_d1.rotate_ccw();
-            c_d.rotate_ccw();
-        }
-        return shadows;
+    inline_always static vertex_data compute(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y);
+    template <Direction DIR>
+    inline_always static uint encode(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+        vertex_data shadows = compute<DIR>(data, h, x, y);
+        return (shadows.v0) | (shadows.v1 << 2) | (shadows.v2 << 4) | (shadows.v3 << 6);
     }
 
    private:
-    template <Direction dir>
-    inline_always static uint ao_get(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y);
+    inline_always static constexpr uint ao_value(uint a, uint b, uint c) {
+        const uint s = a + b;
+        return s == 2 ? 3 : s + c;
+    }
 };
 
 template <>
-inline_always uint aos::ao_get<Direction::Up>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
-    return data.get_hxy((h + 1), (x + d_xy.x), (y + d_xy.y));
+inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Up>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    uint* __restrict base = data.get_ptr_hxy(h, x, y);
+    constexpr int S = CHUNK_SIZE_E;
+    constexpr int P = PLANE_SIZE_E;
+    ao_shadows::vertex_data shadows;
+    uint c0 = is_solid_01(base[P - S - 1]);
+    uint c1 = is_solid_01(base[P - S]);
+    uint c2 = is_solid_01(base[P - S + 1]);
+    uint c3 = is_solid_01(base[P - 1]);
+    shadows.v0 = ao_value(c3, c1, c0);
+    uint c4 = is_solid_01(base[P + 1]);
+    shadows.v1 = ao_value(c1, c4, c2);
+    uint c5 = is_solid_01(base[P + S - 1]);
+    uint c6 = is_solid_01(base[P + S]);
+    shadows.v3 = ao_value(c6, c3, c5);
+    uint c7 = is_solid_01(base[P + S + 1]);
+    shadows.v2 = ao_value(c4, c6, c7);
+    return shadows;
 }
 
 template <>
-inline_always uint aos::ao_get<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
-    return data.get_hxy((h - 1), (x + d_xy.x), (y - d_xy.y));
+inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Front>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    uint* __restrict base = data.get_ptr_hxy(h, x, y);
+    constexpr int S = CHUNK_SIZE_E;
+    constexpr int P = PLANE_SIZE_E;
+    ao_shadows::vertex_data shadows;
+    uint c0 = is_solid_01(base[-P - S - 1]);
+    uint c1 = is_solid_01(base[-P - S]);
+    uint c2 = is_solid_01(base[-P - S + 1]);
+    uint c3 = is_solid_01(base[-S - 1]);
+    shadows.v0 = ao_value(c3, c1, c0);
+    uint c4 = is_solid_01(base[-S + 1]);
+    shadows.v1 = ao_value(c1, c4, c2);
+    uint c5 = is_solid_01(base[P - S - 1]);
+    uint c6 = is_solid_01(base[P - S]);
+    shadows.v3 = ao_value(c6, c3, c5);
+    uint c7 = is_solid_01(base[P - S + 1]);
+    shadows.v2 = ao_value(c4, c6, c7);
+    return shadows;
 }
 
 template <>
-inline_always uint aos::ao_get<Direction::Front>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
-    return data.get_hxy((h + d_xy.y), (x + d_xy.x), (y - 1));
+inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Left>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    uint* __restrict base = data.get_ptr_hxy(h, x, y);
+    constexpr int S = CHUNK_SIZE_E;
+    constexpr int P = PLANE_SIZE_E;
+    ao_shadows::vertex_data shadows;
+    uint c0 = is_solid_01(base[-P - S - 1]);
+    uint c1 = is_solid_01(base[-P - 1]);
+    uint c2 = is_solid_01(base[-P + S - 1]);
+    uint c3 = is_solid_01(base[-S - 1]);
+    shadows.v1 = ao_value(c1, c3, c0);
+    uint c4 = is_solid_01(base[+S - 1]);
+    shadows.v0 = ao_value(c4, c1, c2);
+    uint c5 = is_solid_01(base[P - S - 1]);
+    uint c6 = is_solid_01(base[P - 1]);
+    shadows.v2 = ao_value(c3, c6, c5);
+    uint c7 = is_solid_01(base[P + S - 1]);
+    shadows.v3 = ao_value(c6, c4, c7);
+    return shadows;
 }
 
 template <>
-inline_always uint aos::ao_get<Direction::Left>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
-    return data.get_hxy((h + d_xy.y), (x - 1), (y - d_xy.x));
+inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Back>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    uint* __restrict base = data.get_ptr_hxy(h, x, y);
+    constexpr int S = CHUNK_SIZE_E;
+    constexpr int P = PLANE_SIZE_E;
+    ao_shadows::vertex_data shadows;
+    uint c0 = is_solid_01(base[-P + S - 1]);
+    uint c1 = is_solid_01(base[-P + S]);
+    uint c2 = is_solid_01(base[-P + S + 1]);
+    uint c3 = is_solid_01(base[+S - 1]);
+    shadows.v1 = ao_value(c1, c3, c0);
+    uint c4 = is_solid_01(base[+S + 1]);
+    shadows.v0 = ao_value(c4, c1, c2);
+    uint c5 = is_solid_01(base[P + S - 1]);
+    uint c6 = is_solid_01(base[P + S]);
+    shadows.v2 = ao_value(c3, c6, c5);
+    uint c7 = is_solid_01(base[P + S + 1]);
+    shadows.v3 = ao_value(c6, c4, c7);
+    return shadows;
 }
 
 template <>
-inline_always uint aos::ao_get<Direction::Back>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
-    return data.get_hxy((h + d_xy.y), (x - d_xy.x), (y + 1));
+inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Right>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    constexpr int S = CHUNK_SIZE_E;
+    constexpr int P = PLANE_SIZE_E;
+    uint* __restrict base = data.get_ptr_hxy(h, x, y);
+    ao_shadows::vertex_data shadows;
+    uint c0 = is_solid_01(base[-P - S + 1]);
+    uint c1 = is_solid_01(base[-P + 1]);
+    uint c2 = is_solid_01(base[-P + S + 1]);
+    uint c3 = is_solid_01(base[-S + 1]);
+    shadows.v0 = ao_value(c3, c1, c0);
+    uint c4 = is_solid_01(base[+S + 1]);
+    shadows.v1 = ao_value(c1, c4, c2);
+    uint c5 = is_solid_01(base[P - S + 1]);
+    uint c6 = is_solid_01(base[P + 1]);
+    shadows.v3 = ao_value(c6, c3, c5);
+    uint c7 = is_solid_01(base[P + S + 1]);
+    shadows.v2 = ao_value(c4, c6, c7);
+    return shadows;
 }
 
 template <>
-inline_always uint aos::ao_get<Direction::Right>(const array_3d<CHUNK_SIZE_E>& data, const dir_xy& d_xy, int h, int x, int y) {
-    return data.get_hxy((h + d_xy.y), (x + 1), (y + d_xy.x));
+inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Down>(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    uint* __restrict base = data.get_ptr_hxy(h, x, y);
+    constexpr int S = CHUNK_SIZE_E;
+    constexpr int P = PLANE_SIZE_E;
+    ao_shadows::vertex_data shadows;
+    uint c0 = is_solid_01(base[-P - S - 1]);
+    uint c1 = is_solid_01(base[-P - S]);
+    uint c2 = is_solid_01(base[-P - S + 1]);
+    uint c3 = is_solid_01(base[-P - 1]);
+    shadows.v3 = ao_value(c1, c3, c0);
+    uint c4 = is_solid_01(base[-P + 1]);
+    shadows.v2 = ao_value(c4, c1, c2);
+    uint c5 = is_solid_01(base[-P + S - 1]);
+    uint c6 = is_solid_01(base[-P + S]);
+    shadows.v0 = ao_value(c3, c6, c5);
+    uint c7 = is_solid_01(base[-P + S + 1]);
+    shadows.v1 = ao_value(c6, c4, c7);
+    return shadows;
 }
 
 struct face_buffers {

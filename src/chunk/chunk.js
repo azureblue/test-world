@@ -1,4 +1,3 @@
-import { ChunkGenerator } from "../gen/generator.js";
 import { Dir27, fvec3, FVec3, IVec3, Vec3, vec3 } from "../geom.js";
 import { ChunkMesh, MeshData } from "../mesh/mesh.js";
 import { TransferObject } from "../transfer.js";
@@ -21,6 +20,16 @@ export class ChunkBlockData extends Array3D {
      */
     constructor(data = null) {
         super(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE, data);
+    }
+}
+
+export class ChunkGenerator {
+
+    /**
+     * @param {Vec3} chunkPos
+     * @return {ChunkBlockData}
+     */
+    generateChunk(chunkPos) {
     }
 }
 

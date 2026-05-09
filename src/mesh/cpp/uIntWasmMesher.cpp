@@ -226,7 +226,7 @@ extern "C"
                     continue;
                 }
 
-                uint is_water = block_id == BLOCK_WATER;
+                bool is_water = block_id == BLOCK_WATER;
                 uint above = data.get_hxy(h + 1, x, y);
                 if (!is_solid(above)) {
                     if (is_water && decode_block_id(above) == BLOCK_WATER) {
@@ -234,7 +234,7 @@ extern "C"
                     }
                     uint shadows = 0;
                     if (!is_water) {
-                        shadows = aos::compute<Direction::Up>(data, h, x, y);
+                        shadows = ao_shadows::encode<Direction::Up>(data, h, x, y);
                     }
                     layers.set_hxy(0, real_x, real_y, (block_textures[0] << 8) | (shadows));
                 }
@@ -244,17 +244,17 @@ extern "C"
                 }
 
                 if (!is_solid(data.get_hxy(h - 1, x, y))) {
-                    uint shadows = aos::compute<Direction::Down>(data, h, x, y);
+                    uint shadows = ao_shadows::encode<Direction::Down>(data, h, x, y);
                     layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, (block_textures[5] << 8) | (shadows));
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y - 1))) {
-                    uint shadows = aos::compute<Direction::Front>(data, h, x, y);
+                    uint shadows = ao_shadows::encode<Direction::Front>(data, h, x, y);
                     layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, (block_textures[1] << 8) | shadows);
                 }
 
                 if (!is_solid(data.get_hxy(h, x - 1, y))) {
-                    uint shadows = aos::compute<Direction::Left>(data, h, x, y);
+                    uint shadows = ao_shadows::encode<Direction::Left>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Left,
                         CHUNK_SIZE - 1 - real_y,
@@ -263,7 +263,7 @@ extern "C"
                 }
 
                 if (!is_solid(data.get_hxy(h, x, y + 1))) {
-                    uint shadows = aos::compute<Direction::Back>(data, h, x, y);
+                    uint shadows = ao_shadows::encode<Direction::Back>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Back,
                         CHUNK_SIZE - 1 - real_x,
@@ -272,7 +272,7 @@ extern "C"
                 }
 
                 if (!is_solid(data.get_hxy(h, x + 1, y))) {
-                    uint shadows = aos::compute<Direction::Right>(data, h, x, y);
+                    uint shadows = ao_shadows::encode<Direction::Right>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Right,
                         real_y,
