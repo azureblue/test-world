@@ -30,7 +30,7 @@ constexpr uint MAX_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
 constexpr uint MAX_OUTPUT_UINTS64 = MAX_FACES * 6;
 constexpr uint HEADER_SIZE_IN_UINT64 = 4;
-}  // namespace data_size
+}
 
 struct dir_xy {
     int x;
@@ -52,43 +52,43 @@ struct array_3d {
     array_3d(uint* __restrict data) : data(data) {
     }
 
-    inline uint is_solid_at(uint idx) const {
+    inline_always uint is_solid_at(uint idx) const {
         return data[idx] >> 31;
     }
 
-    inline uint get_xyz(uint x, uint y, uint z) const {
+    inline_always uint get_xyz(uint x, uint y, uint z) const {
         return data[z * plane_size + y * sy + x];
     }
 
-    inline uint get_hxy(uint h, uint x, uint y) const {
+    inline_always uint get_hxy(uint h, uint x, uint y) const {
         return data[h * plane_size + y * sy + x];
     }
 
-    inline void set_xyz(uint x, uint y, uint z, uint value) {
+    inline_always void set_xyz(uint x, uint y, uint z, uint value) {
         data[z * plane_size + y * sy + x] = value;
     }
 
-    inline void set_hxy(uint h, uint x, uint y, uint value) {
+    inline_always void set_hxy(uint h, uint x, uint y, uint value) {
         data[h * plane_size + y * sy + x] = value;
     }
 
-    inline uint* get_plane(uint plane) const {
+    inline_always uint* get_plane(uint plane) const {
         return &data[plane * plane_size];
     }
 
-    inline uint plane_idx(uint plane) const {
+    inline_always uint plane_idx(uint plane) const {
         return plane * plane_size;
     }
 
-    inline uint row_idx(uint plane, uint row) const {
+    inline_always uint row_idx(uint plane, uint row) const {
         return plane * plane_size + row * sy;
     }
 
-    inline void set_idx(uint idx, uint value) {
+    inline_always void set_idx(uint idx, uint value) {
         data[idx] = value;
     }
 
-    inline uint get_idx(uint idx) const {
+    inline_always uint get_idx(uint idx) const {
         return data[idx];
     }
 
@@ -105,15 +105,15 @@ struct array_3d {
     }
 };
 
-static inline uint offset_to_dir27(int x, int y, int z) {
+inline_always constexpr static uint offset_to_dir27(int x, int y, int z) {
     return (z + 1) * 9 + (y + 1) * 3 + (x + 1);
 }
 
-static inline uint dir27_is_bit_set(uint dir27, int x, int y, int z) {
+inline_always constexpr static uint dir27_is_bit_set(uint dir27, int x, int y, int z) {
     return (dir27 >> offset_to_dir27(x, y, z)) & 1;
 }
 
-static inline bool is_bit_set(uint value, uint bit) {
+inline_always constexpr static bool is_bit_set(uint value, uint bit) {
     return (value >> bit) & 1;
 }
 
@@ -127,6 +127,7 @@ class ao_shadows {
     };
     template <Direction DIR>
     inline_always static vertex_data compute(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y);
+
     template <Direction DIR>
     inline_always static uint encode(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
         vertex_data shadows = compute<DIR>(data, h, x, y);
@@ -193,7 +194,7 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Left>(const
     uint c2 = is_solid_01(base[-P + S - 1]);
     uint c3 = is_solid_01(base[-S - 1]);
     shadows.v1 = ao_value(c1, c3, c0);
-    uint c4 = is_solid_01(base[+S - 1]);
+    uint c4 = is_solid_01(base[S - 1]);
     shadows.v0 = ao_value(c4, c1, c2);
     uint c5 = is_solid_01(base[P - S - 1]);
     uint c6 = is_solid_01(base[P - 1]);
@@ -212,9 +213,9 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Back>(const
     uint c0 = is_solid_01(base[-P + S - 1]);
     uint c1 = is_solid_01(base[-P + S]);
     uint c2 = is_solid_01(base[-P + S + 1]);
-    uint c3 = is_solid_01(base[+S - 1]);
+    uint c3 = is_solid_01(base[S - 1]);
     shadows.v1 = ao_value(c1, c3, c0);
-    uint c4 = is_solid_01(base[+S + 1]);
+    uint c4 = is_solid_01(base[S + 1]);
     shadows.v0 = ao_value(c4, c1, c2);
     uint c5 = is_solid_01(base[P + S - 1]);
     uint c6 = is_solid_01(base[P + S]);
@@ -235,7 +236,7 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Right>(cons
     uint c2 = is_solid_01(base[-P + S + 1]);
     uint c3 = is_solid_01(base[-S + 1]);
     shadows.v0 = ao_value(c3, c1, c0);
-    uint c4 = is_solid_01(base[+S + 1]);
+    uint c4 = is_solid_01(base[S + 1]);
     shadows.v1 = ao_value(c1, c4, c2);
     uint c5 = is_solid_01(base[P - S + 1]);
     uint c6 = is_solid_01(base[P + 1]);

@@ -9,8 +9,6 @@ constexpr int DIRECTION_ENCODE[40] = {
 
 constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
-
-
 template <Direction DIR>
 static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     constexpr uint dir_encode_base_idx = (DIR << 3);

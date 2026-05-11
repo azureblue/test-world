@@ -32,7 +32,6 @@ extern "C"
                     continue;
                 }
                 auto& face_buffer = buffers.mesh_solid_cur;
-                uint64 pos_bits = quad_encoder::encode_pos_bits(x - 1, y - 1, h - 1);
 
                 if (!is_solid(above)) {
                     quad_encoder::encode_face_q<Direction::Up>(face_buffer, data, x, y, h, block_textures[Direction::Up]);

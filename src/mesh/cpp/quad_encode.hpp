@@ -7,12 +7,10 @@ constexpr int MERGE_VECTOR_W[8][3] = {{1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {-1, 0, 
 constexpr int MERGE_VECTOR_H[8][3] = {{0, 1, 0}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, -1, 0}, {0, 0, 1}, {0, 0, 1}};
 }  // namespace quad_encoding
 
-namespace {
 template <typename T, int shift, typename V>
 inline_always constexpr static T encode_value(V value) {
     return static_cast<T>(value) << shift;
 }
-}  // namespace
 
 class quad_encoder {
    public:
@@ -33,22 +31,6 @@ class quad_encoder {
     }
 
     template <Direction DIR>
-    inline_always static void encode_face_q(uint64* __restrict& out, const array_3d<CHUNK_SIZE_E>& data, uint e_x, uint e_y, uint e_z, uint tex) {
-        uint64 pos_bits = quad_encoder::encode_pos_bits(e_x - 1, e_y - 1, e_z - 1);
-        const ao_shadows::vertex_data& aos = ao_shadows::compute<DIR>(data, e_z, e_x, e_y);
-
-        uint64 base_bits = (pos_bits + pos_offset_bits<DIR>) | encode_tex_bits(tex) | encode_dir_bits(DIR);
-
-        uint64 v0 = base_bits | encode_ao_bits(aos.v0);
-        uint64 v1 = base_bits + POS_OFFSET_W<DIR> | MERGE_BIT_W | encode_ao_bits(aos.v1);
-        uint64 v2 = base_bits + POS_OFFSET_W<DIR> + POS_OFFSET_H<DIR> | MERGE_BIT_W | MERGE_BIT_H | encode_ao_bits(aos.v2);
-        uint64 v3 = base_bits + POS_OFFSET_H<DIR> | MERGE_BIT_H | encode_ao_bits(aos.v3);
-
-        bool reverse_winding = (aos.v0 + aos.v2) > (aos.v1 + aos.v3);
-        encode(out, v0, v1, v2, v3, reverse_winding);
-    }
-
-    template <Direction DIR>
     inline_always static bool encode_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex_id, uint ao_shadow) {
         uint ao0 = (ao_shadow >> 0) & 0b11;
         uint ao1 = (ao_shadow >> 2) & 0b11;
@@ -65,39 +47,34 @@ class quad_encoder {
         return (ao0 + ao2) > (ao1 + ao3);
     }
 
-    template <Direction DIR>
-    inline_always static bool encode_quad_form_vx_pos_bits(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint64 pos_bits, uint tex_id, uint ao_shadow) {
-        uint ao0 = (ao_shadow >> 0) & 0b11;
-        uint ao1 = (ao_shadow >> 2) & 0b11;
-        uint ao2 = (ao_shadow >> 4) & 0b11;
-        uint ao3 = (ao_shadow >> 6) & 0b11;
-
-        uint64 base_bits = (pos_bits + pos_offset_bits<DIR>) | encode_tex_bits(tex_id) | encode_dir_bits(DIR);
-
-        v0 = base_bits | encode_ao_bits(ao0);
-        v1 = base_bits + POS_OFFSET_W<DIR> | MERGE_BIT_W | encode_ao_bits(ao1);
-        v2 = base_bits + POS_OFFSET_W<DIR> + POS_OFFSET_H<DIR> | MERGE_BIT_W | MERGE_BIT_H | encode_ao_bits(ao2);
-        v3 = base_bits + POS_OFFSET_H<DIR> | MERGE_BIT_H | encode_ao_bits(ao3);
-
-        return (ao0 + ao2) > (ao1 + ao3);
-    }
-
     inline_always static uint64 encode_pos_bits(uint x, uint y, uint z) {
         return encode_value<uint64, 0>(x) | encode_value<uint64, 7>(y) | encode_value<uint64, 14>(z);
     }
 
     template <Direction DIR>
     inline_always static uint64 encode_base_bits(uint vx_x, uint vx_y, uint vx_z, uint tex_id) {
-        // int x = vx_x + quad_encoding::VERTEX_OFFSETS[DIR][X];
-        // int y = vx_y + quad_encoding::VERTEX_OFFSETS[DIR][Y];
-        // int z = vx_z + quad_encoding::VERTEX_OFFSETS[DIR][Z];
-
         return encode_pos_bits(vx_x, vx_y, vx_z) + pos_offset_bits<DIR> | encode_tex_bits(tex_id) | encode_dir_bits(DIR);
     }
 
     template <Direction DIR>
     constexpr static uint64 pos_offset_bits =
         encode_value<uint64, 0>(quad_encoding::VERTEX_OFFSETS[DIR][X]) | encode_value<uint64, 7>(quad_encoding::VERTEX_OFFSETS[DIR][Y]) | encode_value<uint64, 14>(quad_encoding::VERTEX_OFFSETS[DIR][Z]);
+
+    template <Direction DIR>
+    inline_always static void encode_face_q(uint64* __restrict& out, const array_3d<CHUNK_SIZE_E>& data, uint e_x, uint e_y, uint e_z, uint tex) {
+        uint64 pos_bits = quad_encoder::encode_pos_bits(e_x - 1, e_y - 1, e_z - 1);
+        const ao_shadows::vertex_data& aos = ao_shadows::compute<DIR>(data, e_z, e_x, e_y);
+
+        uint64 base_bits = (pos_bits + pos_offset_bits<DIR>) | encode_tex_bits(tex) | encode_dir_bits(DIR);
+
+        uint64 v0 = base_bits | encode_ao_bits(aos.v0);
+        uint64 v1 = base_bits + POS_OFFSET_W<DIR> | MERGE_BIT_W | encode_ao_bits(aos.v1);
+        uint64 v2 = base_bits + POS_OFFSET_W<DIR> + POS_OFFSET_H<DIR> | MERGE_BIT_W | MERGE_BIT_H | encode_ao_bits(aos.v2);
+        uint64 v3 = base_bits + POS_OFFSET_H<DIR> | MERGE_BIT_H | encode_ao_bits(aos.v3);
+
+        bool reverse_winding = (aos.v0 + aos.v2) > (aos.v1 + aos.v3);
+        encode(out, v0, v1, v2, v3, reverse_winding);
+    }
 
    private:
     constexpr static uint64 MERGE_BIT_W = 1ull << 32;
@@ -121,7 +98,7 @@ class quad_encoder {
         return encode_value<uint64, 48>(dir);
     }
 
-    inline_always static void encode(uint64* __restrict& out, uint64& v0, uint64& v1, uint64& v2, uint64& v3, bool reverse_winding) {
+    inline_always static void encode(uint64* __restrict& out, uint64 v0, uint64 v1, uint64 v2, uint64 v3, bool reverse_winding) {
         if (reverse_winding) {
             out[0] = v1;
             out[1] = v2;
@@ -203,7 +180,7 @@ class water_encoder {
     }
 
     inline_always static uint64 encode_tex_bits(uint tex_id) {
-        return encode_value<uint64, 57>(6);
+        return encode_value<uint64, 57>(tex_id);
     }
 
     inline_always static uint64 encode_dir_bits(Direction dir) {
