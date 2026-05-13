@@ -1,15 +1,15 @@
 #pragma once
 #include "int.h"
 inline constexpr uint BLOCKS_TEXTURES[9][6] = {
-    {0, 0, 0, 0, 0, 0},
-    {1, 1, 1, 1, 1, 1},
-    {3, 2, 2, 2, 2, 1},
-    {3, 3, 3, 3, 3, 3},
-    {4, 4, 4, 4, 4, 4},
-    {5, 5, 5, 5, 5, 5},
-    {6, 6, 6, 6, 6, 6},
-    {7, 7, 7, 7, 7, 7},
-    {0, 9, 9, 9, 9, 0},
+    {0, 0, 0, 0, 0, 0}, // 0
+    {1, 1, 1, 1, 1, 1}, // 1
+    {3, 2, 2, 2, 2, 1}, // 2
+    {3, 3, 3, 3, 3, 3}, // 3
+    {4, 4, 4, 4, 4, 4}, // 4
+    {5, 5, 5, 5, 5, 5}, // 5
+    {6, 6, 6, 6, 6, 6}, // 6
+    {7, 7, 7, 7, 7, 7}, // 7
+    {0, 9, 9, 9, 9, 0}, // 8
 };
 
 constexpr uint BLOCK_WATER = 6;
@@ -31,5 +31,3 @@ static inline uint is_solid_01(uint block) {
 static inline uint decode_block_id(uint id) {
     return id & 0x7fff'fff;
 }
-
-
