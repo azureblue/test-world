@@ -1,8 +1,12 @@
 import { ChunkData } from "../chunk/chunk.js";
-import { copyData, Resources } from "../utils.js";
+import { CHUNK_EXT_DATA_SIZE, ChunkDataExt } from "../chunk/extChunk.js";
+import { copyArrayBuffer, copyData, Resources } from "../utils.js";
 import { UIntMesher } from "./uIntMesh.js";
 
 const HEADER_SIZE_IN_UINT32 = 8;
+const HEADER_SIZE_IN_BYTES = HEADER_SIZE_IN_UINT32 * 4;
+const CHUNK_EXT_DATA_SIZE_IN_BYTES = CHUNK_EXT_DATA_SIZE * 4;
+
 const alignUp = (x, a) => (x + (a - 1)) & ~(a - 1);
 const PAGE = 64 * 1024;
 const bytesToPages = (b) => (b + PAGE - 1) >>> 16;
@@ -27,42 +31,47 @@ const totalBytes = buffersBytes + STACK_BYTES + STATIC_BYTES;
 const initialPages = bytesToPages(totalBytes);
 
 export class UIntExtWasmMesher extends UIntMesher {
-
+    
     #mesherWasmFunction;
     #heapBase;
+    #byteOutputOffset;
+    #byteHeaderOffset;
+    #byteOutputDataOffset;
+    
     /** @type {WebAssembly.Memory} */
-    #mem;
+    #mem;    
 
     constructor(mesherWasmFunction, heapBase, mem) {
         super();
         this.#mesherWasmFunction = mesherWasmFunction;
         this.#heapBase = heapBase;
+        this.#byteOutputOffset = this.#heapBase + CHUNK_EXT_DATA_SIZE_IN_BYTES;
+        this.#byteHeaderOffset = this.#byteOutputOffset;
+        this.#byteOutputDataOffset = this.#byteOutputOffset + HEADER_SIZE_IN_BYTES;
         this.#mem = mem;
     }
 
     /**
-     * @param {ChunkData} chunkData
+     * @param {ChunkDataExt} chunkData
+     * @param {Uint32Array} [destData] Optional pre-allocated array to store the result data.
      * @return {{data: Uint32Array, solidEnd: number, liquidEnd: number, xQuadEnd: number}}     
      */
-    mesh(chunkData) {
+    mesh(chunkData, destData = null) {
         const rawData = chunkData.rawData();
-        const dataByteLen = rawData.byteLength;
-
-        const MAX_FACES = 32 * 32 * 32 * 3;
-        const OUTPUT_SIZE = MAX_FACES * 6 * 4 * 2;
-        copyData(rawData, this.#mem.buffer, this.#heapBase);
-        const len = this.#mesherWasmFunction(
+        copyData(rawData, this.#mem.buffer, 0, this.#heapBase);
+        const dataLength = this.#mesherWasmFunction(
             this.#heapBase,
-            this.#heapBase + dataByteLen,
+            this.#byteOutputOffset,
         )
-        const output = new Uint32Array(this.#mem.buffer, this.#heapBase + dataByteLen, OUTPUT_SIZE / 4);
-        const solidEnd = output[0];
-        const liquidEnd = output[1];
-        const xQuadEnd = output[2];
-        const trimmedOutput = new Uint32Array(len - HEADER_SIZE_IN_UINT32);
-        trimmedOutput.set(output.subarray(HEADER_SIZE_IN_UINT32, len));
+        const header = new Uint32Array(this.#mem.buffer, this.#byteHeaderOffset, HEADER_SIZE_IN_UINT32);
+        const solidEnd = header[0];
+        const liquidEnd = header[1];
+        const xQuadEnd = header[2];
+        const outputData = new Uint32Array(this.#mem.buffer, this.#byteOutputDataOffset, dataLength);
+        const resultData = destData || new Uint32Array(dataLength);
+        resultData.set(outputData);
         return {
-            data: trimmedOutput,
+            data: resultData,
             solidEnd: solidEnd,
             liquidEnd: liquidEnd,
             xQuadEnd: xQuadEnd

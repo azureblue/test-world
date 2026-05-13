@@ -17,7 +17,6 @@ export class PixelDataChunkGenerator {
     #originPosition
     #ppv = 1
 
-
     /**
      * @param {ImagePixels} pixels 
      * @param {Vec2} originPosition
@@ -878,5 +877,5 @@ export class TestGenerator2 {
 
 
 export function createGenerator() {
-    return new NoiseChunkGenerator();
+    return new TestGenerator();
 }

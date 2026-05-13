@@ -661,14 +661,13 @@ export const Arrays = {
 
 Object.freeze(Arrays);
 
-
 /**
  * @param {ArrayBuffer} source 
  * @param {ArrayBuffer} target 
  * @param {number} byteTargetOffset - Offset in the target buffer to start copying to (default 0)
  */
-export function copyData(source, target, byteTargetOffset = 0) {
-    const sourceView = new Uint8Array(source);
+export function copyData(source, target, byteSourceOffset = 0, byteTargetOffset = 0, len = source.byteLength - byteSourceOffset) {
+    const sourceView = new Uint8Array(source, byteSourceOffset, len);
     const targetView = new Uint8Array(target, byteTargetOffset);
     targetView.set(sourceView);
 }

@@ -3,6 +3,7 @@ import { Array3D } from "../utils.js";
 import { CHUNK_SIZE, ChunkBlockData, ChunkData, ChunkDataFactory, ChunkDataTransfer } from "./chunk.js";
 
 export const CHUNK_SIZE_E = 34;
+export const CHUNK_EXT_DATA_SIZE = CHUNK_SIZE_E ** 3;
 
 export class ChunkDataExt extends ChunkData {
 

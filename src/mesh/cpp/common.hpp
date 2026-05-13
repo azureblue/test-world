@@ -168,6 +168,7 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Front>(cons
     constexpr int S = CHUNK_SIZE_E;
     constexpr int P = PLANE_SIZE_E;
     ao_shadows::vertex_data shadows;
+
     uint c0 = is_solid_01(base[-P - S - 1]);
     uint c1 = is_solid_01(base[-P - S]);
     uint c2 = is_solid_01(base[-P - S + 1]);
@@ -311,5 +312,5 @@ static uint complete_buffers(face_buffers& buffers) {
     buffers.output_base[1] =
         (static_cast<uint64>(cutout_x_end));
 
-    return (n_solid + n_water + n_cutout_x) * 2 + data_size::HEADER_SIZE_IN_UINT64 * 2;
+    return (n_solid + n_water + n_cutout_x) * 2;
 }
