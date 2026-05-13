@@ -46,7 +46,7 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
 template <>
 inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     uint x = layer_x;
-    uint y = (CHUNK_SIZE - 1) - layer_y + 1;
+    uint y = (CHUNK_SIZE - 1) - layer_y;
     uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
