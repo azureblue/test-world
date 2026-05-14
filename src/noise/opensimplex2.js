@@ -2,9 +2,10 @@ import { Resources } from "../utils.js";
 import { Generator, NoiseSource } from "./noise.js";
 
 const mem = new WebAssembly.Memory({
-    initial: 64,
-    maximum: 64
+    initial: 8,
+    maximum: 8
 })
+
 const wasmResult = await WebAssembly.instantiateStreaming(
     fetch(Resources.relativeToRoot("./noise/openSimplex2Noise.wasm")),
     {
