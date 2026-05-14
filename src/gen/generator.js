@@ -9,6 +9,7 @@ import { Array2D, ImagePixels } from "../utils.js";
 import { LinearCurve, point } from "./curve.js";
 import { testgen } from "./generators.js";
 import { CurveNode, GenericNode, GenNode } from "./node.js";
+import { TreeGenerator } from "./treeGen.js";
 
 
 
@@ -853,6 +854,12 @@ export class TestGenerator {
                     for (let h = 0; h < CHUNK_SIZE; h++)
                         chunkData.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
             }
+        } else if (chunkPos.equals(0, 1, 0)) {
+            TreeGenerator.generate(chunkData, 0, 5, 5, 0);
+            TreeGenerator.generate(chunkData, 0, 10, 7, 1123);
+            TreeGenerator.generate(chunkData, 0, 2, 11, 124124);
+            TreeGenerator.generate(chunkData, 0, 15, 11, 12421);
+            TreeGenerator.generate(chunkData, 0, 15, 16, 12);
         }
 
         return chunkData;
