@@ -1,15 +1,12 @@
-import { ChunkData } from "../chunk/chunk.js";
 import { CHUNK_EXT_DATA_SIZE, ChunkDataExt } from "../chunk/extChunk.js";
-import { copyArrayBuffer, copyData, Resources } from "../utils.js";
+import { copyData, Resources } from "../utils.js";
+import { WASM } from "../wasm.js";
 import { UIntMesher } from "./uIntMesh.js";
 
 const HEADER_SIZE_IN_UINT32 = 8;
 const HEADER_SIZE_IN_BYTES = HEADER_SIZE_IN_UINT32 * 4;
 const CHUNK_EXT_DATA_SIZE_IN_BYTES = CHUNK_EXT_DATA_SIZE * 4;
 
-const alignUp = (x, a) => (x + (a - 1)) & ~(a - 1);
-const PAGE = 64 * 1024;
-const bytesToPages = (b) => (b + PAGE - 1) >>> 16;
 
 const MAX_VOXELS = 32 * 32 * 32;
 const MAX_FACES = MAX_VOXELS * 3;
@@ -21,25 +18,24 @@ const UINTS_PER_CUTOFF_X_FACE = 6;
 const OUTPUT_SIZE_BYTES_SOLID = MAX_FACES * UINTS_PER_FACE * 4;
 const OUTPUT_SIZE_BYTES_CUTOFF_X = MAX_VOXELS * UINTS_PER_CUTOFF_X_FACE * 2 * 4;
 
-// const buffersBytes = INPUT_SIZE_BYTES + OUTPUT_SIZE_BYTES_SOLID * 2 + OUTPUT_SIZE_BYTES_CUTOFF_X;
-const buffersBytes = INPUT_SIZE_BYTES + OUTPUT_SIZE_BYTES_SOLID * 3;
+const BUFFERS_BYTES = INPUT_SIZE_BYTES + OUTPUT_SIZE_BYTES_SOLID * 2 + OUTPUT_SIZE_BYTES_CUTOFF_X;
 
 const STACK_BYTES = 512 * 1024;
 const STATIC_BYTES = 128 * 1024;
 
-const totalBytes = buffersBytes + STACK_BYTES + STATIC_BYTES;
-const initialPages = bytesToPages(totalBytes);
+const TOTAL_BYTES = BUFFERS_BYTES + STACK_BYTES + STATIC_BYTES;
+const INITIAL_PAGES = WASM.bytesToPages(TOTAL_BYTES);
 
 export class UIntExtWasmMesher extends UIntMesher {
-    
+
     #mesherWasmFunction;
     #heapBase;
     #byteOutputOffset;
     #byteHeaderOffset;
     #byteOutputDataOffset;
-    
+
     /** @type {WebAssembly.Memory} */
-    #mem;    
+    #mem;
 
     constructor(mesherWasmFunction, heapBase, mem) {
         super();
@@ -70,19 +66,19 @@ export class UIntExtWasmMesher extends UIntMesher {
         const outputData = new Uint32Array(this.#mem.buffer, this.#byteOutputDataOffset, dataLength);
         const resultData = destData || new Uint32Array(dataLength);
         resultData.set(outputData);
+
         return {
             data: resultData,
             solidEnd: solidEnd,
             liquidEnd: liquidEnd,
             xQuadEnd: xQuadEnd
-            
         };
     }
 
     static async createMesher() {
         const mem = new WebAssembly.Memory({
-            initial: initialPages,
-            maximum: initialPages,
+            initial: INITIAL_PAGES,
+            maximum: INITIAL_PAGES,
         });
 
         const uIntWasmMesherResult = await WebAssembly.instantiateStreaming(
@@ -94,15 +90,15 @@ export class UIntExtWasmMesher extends UIntMesher {
             }
         );
 
-        const heap_base = alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
+        const heapBase = WASM.alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
         const wasmCreateMesh = uIntWasmMesherResult.instance.exports.create_mesh;
-        return new UIntExtWasmMesher(wasmCreateMesh, heap_base, mem);        
+        return new UIntExtWasmMesher(wasmCreateMesh, heapBase, mem);
     }
 
     static async createFastkMesher() {
         const mem = new WebAssembly.Memory({
-            initial: initialPages,
-            maximum: initialPages,
+            initial: INITIAL_PAGES,
+            maximum: INITIAL_PAGES,
         });
 
         const uIntWasmMesherResult = await WebAssembly.instantiateStreaming(
@@ -116,6 +112,6 @@ export class UIntExtWasmMesher extends UIntMesher {
 
         const heap_base = alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
         const wasmCreateMesh = uIntWasmMesherResult.instance.exports.create_mesh;
-        return new UIntExtWasmMesher(wasmCreateMesh, heap_base, mem);        
+        return new UIntExtWasmMesher(wasmCreateMesh, heap_base, mem);
     }
 }
