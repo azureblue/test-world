@@ -44,7 +44,10 @@ export const BLOCK_IDS = {
     ROCK: 5 | (1 << SOLID_CUBE_BIT),
     WATER: 6 | (1 << LIQUID_BIT),
     SAND: 7 | (1 << SOLID_CUBE_BIT),
-    GRASS_SHORT: 8 | (1 << X_QUADS),
+    GRASS_SHORT_0: 8 | (1 << X_QUADS),
+    GRASS_SHORT_1: 9 | (1 << X_QUADS),
+    TREE_TRUNK: 16 | (1 << SOLID_CUBE_BIT),
+    TREE_LEAVES: 17 | (1 << SOLID_CUBE_BIT),
     CHUNK_EDGE: 255
 };
 
@@ -66,7 +69,16 @@ const BLOCKS = [
     new Block(5, "block_rock", [5, 5, 5, 5, 5, 5], true),
     new Block(6, "block_water", [6, 6, 6, 6, 6, 6], false),
     new Block(7, "block_sand", [7, 7, 7, 7, 7, 7], true),
-    new Block(8, "block_grass_short", [0, 8, 8, 8, 8, 0], true)
+    new Block(8, "block_grass_short_0", [0, 8, 8, 8, 8, 0], false),
+    new Block(9, "block_grass_short_1", [0, 9, 9, 9, 9, 0], false),
+    new Block(10, "empty_10", [0, 0, 0, 0, 0, 0], false),
+    new Block(11, "empty_11", [0, 0, 0, 0, 0, 0], false),
+    new Block(12, "empty_12", [0, 0, 0, 0, 0, 0], false),
+    new Block(13, "empty_13", [0, 0, 0, 0, 0, 0], false),
+    new Block(14, "empty_14", [0, 0, 0, 0, 0, 0], false),
+    new Block(15, "empty_15", [0, 0, 0, 0, 0, 0], false),
+    new Block(16, "tree_trunk", [17, 16, 16, 16, 16, 17], true),
+    new Block(17, "tree_leaves", [18, 18, 18, 18, 18, 18], true)
 ]
 Object.freeze(BLOCKS);
 

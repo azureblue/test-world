@@ -1,6 +1,6 @@
 #pragma once
 #include "int.h"
-inline constexpr uint BLOCKS_TEXTURES[9][6] = {
+inline constexpr uint BLOCKS_TEXTURES[20][6] = {
     {0, 0, 0, 0, 0, 0}, // 0
     {1, 1, 1, 1, 1, 1}, // 1
     {3, 2, 2, 2, 2, 1}, // 2
@@ -9,7 +9,16 @@ inline constexpr uint BLOCKS_TEXTURES[9][6] = {
     {5, 5, 5, 5, 5, 5}, // 5
     {6, 6, 6, 6, 6, 6}, // 6
     {7, 7, 7, 7, 7, 7}, // 7
-    {0, 9, 9, 9, 9, 0}, // 8
+    {0, 8, 8, 8, 8, 0}, // 8
+    {0, 9, 9, 9, 9, 0}, // 9
+    {0}, // 10
+    {0}, // 11
+    {0}, // 12
+    {0}, // 13
+    {0}, // 14
+    {0}, // 15
+    {17, 16, 16, 16, 16, 17}, // 16
+    {18, 18, 18, 18, 18, 18} // 17
 };
 
 constexpr uint BLOCK_WATER = 6;
