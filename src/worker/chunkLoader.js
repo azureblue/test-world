@@ -1,24 +1,26 @@
-import { ChunkDataLoader } from "./chunk/chunk.js";
-import { ChunkExtDataFactory } from "./chunk/extChunk.js";
-import { createGenerator } from "./gen/generator.js";
-import { Logger } from "./logging.js";
-import { UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
-import { perfDiff } from "./utils.js";
-import { ChunkRequest, ChunkResponse } from "./worker/common.js";
-import { WorkerConnection, WorkerServer } from "./worker/worker.js";
+import { ChunkDataLoader } from "../chunk/chunk.js";
+import { ChunkExtDataFactory } from "../chunk/extChunk.js";
+import { ChunkGeneratorFactory } from "../gen/registry.js";
+import { Logger } from "../logging.js";
+import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
+import { perfDiff } from "../utils.js";
+import { ChunkRequest, ChunkResponse } from "./common.js";
+import { WorkerConnection, WorkerServer } from "./worker.js";
 
 
 const params = new URL(self.location.href).searchParams;
-const WORKER_ID = params.get("workerId");
+const workerId = params.get("workerId");
+const generatorName = params.get("gen") ?? "default";
+const fastMesher = params.get("fastMesher") === "true";
 
-const logger = new Logger("chunk load worker " + WORKER_ID);
+const logger = new Logger("chunk load worker " + workerId);
+const generator = await ChunkGeneratorFactory.createForName(generatorName);
 
-const generator = createGenerator();
 const chunkDataFactory = new ChunkExtDataFactory();
 const chunkDataLoader = new ChunkDataLoader(generator, chunkDataFactory);
-const mesher = await UIntExtWasmMesher.createMesher();
+const mesher = await (fastMesher ? UIntExtWasmMesher.createFastMesher() : UIntExtWasmMesher.createMesher());
 
-const workerServer = new WorkerServer(self, WORKER_ID, {
+const workerServer = new WorkerServer(self, workerId, {
 
     /**
      * @param {any} data - Data related to the request.

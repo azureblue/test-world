@@ -13,6 +13,9 @@ import { WorkerClient } from "./worker/worker.js";
 /**
  * @typedef {import("./chunkLoader.js").ChunkResponseData} ChunkResponseData
  */
+const params = new URL(self.location.href).searchParams;
+const generatorName = params.get("gen") ?? "default";
+const fastMesher = params.get("fastMesher") === "true";
 
 const logger = new Logger("World");
 
@@ -136,7 +139,7 @@ export class World {
     constructor(meshHandler) {
         this.#meshHandler = meshHandler;
         this.#chunkLoaderWorkerClient = new WorkerClient(
-            new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=world0`), { type: "module" }),
+            new Worker(Resources.relativeToRoot(`./worker/chunkLoader.js?workerId=world0&gen=${generatorName}&fastMesher=${fastMesher}`), { type: "module" }),
             logger
         );
         this.#chunkLoaderWorkerClient.connect("chunkLoad").then((messagePort) => {

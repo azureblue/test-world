@@ -9,8 +9,11 @@ import { TextureArray } from "./textures.js";
 import { GenericBuffer, Replacer, Resources, writeVoxelWireframe } from "./utils.js";
 import { Position, World } from "./world.js";
 
-const VIEW_DISTANCE_SQ = (8 * 32) ** 2;
+
 // const VIEW_DISTANCE_SQ = 409600.0;
+
+const params = new URL(self.location.href).searchParams;
+const viewDistSq = params.get("vdsq") ?? (8 * 32) ** 2;
 
 export async function start() {
     document.body.style.margin = "0";
@@ -36,7 +39,7 @@ export async function start() {
         gl,
         Replacer.replace(await Resources.loadText("shaders/cube_solid.vert"),
             {
-                "viewDistanceSq": VIEW_DISTANCE_SQ.toFixed(1)
+                "viewDistanceSq": viewDistSq.toFixed(1)
             }
         ),
         await Resources.loadText("shaders/cube_solid.frag")
@@ -45,7 +48,7 @@ export async function start() {
         gl,
         Replacer.replace(await Resources.loadText("shaders/x_quads.vert"),
             {
-                "viewDistanceSq": VIEW_DISTANCE_SQ.toFixed(1)
+                "viewDistanceSq": viewDistSq.toFixed(1)
             }
         ),
         await Resources.loadText("shaders/x_quads.frag")
@@ -55,7 +58,7 @@ export async function start() {
         gl,
         Replacer.replace(await Resources.loadText("shaders/water.vert"),
             {
-                "viewDistanceSq": VIEW_DISTANCE_SQ.toFixed(1)
+                "viewDistanceSq": viewDistSq.toFixed(1)
             }
         ),
         await Resources.loadText("shaders/water.frag")

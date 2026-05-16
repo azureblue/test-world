@@ -31,6 +31,13 @@ export class ChunkGenerator {
      */
     generateChunk(chunkPos) {
     }
+
+    /**
+     * @returns {Promise<ChunkGenerator>}
+     */
+    static async create(params = {}) {    
+
+    }
 }
 
 export class ChunkDataFactory {

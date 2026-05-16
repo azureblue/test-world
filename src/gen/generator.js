@@ -487,6 +487,10 @@ export class NoiseChunkGenerator extends ChunkGenerator {
         this.localHeightMap = new Array2D(CHUNK_SIZE + 8, CHUNK_SIZE + 8, Int32Array);
     }
 
+    static async create(params = {}) {
+        return new NoiseChunkGenerator();
+    }
+
     /**
      * @param {Vec3} chunkPos
      * @returns {ChunkBlockData}
@@ -803,7 +807,7 @@ export const GeneratorPatterns = {
 
 }
 
-export class TestGenerator {
+export class TestGenerator extends ChunkGenerator {
 
     /**
      * @param {Vec3} chunkPos
@@ -811,50 +815,18 @@ export class TestGenerator {
     generateChunk(chunkPos) {
         const chunkData = new ChunkBlockData();
         if (chunkPos.equals(0, 0, 0)) {
-            for (let y = 0; y < CHUNK_SIZE; y++)
-                for (let x = 0; x < CHUNK_SIZE; x++) {
-                    for (let h = 0; h < CHUNK_SIZE; h++) {
-                        if (((x ^ y ^ h) & 1) == 0)
-                            chunkData.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
-                    }
-                }
+            GeneratorPatterns.fullSolid(chunkData);
         } else if (chunkPos.equals(2, 0, 0)) {
-            for (let y = 0; y < CHUNK_SIZE; y++)
-                for (let x = 0; x < CHUNK_SIZE; x++)
-                    for (let h = 0; h < CHUNK_SIZE; h++)
-                        if (((x ^ y ^ h) & 2) == 0)
-                            chunkData.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
+             GeneratorPatterns.border(chunkData);
         } else if (chunkPos.equals(0, 2, 0)) {
-            for (let h = 0; h < CHUNK_SIZE; h++)
-                for (let y = 0; y < CHUNK_SIZE; y++)
-                    for (let x = 0; x < CHUNK_SIZE; x++)
-                        chunkData.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
-
+             GeneratorPatterns.fullChecker(chunkData);
         } else if (chunkPos.equals(2, 2, 0)) {
-            for (let h = 0; h < CHUNK_SIZE; h++) {
-                if ((h & 1) == 1)
-                    continue;
-                for (let y = 0; y < CHUNK_SIZE; y++)
-                    for (let x = 0; x < CHUNK_SIZE; x++)
-                        chunkData.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
-            }
+           GeneratorPatterns.horizontalStripes(chunkData);
         } else if (chunkPos.equals(-2, 0, 0)) {
-            for (let y = 0; y < CHUNK_SIZE; y++) {
-                if ((y & 1) == 1)
-                    continue;
-                for (let h = 0; h < CHUNK_SIZE; h++)
-                    for (let x = 0; x < CHUNK_SIZE; x++)
-                        chunkData.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
-            }
+            GeneratorPatterns.verticalStripesX(chunkData);
         } else if (chunkPos.equals(0, -2, 0)) {
-            for (let x = 0; x < CHUNK_SIZE; x++) {
-                if ((x & 1) == 1)
-                    continue;
-                for (let y = 0; y < CHUNK_SIZE; y++)
-                    for (let h = 0; h < CHUNK_SIZE; h++)
-                        chunkData.setHXY(h, x, y, BLOCK_IDS.DIRT_GRASS);
-            }
-        } else if (chunkPos.equals(0, 1, 0)) {
+            GeneratorPatterns.verticalStripesY(chunkData);
+        } else if (chunkPos.equals(0, 0, 1)) {
             TreeGenerator.generate(chunkData, 0, 5, 5, 0);
             TreeGenerator.generate(chunkData, 0, 10, 7, 1123);
             TreeGenerator.generate(chunkData, 0, 2, 11, 124124);
@@ -863,6 +835,10 @@ export class TestGenerator {
         }
 
         return chunkData;
+    }
+
+    static async create(params = {}) {
+        return new TestGenerator();
     }
 }
 

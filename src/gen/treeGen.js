@@ -9,7 +9,7 @@ export class TreeGenerator {
     };
 
     static generate(chunk, baseH, baseX, baseY, seed, options = {}) {
-        const shape = options.shape ?? TreeGenerator.SHAPES.ROUND;
+        const shape = options.shape ?? TreeGenerator.SHAPES.OAK;
 
         const height =
             options.height ??
@@ -103,75 +103,102 @@ export class TreeGenerator {
         }
     }
 
-    static #generateOakTree(chunk, baseH, baseX, baseY, seed, height, crownRadius) {
-        const trunkHeight = Math.max(3, height - crownRadius);
+    static #leafKey(h, x, y) {
+    return `${h}:${x}:${y}`;
+}
 
-        for (let h = 0; h < trunkHeight; h++) {
-            TreeGenerator.#setIfInside(
-                chunk,
-                baseH + h,
-                baseX,
-                baseY,
-                BLOCK_IDS.TREE_TRUNK
-            );
-        }
+static #addLeaf(leaves, h, x, y) {
+    leaves.add(TreeGenerator.#leafKey(h, x, y));
+}
 
-        const crownCenterH = baseH + trunkHeight;
-        const r = crownRadius;
+static #hasLeaf(leaves, h, x, y) {
+    return leaves.has(TreeGenerator.#leafKey(h, x, y));
+}
 
-        for (let dh = -r; dh <= r; dh++) {
-            for (let dy = -r; dy <= r; dy++) {
-                for (let dx = -r; dx <= r; dx++) {
-                    const dist =
-                        dx * dx +
-                        dy * dy +
-                        dh * dh * 1.4;
+static #countLeafNeighbors6(leaves, h, x, y) {
+    let count = 0;
 
-                    const noise = TreeGenerator.rand01(
-                        seed ^
-                        ((dx + 16) * 73856093) ^
-                        ((dy + 16) * 19349663) ^
-                        ((dh + 16) * 83492791)
-                    );
+    if (TreeGenerator.#hasLeaf(leaves, h + 1, x, y)) count++;
+    if (TreeGenerator.#hasLeaf(leaves, h - 1, x, y)) count++;
+    if (TreeGenerator.#hasLeaf(leaves, h, x + 1, y)) count++;
+    if (TreeGenerator.#hasLeaf(leaves, h, x - 1, y)) count++;
+    if (TreeGenerator.#hasLeaf(leaves, h, x, y + 1)) count++;
+    if (TreeGenerator.#hasLeaf(leaves, h, x, y - 1)) count++;
 
-                    const limit = r * r + noise * 1.3;
+    return count;
+}
 
-                    if (dist <= limit) {
-                        const h = crownCenterH + dh;
-                        const x = baseX + dx;
-                        const y = baseY + dy;
+static #pruneLooseLeaves(leaves) {
+    const result = new Set();
 
-                        const isInsideTrunk =
-                            x === baseX &&
-                            y === baseY &&
-                            h < baseH + trunkHeight;
+    for (const key of leaves) {
+        const [h, x, y] = key.split(":").map(Number);
 
-                        if (!isInsideTrunk) {
-                            TreeGenerator.#setIfInside(
-                                chunk,
-                                h,
-                                x,
-                                y,
-                                BLOCK_IDS.TREE_LEAVES
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        const neighbors = TreeGenerator.#countLeafNeighbors6(leaves, h, x, y);
 
-        // Pień aż do środka korony.
-        for (let h = 0; h <= trunkHeight; h++) {
-            TreeGenerator.#setIfInside(
-                chunk,
-                baseH + h,
-                baseX,
-                baseY,
-                BLOCK_IDS.TREE_TRUNK
-            );
+        // 0-1 sąsiad = prawie zawsze brzydki pojedynczy wystający voxel.
+        if (neighbors >= 2) {
+            result.add(key);
         }
     }
 
+    return result;
+}
+
+static #writeLeaves(chunk, leaves) {
+    for (const key of leaves) {
+        const [h, x, y] = key.split(":").map(Number);
+
+        TreeGenerator.#setIfInside(
+            chunk,
+            h,
+            x,
+            y,
+            BLOCK_IDS.LEAVES
+        );
+    }
+}
+static #generateOakTree(chunk, baseH, baseX, baseY, seed, height, crownRadius) {
+    const trunkHeight = Math.max(4, height - 2);
+    const r = Math.max(1, crownRadius);
+
+    for (let h = 0; h <= trunkHeight; h++) {
+        TreeGenerator.#setIfInside(chunk, baseH + h, baseX, baseY, BLOCK_IDS.TREE_TRUNK);
+    }
+
+    const crownBaseH = baseH + trunkHeight - 2;
+
+    TreeGenerator.#leafLayer(chunk, crownBaseH + 0, baseX, baseY, r);
+    TreeGenerator.#leafLayer(chunk, crownBaseH + 1, baseX, baseY, r);
+    TreeGenerator.#leafLayer(chunk, crownBaseH + 2, baseX, baseY, r);
+    TreeGenerator.#leafLayer(chunk, crownBaseH + 3, baseX, baseY, Math.max(1, r - 1));
+    TreeGenerator.#leafLayer(chunk, crownBaseH + 4, baseX, baseY, Math.max(0, r - 2));
+
+    for (let h = 0; h <= trunkHeight; h++) {
+        TreeGenerator.#setIfInside(chunk, baseH + h, baseX, baseY, BLOCK_IDS.TREE_TRUNK);
+    }
+}
+static #leafLayer(chunk, h, centerX, centerY, radius) {
+    for (let y = -radius; y <= radius; y++) {
+        for (let x = -radius; x <= radius; x++) {
+            const ax = Math.abs(x);
+            const ay = Math.abs(y);
+
+            // Ucina tylko rogi, żeby nie było pełnego kwadratu.
+            if (radius > 1 && ax === radius && ay === radius) {
+                continue;
+            }
+
+            TreeGenerator.#setIfInside(
+                chunk,
+                h,
+                centerX + x,
+                centerY + y,
+                BLOCK_IDS.TREE_LEAVES
+            );
+        }
+    }
+}
     static #generatePineTree(chunk, baseH, baseX, baseY, seed, height, crownRadius) {
         for (let h = 0; h < height; h++) {
             TreeGenerator.#setIfInside(

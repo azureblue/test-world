@@ -95,7 +95,7 @@ export class UIntExtWasmMesher extends UIntMesher {
         return new UIntExtWasmMesher(wasmCreateMesh, heapBase, mem);
     }
 
-    static async createFastkMesher() {
+    static async createFastMesher() {
         const mem = new WebAssembly.Memory({
             initial: INITIAL_PAGES,
             maximum: INITIAL_PAGES,
@@ -110,7 +110,7 @@ export class UIntExtWasmMesher extends UIntMesher {
             }
         );
 
-        const heap_base = alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
+        const heap_base = WASM.alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
         const wasmCreateMesh = uIntWasmMesherResult.instance.exports.create_mesh;
         return new UIntExtWasmMesher(wasmCreateMesh, heap_base, mem);
     }
