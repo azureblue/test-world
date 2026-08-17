@@ -9,7 +9,6 @@ import { TextureArray } from "./textures.js";
 import { GenericBuffer, Replacer, Resources, writeVoxelWireframe } from "./utils.js";
 import { Position, World } from "./world.js";
 
-
 // const VIEW_DISTANCE_SQ = 409600.0;
 
 const params = new URL(self.location.href).searchParams;
@@ -34,7 +33,6 @@ export async function start() {
         desynchronized: false
     });
 
-
     const cubeSolidProgram = new Program(
         gl,
         Replacer.replace(await Resources.loadText("shaders/cube_solid.vert"),
@@ -54,7 +52,7 @@ export async function start() {
         await Resources.loadText("shaders/x_quads.frag")
     );
 
-        const waterProgram = new Program(
+    const waterProgram = new Program(
         gl,
         Replacer.replace(await Resources.loadText("shaders/water.vert"),
             {
@@ -69,7 +67,6 @@ export async function start() {
         await Resources.loadText("shaders/blockhighlight.vert"),
         await Resources.loadText("shaders/blockhighlight.frag")
     );
-
 
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.lineWidth(5);
@@ -96,7 +93,6 @@ export async function start() {
     gl.useProgram(cubeSolidProgram.program);
 
     const texArray = TextureArray.create(gl, textures, 16);
-
 
     const uCamera = gl.getUniformBlockIndex(cubeSolidProgram.program, "Camera");
     const uCameraSize = gl.getActiveUniformBlockParameter(cubeSolidProgram.program, uCamera, gl.UNIFORM_BLOCK_DATA_SIZE);
