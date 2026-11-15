@@ -9,7 +9,7 @@ import { Array2D, ImagePixels } from "../utils.js";
 import { LinearCurve, point } from "./curve.js";
 import { testgen } from "./generators.js";
 import { CurveNode, GenericNode, GenNode } from "./node.js";
-import { TreeGenerator } from "./treeGen.js";
+import { TreeGenerator, TreeGenerator0 } from "./treeGen.js";
 
 
 
@@ -808,6 +808,7 @@ export const GeneratorPatterns = {
 }
 
 export class TestGenerator extends ChunkGenerator {
+    #treeGen = new TreeGenerator();
 
     /**
      * @param {Vec3} chunkPos
@@ -827,11 +828,12 @@ export class TestGenerator extends ChunkGenerator {
         } else if (chunkPos.equals(0, -2, 0)) {
             GeneratorPatterns.verticalStripesY(chunkData);
         } else if (chunkPos.equals(0, 0, 1)) {
-            TreeGenerator.generate(chunkData, 0, 5, 5, 0);
-            TreeGenerator.generate(chunkData, 0, 10, 7, 1123);
-            TreeGenerator.generate(chunkData, 0, 2, 11, 124124);
-            TreeGenerator.generate(chunkData, 0, 15, 11, 12421);
-            TreeGenerator.generate(chunkData, 0, 15, 16, 12);
+            // TreeGenerator0.generate(chunkData, 0, 5, 5, 0);
+            // TreeGenerator0.generate(chunkData, 0, 10, 7, 1123);
+            // TreeGenerator0.generate(chunkData, 0, 2, 11, 124124);
+            // TreeGenerator0.generate(chunkData, 0, 15, 11, 12421);
+            // TreeGenerator0.generate(chunkData, 0, 15, 16, 12);
+            this.#treeGen.generate(chunkData, 0, 5, 5, 0);
         }
 
         return chunkData;
