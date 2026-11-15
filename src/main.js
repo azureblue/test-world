@@ -14,6 +14,10 @@ import { Position, World } from "./world.js";
 const params = new URL(self.location.href).searchParams;
 const viewDistSq = params.get("vdsq") ?? (8 * 32) ** 2;
 
+function formatK(n) {
+    return n >= 1000 ? (n / 1000).toFixed(0) + "k" : n.toFixed(0);
+}
+
 export async function start() {
     document.body.style.margin = "0";
     document.body.style.overflow = "hidden";
@@ -30,7 +34,8 @@ export async function start() {
 
     const gl = canvas.getContext("webgl2", {
         powerPreference: "high-performance",
-        desynchronized: false
+        desynchronized: false,
+        alpha: false
     });
 
     const cubeSolidProgram = new Program(
@@ -75,7 +80,8 @@ export async function start() {
     gl.frontFace(gl.CCW);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
-    gl.enable(gl.BLEND)
+    // blending is enabled only for the water pass, opaque passes skip the framebuffer read
+    gl.disable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
     const aIn = cubeSolidProgram.getAttribLocation("a_in");
@@ -217,6 +223,7 @@ export async function start() {
         world.update();
 
         visibleChunks.reset();
+        meshDrawer.stats.reset();
         world.forEachChunkInRangeNearToFar(chunk => {
             allChunks++;
             if (!frustumCuller.shouldDraw(chunk)) {
@@ -247,20 +254,23 @@ export async function start() {
             // gl.enable(gl.DEPTH_TEST);
         }
 
-        waterProgram.use();
         gl.disable(gl.CULL_FACE);
-        for (let chunk of visibleChunks) {
-            meshDrawer.drawNonSolids(chunk.mesh);
-        }
-        
         xQuadsProgram.use();
         for (let chunk of visibleChunks) {
             meshDrawer.drawXQuads(chunk.mesh);
         }
+
+        waterProgram.use();
+        gl.enable(gl.BLEND);
+        for (let chunk of visibleChunks) {
+            meshDrawer.drawNonSolids(chunk.mesh);
+        }
+        gl.disable(gl.BLEND);
         gl.enable(gl.CULL_FACE);
 
         if (fpsCounter.getCurrentFrame() % 5 === 0) {
             const block = world.blockAt(pos.ix, pos.iy, pos.iz);
+            const drawStats = meshDrawer.stats;
 
             statsDiv.textContent =
                 `world pos ${pos.wx.toFixed(1)}x ${pos.wz.toFixed(1)}z ${pos.wy.toFixed(1)}y ` +
@@ -268,6 +278,8 @@ export async function start() {
                 `cam ${camera.pitch.toFixed(1)}p ${camera.yaw.toFixed(1)}y ` +
                 `fps ${fpsCounter.fps()} ` +
                 `chunks ${chunksDrawn}/${allChunks}/${world.chunksInView} ` +
+                `draws s:${drawStats.solidDraws} w:${drawStats.waterDraws} x:${drawStats.xQuadDraws} ` +
+                `tris s:${formatK(drawStats.solidTris)} w:${formatK(drawStats.waterTris)} x:${formatK(drawStats.xQuadTris)} ` +
                 `pos x:${pos.ix} y:${pos.iy} z:${pos.iz} ` +
                 `chunk x:${pos.cx} y:${pos.cy} z:${pos.cz} ` +
                 `local x:${pos.bx} y:${pos.by} z:${pos.bz} ` +

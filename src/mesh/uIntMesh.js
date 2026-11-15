@@ -126,6 +126,8 @@ export class UIntMeshHandler extends MeshHandler {
         const gl = this.#gl;
         gl.deleteBuffer(mesh.vb);
         gl.deleteVertexArray(mesh.va);
+        gl.deleteBuffer(mesh.vbWater);
+        gl.deleteVertexArray(mesh.vaWater);
         gl.deleteBuffer(mesh.vbXQuads);
         gl.deleteVertexArray(mesh.vaXQuads);
     }
@@ -212,11 +214,30 @@ export class UIntMesher extends ChunkMesher {
     }
 }
 
+export class DrawStats {
+    solidDraws = 0;
+    solidTris = 0;
+    waterDraws = 0;
+    waterTris = 0;
+    xQuadDraws = 0;
+    xQuadTris = 0;
+
+    reset() {
+        this.solidDraws = 0;
+        this.solidTris = 0;
+        this.waterDraws = 0;
+        this.waterTris = 0;
+        this.xQuadDraws = 0;
+        this.xQuadTris = 0;
+    }
+}
+
 export class UIntMeshDrawer {
     #gl;
     #uTranslation;
     #uXQuadsTranslation;
     #uWaterTranslation;
+    stats = new DrawStats();
     /**
      * @param {WebGL2RenderingContext} gl
      * @param {WebGLUniformLocation} uTranslation
@@ -234,33 +255,45 @@ export class UIntMeshDrawer {
      * @param {UIntMesh} mesh 
      */
     draw(mesh) {
+        if (mesh.solidLen === 0)
+            return;
         const gl = this.#gl;
-        gl.bindVertexArray(mesh.va);        
+        gl.bindVertexArray(mesh.va);
         const modelTranslation = mesh.modelTranslation;
-        gl.uniform3f(this.#uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);        
+        gl.uniform3f(this.#uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
         gl.drawArrays(gl.TRIANGLES, 0, mesh.solidLen);
+        this.stats.solidDraws++;
+        this.stats.solidTris += mesh.solidLen / 3;
     }
 
     /**
      * @param {UIntMesh} mesh 
      */
     drawNonSolids(mesh) {
+        if (mesh.liquidLen === 0)
+            return;
         const gl = this.#gl;
-        gl.bindVertexArray(mesh.vaWater);        
+        gl.bindVertexArray(mesh.vaWater);
         const modelTranslation = mesh.modelTranslation;
         gl.uniform3f(this.#uWaterTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
         gl.drawArrays(gl.TRIANGLES, 0, mesh.liquidLen);
+        this.stats.waterDraws++;
+        this.stats.waterTris += mesh.liquidLen / 3;
     }
 
     /**
      * @param {UIntMesh} mesh 
      */
     drawXQuads(mesh) {
+        if (mesh.xQuadLen === 0)
+            return;
         const gl = this.#gl;
-        gl.bindVertexArray(mesh.vaXQuads);        
+        gl.bindVertexArray(mesh.vaXQuads);
         const modelTranslation = mesh.modelTranslation;
         gl.uniform3f(this.#uXQuadsTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
         gl.drawArrays(gl.TRIANGLES, 0, mesh.xQuadLen);
+        this.stats.xQuadDraws++;
+        this.stats.xQuadTris += mesh.xQuadLen / 3;
     }
 }
 
