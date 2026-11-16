@@ -13,6 +13,43 @@ import { Position, World } from "./world.js";
 
 const params = new URL(self.location.href).searchParams;
 const viewDistSq = params.get("vdsq") ?? (8 * 32) ** 2;
+const overdraw = params.get("overdraw") === "true";
+const OVERDRAW_SAMPLE_FRAMES = 30;
+
+/**
+ * Reads back the overdraw view and counts fragment shader invocations per covered pixel
+ * (red channel, see shaders/overdraw.frag).
+ */
+class OverdrawStats {
+    avg = 0;
+    max = 0;
+    #pixels = null;
+
+    /** @param {WebGL2RenderingContext} gl */
+    sample(gl) {
+        const width = gl.drawingBufferWidth;
+        const height = gl.drawingBufferHeight;
+        if (this.#pixels === null || this.#pixels.length !== width * height * 4) {
+            this.#pixels = new Uint8Array(width * height * 4);
+        }
+        const pixels = this.#pixels;
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        let sum = 0;
+        let covered = 0;
+        let max = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+            const shades = pixels[i];
+            if (shades !== 0) {
+                sum += shades;
+                covered++;
+                if (shades > max)
+                    max = shades;
+            }
+        }
+        this.avg = covered === 0 ? 0 : sum / covered;
+        this.max = max;
+    }
+}
 
 function formatK(n) {
     return n >= 1000 ? (n / 1000).toFixed(0) + "k" : n.toFixed(0);
@@ -24,6 +61,9 @@ export async function start() {
 
     const textures = await Resources.loadImage("./images/textures.png");
     const statsDiv = document.getElementById("stats");
+    // updating a text node's data in place avoids replacing the DOM child on every stats update
+    const statsText = document.createTextNode("");
+    statsDiv.replaceChildren(statsText);
 
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
@@ -45,7 +85,7 @@ export async function start() {
                 "viewDistanceSq": viewDistSq.toFixed(1)
             }
         ),
-        await Resources.loadText("shaders/cube_solid.frag")
+        await Resources.loadText(overdraw ? "shaders/overdraw.frag" : "shaders/cube_solid.frag")
     );
     const xQuadsProgram = new Program(
         gl,
@@ -75,7 +115,11 @@ export async function start() {
 
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.lineWidth(5);
-    gl.clearColor(0.522, 0.855, 1, 1);
+    if (overdraw) {
+        gl.clearColor(0, 0, 0, 1);
+    } else {
+        gl.clearColor(0.522, 0.855, 1, 1);
+    }
     gl.enable(gl.DEPTH_TEST);
     gl.frontFace(gl.CCW);
     gl.enable(gl.CULL_FACE);
@@ -184,6 +228,7 @@ export async function start() {
     });
 
     const visibleChunks = new GenericBuffer(2000);
+    const overdrawStats = overdraw ? new OverdrawStats() : null;
     function draw() {
         if (pause) {
             requestAnimationFrame(draw);
@@ -224,6 +269,10 @@ export async function start() {
 
         visibleChunks.reset();
         meshDrawer.stats.reset();
+        if (overdraw) {
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.ONE, gl.ONE);
+        }
         world.forEachChunkInRangeNearToFar(chunk => {
             allChunks++;
             if (!frustumCuller.shouldDraw(chunk)) {
@@ -236,12 +285,19 @@ export async function start() {
         });
 
         gl.bindVertexArray(null);
+        if (overdraw) {
+            gl.disable(gl.BLEND);
+            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+            if (fpsCounter.getCurrentFrame() % OVERDRAW_SAMPLE_FRAMES === 0) {
+                overdrawStats.sample(gl);
+            }
+        }
 
         const camDir = camera.direction;
         const camPos = camera.position;
         pos.setWorld(camPos.x, camPos.y, camPos.z);
         raycastBlock = world.raycasti(camPos, camDir, 5);
-        if (raycastBlock !== null) {
+        if (raycastBlock !== null && !overdraw) {
             // gl.disable(gl.DEPTH_TEST);
             // world.blockWorldAt(raycastBlock.x, raycastBlock.y, raycastBlock.z);
             // console.log(out.value);
@@ -254,25 +310,27 @@ export async function start() {
             // gl.enable(gl.DEPTH_TEST);
         }
 
-        gl.disable(gl.CULL_FACE);
-        xQuadsProgram.use();
-        for (let chunk of visibleChunks) {
-            meshDrawer.drawXQuads(chunk.mesh);
-        }
+        if (!overdraw) {
+            gl.disable(gl.CULL_FACE);
+            xQuadsProgram.use();
+            for (let chunk of visibleChunks) {
+                meshDrawer.drawXQuads(chunk.mesh);
+            }
 
-        waterProgram.use();
-        gl.enable(gl.BLEND);
-        for (let chunk of visibleChunks) {
-            meshDrawer.drawNonSolids(chunk.mesh);
+            waterProgram.use();
+            gl.enable(gl.BLEND);
+            for (let chunk of visibleChunks) {
+                meshDrawer.drawNonSolids(chunk.mesh);
+            }
+            gl.disable(gl.BLEND);
+            gl.enable(gl.CULL_FACE);
         }
-        gl.disable(gl.BLEND);
-        gl.enable(gl.CULL_FACE);
 
         if (fpsCounter.getCurrentFrame() % 5 === 0) {
             const block = world.blockAt(pos.ix, pos.iy, pos.iz);
             const drawStats = meshDrawer.stats;
 
-            statsDiv.textContent =
+            statsText.data =
                 `world pos ${pos.wx.toFixed(1)}x ${pos.wz.toFixed(1)}z ${pos.wy.toFixed(1)}y ` +
                 `dir ${camDir.x.toFixed(1)}x ${camDir.z.toFixed(1)}z ${camDir.y.toFixed(1)}y ` +
                 `cam ${camera.pitch.toFixed(1)}p ${camera.yaw.toFixed(1)}y ` +
@@ -280,6 +338,7 @@ export async function start() {
                 `chunks ${chunksDrawn}/${allChunks}/${world.chunksInView} ` +
                 `draws s:${drawStats.solidDraws} w:${drawStats.waterDraws} x:${drawStats.xQuadDraws} ` +
                 `tris s:${formatK(drawStats.solidTris)} w:${formatK(drawStats.waterTris)} x:${formatK(drawStats.xQuadTris)} ` +
+                (overdraw ? `overdraw avg:${overdrawStats.avg.toFixed(2)} max:${overdrawStats.max} ` : "") +
                 `pos x:${pos.ix} y:${pos.iy} z:${pos.iz} ` +
                 `chunk x:${pos.cx} y:${pos.cy} z:${pos.cz} ` +
                 `local x:${pos.bx} y:${pos.by} z:${pos.bz} ` +

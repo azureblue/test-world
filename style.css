@@ -10,6 +10,12 @@ body {
     font-family: monospace;
     font-weight: bold;
     background-color: rgba(0, 0, 0, 0.151);
+    /* text updates every few frames: keep relayout/repaint scoped to this box and its own compositor layer */
+    right: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    contain: layout paint style;
+    will-change: transform;
 }
 
 .crosshair-line {
