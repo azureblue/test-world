@@ -10,3 +10,5 @@ static_assert(sizeof(int) == 4, "int must be 32-bit");
 static_assert(sizeof(int32) == 4, "int32 must be 32-bit");
 static_assert(sizeof(uint64) == 8, "uint64 must be 64-bit");
 static_assert(sizeof(int64) == 8, "int64 must be 64-bit");
+typedef unsigned char uint8;
+static_assert(sizeof(uint8) == 1, "uint8 must be 8-bit");

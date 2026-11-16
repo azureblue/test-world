@@ -29,6 +29,7 @@ constexpr uint MAX_VISIBLE_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
 constexpr uint MAX_OUTPUT_UINTS64 = MAX_FACES * 6;
+constexpr uint MAX_CUTOUT_X_UINTS64 = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 6;
 constexpr uint HEADER_SIZE_IN_UINT64 = 4;
 }
 

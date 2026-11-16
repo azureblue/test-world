@@ -9,6 +9,77 @@ constexpr int DIRECTION_ENCODE[40] = {
 
 constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
+// Solid faces are sorted front-to-back per direction, so early depth test rejects hidden faces inside a chunk.
+// A face is visible only from the side its normal points to, so for faces of one direction, a larger coordinate
+// along the normal is always closer to any camera that can see them. Groups go in Direction order (Up first).
+// Faces are written to a scratch area together with a bucket key, then counting-sorted into the output.
+namespace solid_sort {
+constexpr uint BUCKETS = 6 * CHUNK_SIZE;
+
+static uint8 keys[data_size::MAX_FACES];
+static uint count;
+
+// x, y, h - block position of the face, normal is +h for Up, -h for Down, -y Front, -x Left, +y Back, +x Right
+template <Direction DIR>
+inline_always static uint key(uint x, uint y, uint h) {
+    constexpr uint base = DIR * CHUNK_SIZE;
+    if constexpr (DIR == Direction::Up)
+        return base + (CHUNK_SIZE - 1 - h);
+    else if constexpr (DIR == Direction::Down)
+        return base + h;
+    else if constexpr (DIR == Direction::Front)
+        return base + y;
+    else if constexpr (DIR == Direction::Left)
+        return base + x;
+    else if constexpr (DIR == Direction::Back)
+        return base + (CHUNK_SIZE - 1 - y);
+    else
+        return base + (CHUNK_SIZE - 1 - x);
+}
+
+static inline uint64* scratch_base(face_buffers& buffers) {
+    return buffers.mesh_cutout_x_base + data_size::MAX_CUTOUT_X_UINTS64;
+}
+
+static inline void begin(face_buffers& buffers) {
+    count = 0;
+    buffers.mesh_solid_cur = scratch_base(buffers);
+}
+
+template <Direction DIR>
+inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows) {
+    keys[count++] = static_cast<uint8>(key<DIR>(x, y, h));
+    quad_encoder::encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
+}
+
+static void finish(face_buffers& buffers) {
+    uint offsets[BUCKETS];
+    for (uint i = 0; i < BUCKETS; i++)
+        offsets[i] = 0;
+    for (uint i = 0; i < count; i++)
+        offsets[keys[i]]++;
+    uint sum = 0;
+    for (uint i = 0; i < BUCKETS; i++) {
+        uint n = offsets[i];
+        offsets[i] = sum;
+        sum += n;
+    }
+    const uint64* __restrict src = scratch_base(buffers);
+    uint64* __restrict dst = buffers.mesh_base;
+    for (uint i = 0; i < count; i++) {
+        uint64* __restrict out = dst + offsets[keys[i]]++ * 6;
+        out[0] = src[0];
+        out[1] = src[1];
+        out[2] = src[2];
+        out[3] = src[3];
+        out[4] = src[4];
+        out[5] = src[5];
+        src += 6;
+    }
+    buffers.mesh_solid_cur = dst + count * 6;
+}
+}  // namespace solid_sort
+
 template <Direction DIR>
 static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     constexpr uint dir_encode_base_idx = (DIR << 3);
@@ -25,7 +96,7 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     if (texture_id == WATER_TEXTURE) {
         water_encoder::encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
     } else {
-        quad_encoder::encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
+        solid_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -39,7 +110,7 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     if (texture_id == WATER_TEXTURE) {
         water_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
     } else {
-        quad_encoder::encode_face<Direction::Up>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
+        solid_sort::encode_face<Direction::Up>(buffers, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -53,7 +124,7 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     if (texture_id == WATER_TEXTURE) {
         water_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
     } else {
-        quad_encoder::encode_face<Direction::Down>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
+        solid_sort::encode_face<Direction::Down>(buffers, x, y, h, width, height, texture_id, shadows);
     }
 }
 
@@ -190,6 +261,7 @@ extern "C"
     __attribute__((export_name("create_mesh"))) uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
     face_buffers buffers(out_data_ptr);
+    solid_sort::begin(buffers);
 
     array_3d<CHUNK_SIZE_E> data(in_chunk_data_ptr);
     uint layers_data[CHUNK_SIZE * CHUNK_SIZE * 12];
@@ -293,5 +365,6 @@ extern "C"
     merge_side_faces_finish<Direction::Back>(buffers, layers, current_layer_offset);
     merge_side_faces_finish<Direction::Right>(buffers, layers, current_layer_offset);
 
+    solid_sort::finish(buffers);
     return complete_buffers(buffers);
 }
