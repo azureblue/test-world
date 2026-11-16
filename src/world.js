@@ -1,13 +1,13 @@
-import { isSolid } from "./blocks.js";
-import { Chunk, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "./chunk/chunk.js";
-import { ChunkDataExtTransfer } from "./chunk/extChunk.js";
+import { BLOCK_IDS, isSolid } from "./blocks.js";
+import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "./chunk/chunk.js";
+import { ChunkDataExt, ChunkDataExtTransfer } from "./chunk/extChunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
 import { Logger } from "./logging.js";
 import { MeshHandler } from "./mesh/mesh.js";
 import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
 import { UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
-import { ChunkLoadCenter, ChunkRequest, ChunkResponse, MessageTransportData } from "./worker/common.js";
+import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse, MeshChunkRequest, MeshChunkResponse, MessageTransportData } from "./worker/common.js";
 import { WorkerClient } from "./worker/worker.js";
 
 const params = new URL(self.location.href).searchParams;
@@ -16,7 +16,8 @@ const fastMesher = params.get("fastMesher") === "true";
 
 const logger = new Logger("World");
 
-const quickMesher = await UIntExtWasmMesher.createMesher();
+// unoptimized but fast mesher for edits on the main thread; the optimized mesh comes from the mesher worker
+const editMesher = await UIntExtWasmMesher.createFastMesher();
 
 
 const CHUNK_RENDER_DIST = 8;
@@ -33,6 +34,8 @@ class ChunkEntry {
     dirty = false;
     /** id of the latest request for this chunk, responses to older requests are dropped */
     requestId = 0;
+    /** id of the latest remesh request for this chunk, older remesh results are dropped */
+    remeshId = 0;
 
     /** @param {Vec3} position */
     constructor(position) {
@@ -99,7 +102,13 @@ export class World {
     #chunkDataTransfer = new ChunkDataExtTransfer();
     #meshDataTransfer = new UIntMeshDataTransfer();
 
-    #quickMesher = quickMesher;
+    #editMesher = editMesher;
+    #mesherWorkerClient;
+    /** @type {MessagePort} */
+    #meshPort = null;
+    /** remesh requests posted before the mesher worker was connected
+     * @type {Array<MessageTransportData>} */
+    #initialMeshQueue = [];
 
     /**@type {Array<Vec3>} */
     #rangeDeltas;
@@ -154,7 +163,20 @@ export class World {
                 message.post(this.#chunkLoadPort);
             }
             this.#initialMessageQueue = [];
-        });
+        }).catch((err) => logger.error(() => `connecting to the chunk loader failed: ${err}`));
+        this.#mesherWorkerClient = new WorkerClient(
+            new Worker(Resources.relativeToRoot(`./worker/mesherWorker.js?workerId=mesh0`), { type: "module" }),
+            logger
+        );
+        this.#mesherWorkerClient.connect("mesh").then((messagePort) => {
+            logger.info(() => "connected to mesher worker");
+            this.#meshPort = messagePort;
+            this.#meshPort.onmessage = (message) => this.#onRemesh(MeshChunkResponse.from(message.data));
+            for (const message of this.#initialMeshQueue) {
+                message.post(this.#meshPort);
+            }
+            this.#initialMeshQueue = [];
+        }).catch((err) => logger.error(() => `connecting to the mesher worker failed, edits keep their quick mesh: ${err}`));
         /** @type {GenericBuffer<Vec3>} */
         const tmpBuff = new GenericBuffer(512);
         for (let dx = -CHUNK_RENDER_DIST; dx <= CHUNK_RENDER_DIST; dx++)
@@ -415,7 +437,9 @@ export class World {
      * @param {FVec3} pos 
      * @param {FVec3} dir 
      * @param {number} maxDist - Maximum ray distance
-     * @returns {{x, y, z, value, distance} | null}
+     * @returns {{hit: boolean, x: number, y: number, z: number, block: number, nx: number, ny: number, nz: number} | null}
+     *   the hit block in world coordinates and the normal of the face the ray entered through
+     *   (pointing back towards the ray origin; all 0 when the origin itself is inside the block)
      */
     raycasti(pos, dir, maxDist = 5) {
         let x = Math.floor(pos.x);
@@ -445,11 +469,13 @@ export class World {
 
         let tMax = { x: tMaxX, y: tMaxY, z: tMaxZ };
         let t = 0;
+        // the face the ray entered the current voxel through is opposite to the last step
+        let nx = 0, ny = 0, nz = 0;
 
         while (t <= maxDist) {
             const block = this.blockWorldAt(x, y, z);
             if (isSolid(block)) {
-                return { hit: true, x, y, z, block };
+                return { hit: true, x, y, z, block, nx, ny, nz };
             }
 
             // Step to the next voxel
@@ -457,14 +483,17 @@ export class World {
                 x += stepX;
                 t = tMax.x;
                 tMax.x += tDeltaX;
+                nx = -stepX; ny = 0; nz = 0;
             } else if (tMax.y < tMax.z) {
                 y += stepY;
                 t = tMax.y;
                 tMax.y += tDeltaY;
+                nx = 0; ny = -stepY; nz = 0;
             } else {
                 z += stepZ;
                 t = tMax.z;
                 tMax.z += tDeltaZ;
+                nx = 0; ny = 0; nz = -stepZ;
             }
         }
 
@@ -472,52 +501,140 @@ export class World {
     }
 
     /**
-     * @param {IVec3} pos 
-     * @returns {IVec3}
+     * World coordinates, as returned by {@link World#raycasti}.
+     * @returns {boolean} whether the block was changed
      */
-    switchBlockPos(pos) {
-        return new ivec3(pos.x, pos.y, -pos.z - 1);
+    setBlockWorld(iwx, iwy, iwz, value) {
+        return this.setBlock(iwx, -iwz - 1, iwy, value);
     }
 
     /**
-     * 
-     * @param {IVec3} pos logical position
-     * @returns 
+     * Changes a block in a loaded chunk. Takes effect right away: the chunk and the neighbours that have the block in
+     * their border data get a quick, unoptimized mesh now, and an optimized one from the mesher worker later.
+     * The chunk loader gets the edit too, so it survives reloads and appears in neighbours loaded later.
+     * Chunk space coordinates (iz is the height), like {@link World#blockAt}.
+     * @returns {boolean} whether the block was changed
      */
-    removeBlock(pos) {
-        return;
-        performance.mark("removeBlockStart");
+    setBlock(ix, iy, iz, value) {
         const start = performance.now();
-
-        const cx = pos.x >> CHUNK_SIZE_BIT_LEN;
-        const cy = pos.z >> CHUNK_SIZE_BIT_LEN;
-        const cz = pos.y >> CHUNK_SIZE_BIT_LEN;
-        const bx = pos.x & 0x1F;
-        const by = pos.z & 0x1F;
-        const bh = pos.y & 0x1F;
+        value >>>= 0; // BLOCK_IDS with the solid bit are negative, chunk data (Uint32Array) returns them unsigned
+        const cx = ix >> CHUNK_SIZE_BIT_LEN;
+        const cy = iy >> CHUNK_SIZE_BIT_LEN;
+        const cz = iz >> CHUNK_SIZE_BIT_LEN;
         const entry = this.#chunks.get(pos3ToKey(cx, cy, cz));
         if (entry === undefined || !entry.loaded)
-            return;
+            return false;
+        const bx = ix & CHUNK_SIZE_MASK;
+        const by = iy & CHUNK_SIZE_MASK;
+        const bh = iz & CHUNK_SIZE_MASK;
+        if (entry.chunk.data.getVoxelXYZ(bx, by, bh) === value)
+            return false;
 
-        entry.chunk.data.setHXY(bh, bx, by, 0);
+        // before any re-request below, so the loader already has the edit when it generates them
+        this.#postToChunkLoader(BlockEdit.toMessage(new BlockEdit(vec3(ix, iy, iz), value)));
 
-        const chunkDataExtended = ChunkDataExtended.load(
-            (cx, cy, cz) => {
-                const key = pos3ToKey(cx, cy, cz);
-                const entry = this.#chunks.get(key);
-                if (entry === undefined || !entry.loaded) {
-                    return null;
+        // the chunk loads a neighbour's border only if it has blocks next to that side; a placed block may be the
+        // first one there, so take the cells around it from the loaded neighbours (its faces and shading need them)
+        this.#syncBorderAround(entry, bx, by, bh);
+        if (value !== BLOCK_IDS.EMPTY)
+            entry.chunk.includeBlock(bx, by, bh);
+
+        const outdatedRequestIds = [];
+        let remeshed = 0;
+        for (let dz = -1; dz <= 1; dz++)
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++) {
+                    // the block's cell in this chunk's extended data (32^3 plus a 1 block border from the neighbours)
+                    const ex = bx + 1 - dx * CHUNK_SIZE;
+                    const ey = by + 1 - dy * CHUNK_SIZE;
+                    const eh = bh + 1 - dz * CHUNK_SIZE;
+                    if (ex < 0 || ex > CHUNK_SIZE + 1 || ey < 0 || ey > CHUNK_SIZE + 1 || eh < 0 || eh > CHUNK_SIZE + 1)
+                        continue;
+                    const neighbour = this.#chunks.get(pos3ToKey(cx + dx, cy + dy, cz + dz));
+                    if (neighbour === undefined)
+                        continue;
+                    if (!neighbour.loaded) {
+                        // its response may already be on the way without the edit: request it again
+                        outdatedRequestIds.push(neighbour.requestId);
+                        this.#requestChunk(neighbour);
+                        continue;
+                    }
+                    const data = /** @type {ChunkDataExt} */ (neighbour.chunk.data);
+                    if (data.getExtVoxel(ex, ey, eh) === value)
+                        continue; // border not loaded on this side (no blocks next to it), nothing to update
+                    data.setExtVoxel(ex, ey, eh, value);
+                    this.#remesh(neighbour);
+                    remeshed++;
                 }
-                return entry.chunk.data;
-            }, cx, cy, cz);
-        const beforeMesh = performance.now();
-        const mesh = this.#quickMesher.createMesh(entry.position, chunkDataExtended);
-        entry.chunk.mesh?.dispose();
-        const uintMesh = UIntMesh.load(mesh.data, mesh.mTranslation);
-        entry.chunk.mesh = uintMesh;
-        entry.dirty = true;
-        const end = performance.now();
-        console.log(`before mesh: ${(beforeMesh - start).toFixed(0)} ms, mesh time: ${(end - beforeMesh).toFixed(0)} ms`);
+        if (outdatedRequestIds.length > 0)
+            this.#postToChunkLoader(ChunkCancel.toMessage(new ChunkCancel(outdatedRequestIds)));
+
+        logger.debug(() => `block (${ix}, ${iy}, ${iz}) set, ${remeshed} chunks remeshed in ${perfDiff(start)} ms`);
+        return true;
+    }
+
+    /**
+     * Copies the border cells of the chunk's extended data around a block from the loaded neighbours.
+     * @param {ChunkEntry} entry
+     */
+    #syncBorderAround(entry, bx, by, bh) {
+        const data = /** @type {ChunkDataExt} */ (entry.chunk.data);
+        const p = entry.position;
+        for (let oz = -1; oz <= 1; oz++)
+            for (let oy = -1; oy <= 1; oy++)
+                for (let ox = -1; ox <= 1; ox++) {
+                    const ex = bx + 1 + ox, ey = by + 1 + oy, eh = bh + 1 + oz;
+                    // which neighbour the cell belongs to (0: inside this chunk)
+                    const dx = ex === 0 ? -1 : (ex === CHUNK_SIZE + 1 ? 1 : 0);
+                    const dy = ey === 0 ? -1 : (ey === CHUNK_SIZE + 1 ? 1 : 0);
+                    const dz = eh === 0 ? -1 : (eh === CHUNK_SIZE + 1 ? 1 : 0);
+                    if (dx === 0 && dy === 0 && dz === 0)
+                        continue;
+                    const neighbour = this.#chunks.get(pos3ToKey(p.x + dx, p.y + dy, p.z + dz));
+                    if (neighbour === undefined || !neighbour.loaded)
+                        continue;
+                    const value = neighbour.chunk.data.getVoxelXYZ(ex - 1 - dx * CHUNK_SIZE, ey - 1 - dy * CHUNK_SIZE, eh - 1 - dz * CHUNK_SIZE);
+                    data.setExtVoxel(ex, ey, eh, value);
+                }
+    }
+
+    /**
+     * Quick mesh now, optimized mesh from the mesher worker later.
+     * @param {ChunkEntry} entry
+     */
+    #remesh(entry) {
+        const data = /** @type {ChunkDataExt} */ (entry.chunk.data);
+        this.#replaceMesh(entry, this.#editMesher.createMesh(entry.position, data));
+
+        entry.remeshId = this.#nextRequestId++;
+        // the main thread keeps its data (raycasts, further edits), the worker gets a copy
+        const copy = new ChunkDataExt(new Uint32Array(data.array3d.data));
+        const message = MeshChunkRequest.toMessage(new MeshChunkRequest(entry.position, copy, entry.remeshId));
+        if (this.#meshPort === null)
+            this.#initialMeshQueue.push(message);
+        else
+            message.post(this.#meshPort);
+    }
+
+    /** @param {MeshChunkResponse} response */
+    #onRemesh(response) {
+        const p = response.chunkPos;
+        const entry = this.#chunks.get(pos3ToKey(p.x, p.y, p.z));
+        // dropped, reloaded or edited again since this remesh was requested
+        if (entry === undefined || !entry.loaded || entry.remeshId !== response.requestId)
+            return;
+        this.#replaceMesh(entry, response.meshData);
+    }
+
+    /**
+     * @param {ChunkEntry} entry
+     * @param {import("./mesh/uIntMesh.js").UIntMeshData} meshData
+     */
+    #replaceMesh(entry, meshData) {
+        const oldMesh = entry.chunk.mesh;
+        entry.chunk.mesh = meshData.isEmpty() ? null : this.#meshHandler.upload(meshData);
+        if (oldMesh)
+            this.#meshHandler.dispose(oldMesh);
     }
 
     blockWorldAt(iwx, iwy, iwz) {

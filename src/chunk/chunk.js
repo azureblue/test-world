@@ -179,6 +179,22 @@ export class Chunk {
         return this.#bounds;
     }
 
+    /**
+     * Grows the bounds (and the culling box) to include a block placed at chunk local x, y, h.
+     * Removed blocks don't shrink them, which keeps culling correct, just less tight.
+     */
+    includeBlock(x, y, h) {
+        const b = this.bounds();
+        if (b === null) {
+            this.#bounds = { minH: h, maxH: h + 1, minY: y, maxY: y + 1, minX: x, maxX: x + 1 };
+        } else {
+            b.minH = Math.min(b.minH, h); b.maxH = Math.max(b.maxH, h + 1);
+            b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y + 1);
+            b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x + 1);
+        }
+        this.#updateCornersData();
+    }
+
     #updateCornersData() {
         const bounds = this.bounds()
         if (!bounds) {
@@ -269,12 +285,40 @@ export class ChunkDataLoader {
     #chunkDataFactory;
 
     /**
+     * Block edits per chunk, applied on top of every generation of the chunk.
+     * @type {Map<string, Map<number, number>>} chunk key -> (index in ChunkBlockData -> block)
+     */
+    #edits = new Map();
+
+    /**
      * @param {ChunkGenerator} generator 
      * @param {ChunkDataFactory} chunkDataFactory
      */
     constructor(generator, chunkDataFactory) {
         this.#generator = generator;
         this.#chunkDataFactory = chunkDataFactory;
+    }
+
+    /**
+     * Records a block edit. It's applied to the cached chunk now and to every later generation of the chunk,
+     * so it survives cache eviction and reloads, and neighbours loaded later get it in their border data.
+     * @param {number} ix block position in chunk space
+     * @param {number} iy
+     * @param {number} iz height
+     * @param {number} value
+     */
+    setBlock(ix, iy, iz, value) {
+        const key = posToKey3(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN);
+        const index = ((iz & CHUNK_SIZE_MASK) * CHUNK_SIZE + (iy & CHUNK_SIZE_MASK)) * CHUNK_SIZE + (ix & CHUNK_SIZE_MASK);
+        let chunkEdits = this.#edits.get(key);
+        if (chunkEdits === undefined) {
+            chunkEdits = new Map();
+            this.#edits.set(key, chunkEdits);
+        }
+        chunkEdits.set(index, value);
+        const cached = this.#blockDataCache.get(key);
+        if (cached !== undefined)
+            cached.data[index] = value;
     }
 
     /**
@@ -286,6 +330,11 @@ export class ChunkDataLoader {
         let chunkBlockData = this.#blockDataCache.get(key);
         if (chunkBlockData === undefined) {
             chunkBlockData = this.#generator.generateChunk(chunkPos);
+            const chunkEdits = this.#edits.get(key);
+            if (chunkEdits !== undefined) {
+                for (const [index, value] of chunkEdits)
+                    chunkBlockData.data[index] = value;
+            }
             this.#blockDataCache.set(key, chunkBlockData);
         }
 

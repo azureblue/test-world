@@ -28,7 +28,7 @@ const workerServer = new WorkerServer(self, workerId, {
             const meshData = mesher.createMesh(chunkPos, meshChunkRequest.chunkData);
             logger.debug(() => `meshed chunk (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z}) in ${perfDiff(start)} ms`);
 
-            MeshChunkResponse.toMessage(new MeshChunkResponse(chunkPos, meshData, meshChunkRequest.chunkData)).post(connection.port);
+            MeshChunkResponse.toMessage(new MeshChunkResponse(chunkPos, meshData, meshChunkRequest.chunkData, meshChunkRequest.requestId)).post(connection.port);
         }
     }
 });

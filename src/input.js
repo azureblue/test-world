@@ -13,15 +13,20 @@ export class MouseInput {
         });
 
         if (pointerLocking) {
-            element.addEventListener("mousedown", async () => {
+            element.addEventListener("mousedown", async (me) => {
                 element.requestPointerLock();
                 if (this.#mouseDownHandler) {
-                    this.#mouseDownHandler();
+                    this.#mouseDownHandler(me.button);
                 }
             });
         }
+        // right button is used in the game
+        element.addEventListener("contextmenu", (e) => e.preventDefault());
     }
 
+    /**
+     * @param {(button: number) => void} handler - button as in MouseEvent.button (0 left, 1 middle, 2 right)
+     */
     onMouseDown(handler) {
         this.#mouseDownHandler = handler;
     }

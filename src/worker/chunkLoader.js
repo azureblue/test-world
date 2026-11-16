@@ -5,7 +5,7 @@ import { Vec3 } from "../geom.js";
 import { Logger } from "../logging.js";
 import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
 import { perfDiff } from "../utils.js";
-import { ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse } from "./common.js";
+import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse } from "./common.js";
 import { WorkerConnection, WorkerServer } from "./worker.js";
 
 
@@ -141,6 +141,10 @@ const workerServer = new WorkerServer(self, workerId, {
                 scheduler.add(ChunkRequest.from(data), connection);
             } else if (ChunkCancel.isType(data)) {
                 scheduler.cancel(ChunkCancel.from(data).requestIds);
+            } else if (BlockEdit.isType(data)) {
+                // applied right away, so requests processed after this message already see the edit
+                const edit = BlockEdit.from(data);
+                chunkDataLoader.setBlock(edit.blockPos.x, edit.blockPos.y, edit.blockPos.z, edit.value);
             } else if (ChunkLoadCenter.isType(data)) {
                 const center = ChunkLoadCenter.from(data);
                 scheduler.setCenter(center.chunkPos, center.rangeSq);

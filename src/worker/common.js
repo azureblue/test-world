@@ -430,17 +430,19 @@ export class MeshChunkRequest extends WorkerMessage {
     /**
      * @param {Vec3} chunkPos - The position of the chunk to mesh.
      * @param {ChunkData} chunkData - Chunk data with borders, transferred.
+     * @param {number} [requestId] - Returned in the {@link MeshChunkResponse}.
      */
-    constructor(chunkPos, chunkData) {
+    constructor(chunkPos, chunkData, requestId = 0) {
         super();
         this.chunkPos = chunkPos;
         this.chunkData = chunkData;
+        this.requestId = requestId;
     }
 
     static toMessage(meshChunkRequest) {
         const tChunkData = CHUNK_DATA_TRANSFER.transfer(meshChunkRequest.chunkData);
         return MessageTransportData.create(MeshChunkRequest.type,
-            { chunkPos: meshChunkRequest.chunkPos, chunkData: tChunkData.data },
+            { chunkPos: meshChunkRequest.chunkPos, chunkData: tChunkData.data, requestId: meshChunkRequest.requestId },
             tChunkData.transferList);
     }
 
@@ -451,7 +453,7 @@ export class MeshChunkRequest extends WorkerMessage {
     static from(message) {
         checkType(this, message);
         const data = message.data;
-        return new MeshChunkRequest(toVec3(data.chunkPos), CHUNK_DATA_TRANSFER.createFrom(data.chunkData));
+        return new MeshChunkRequest(toVec3(data.chunkPos), CHUNK_DATA_TRANSFER.createFrom(data.chunkData), data.requestId);
     }
 }
 
@@ -469,19 +471,22 @@ export class MeshChunkResponse extends WorkerMessage {
      * @param {Vec3} chunkPos - The position of the meshed chunk.
      * @param {MeshData} meshData - Mesh data, transferred.
      * @param {ChunkData} chunkData - The chunk data the mesh was created from, transferred back.
+     * @param {number} [requestId] - The id of the {@link MeshChunkRequest} this responds to.
      */
-    constructor(chunkPos, meshData, chunkData) {
+    constructor(chunkPos, meshData, chunkData, requestId = 0) {
         super();
         this.chunkPos = chunkPos;
         this.meshData = meshData;
         this.chunkData = chunkData;
+        this.requestId = requestId;
     }
 
     static toMessage(meshChunkResponse) {
         const tMeshData = MESH_DATA_TRANSFER.transfer(meshChunkResponse.meshData);
         const tChunkData = CHUNK_DATA_TRANSFER.transfer(meshChunkResponse.chunkData);
         return MessageTransportData.create(MeshChunkResponse.type, {
-            chunkPos: meshChunkResponse.chunkPos, meshData: tMeshData.data, chunkData: tChunkData.data
+            chunkPos: meshChunkResponse.chunkPos, meshData: tMeshData.data, chunkData: tChunkData.data,
+            requestId: meshChunkResponse.requestId
         }, [...tMeshData.transferList, ...tChunkData.transferList]);
     }
 
@@ -494,7 +499,42 @@ export class MeshChunkResponse extends WorkerMessage {
         const data = message.data;
         return new MeshChunkResponse(toVec3(data.chunkPos),
             MESH_DATA_TRANSFER.createFrom(data.meshData),
-            CHUNK_DATA_TRANSFER.createFrom(data.chunkData));
+            CHUNK_DATA_TRANSFER.createFrom(data.chunkData),
+            data.requestId);
+    }
+}
+
+/**
+ * A block change, sent to the chunk loader so it applies it to its cached data and to every later generation
+ * of the chunk (the edit survives reloads, and neighbours get it in their border data).
+ */
+export class BlockEdit extends WorkerMessage {
+
+    static get type() {
+        return "block_edit";
+    }
+
+    /**
+     * @param {Vec3} blockPos - Block position in chunk space (z is the height).
+     * @param {number} value - The new block.
+     */
+    constructor(blockPos, value) {
+        super();
+        this.blockPos = blockPos;
+        this.value = value;
+    }
+
+    static toMessage(blockEdit) {
+        return MessageTransportData.create(BlockEdit.type, { blockPos: blockEdit.blockPos, value: blockEdit.value });
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {BlockEdit}
+     */
+    static from(message) {
+        checkType(this, message);
+        return new BlockEdit(toVec3(message.data.blockPos), message.data.value);
     }
 }
 

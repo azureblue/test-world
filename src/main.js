@@ -1,6 +1,6 @@
-import { getBlockById } from "./blocks.js";
+import { BLOCK_IDS, getBlockById } from "./blocks.js";
 import { Camera, FrustumCuller } from "./camera.js";
-import { FVec3, mat4, Projection, vec3 } from "./geom.js";
+import { FVec3, mat4, Projection } from "./geom.js";
 import { Program } from "./gl.js";
 import { KeyboardInput, MouseInput } from "./input.js";
 import { UIntMeshDrawer, UIntMeshHandler } from "./mesh/uIntMesh.js";
@@ -217,13 +217,26 @@ export async function start() {
     const lookAtPosition = new Position();
     const chunkVisibleExtra = Symbol('chunkVisibleExtra');
     let raycastBlock = null;
-    mouseInput.onMouseDown(() => {
+    mouseInput.onMouseDown((button) => {
         if (pause) {
             return
         }
-        if (raycastBlock !== null) {
-            const logicPos = world.switchBlockPos(vec3(raycastBlock.x, raycastBlock.y, raycastBlock.z));
-            world.removeBlock(logicPos);
+        if (raycastBlock === null) {
+            return;
+        }
+        if (button === 0) {
+            world.setBlockWorld(raycastBlock.x, raycastBlock.y, raycastBlock.z, BLOCK_IDS.EMPTY);
+        } else if (button === 2) {
+            const { nx, ny, nz } = raycastBlock;
+            if (nx === 0 && ny === 0 && nz === 0) {
+                return; // the camera is inside the block, no face was hit
+            }
+            const px = raycastBlock.x + nx, py = raycastBlock.y + ny, pz = raycastBlock.z + nz;
+            const camPos = camera.position;
+            if (px === Math.floor(camPos.x) && py === Math.floor(camPos.y) && pz === Math.floor(camPos.z)) {
+                return; // don't place a block where the camera is
+            }
+            world.setBlockWorld(px, py, pz, BLOCK_IDS.ROCK);
         }
     });
 
