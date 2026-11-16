@@ -1,7 +1,6 @@
-import { ChunkAdjDataTransfer } from "../chunk/adjChunk.js";
 import { ChunkBlockData, ChunkData } from "../chunk/chunk.js";
 import { ChunkDataExtTransfer } from "../chunk/extChunk.js";
-import { vec3, Vec3 } from "../geom.js";
+import { Vec3 } from "../geom.js";
 import { MeshData } from "../mesh/mesh.js";
 import { UIntMeshDataTransfer } from "../mesh/uIntMesh.js";
 
@@ -80,15 +79,15 @@ export class MessageTransportData {
  */
 function checkType(messageClass, message) {
     if (message.type !== messageClass.type) {
-        throw new Error(`Invalid message type for ${messageClass.name}: ${message.data.type}`);
+        throw new Error(`Invalid message type for ${messageClass.name}: ${message?.type}`);
     }
 }
 
+/**
+ * Base class of protocol messages. Subclasses define `static get type()`, `static toMessage(obj)`, which builds
+ * a {@link MessageTransportData} with the transfer list, and `static from(message)`, which parses a received message.
+ */
 export class WorkerMessage {
-    static type() {
-        return this.type;
-    }
-
     static isType(message) {
         return message.type === this.type;
     }
@@ -188,14 +187,19 @@ export class WorkerConnectReject extends WorkerMessage {
         return "worker_connect_reject";
     }
 
-    constructor(connectionId, reason) {
+    constructor(endpointName, connectionId, reason) {
         super();
+        this.endpointName = endpointName;
         this.connectionId = connectionId;
         this.reason = reason;
     }
 
     static toMessage(workerConnectRejectMessage) {
-        return MessageTransportData.create(WorkerConnectReject.type, { connectionId: workerConnectRejectMessage.connectionId, reason: workerConnectRejectMessage.reason });
+        return MessageTransportData.create(WorkerConnectReject.type, {
+            endpointName: workerConnectRejectMessage.endpointName,
+            connectionId: workerConnectRejectMessage.connectionId,
+            reason: workerConnectRejectMessage.reason
+        });
     }
 
     /**
@@ -205,124 +209,7 @@ export class WorkerConnectReject extends WorkerMessage {
     static from(message) {
         checkType(this, message);
         const data = message.data;
-        return new WorkerConnectReject(data.connectionId, data.reason);
-    }
-}
-
-
-export class GenerateChunkRequest {
-    /**
-     * @param {Vec3} chunkPos - The position of the chunk to be generated.
-     */
-    constructor(chunkPos) {
-        this.chunkPos = chunkPos;
-    }
-
-    toMessage() {
-        return new MessageTransportData("generateChunkRequest", { chunkPos: this.chunkPos });
-    }
-
-    /**
-     * Creates a GenerateChunkRequest from a given message event.
-     * @param {MessageEvent} message - The message event containing the chunk request data.
-     * @returns {GenerateChunkRequest} A new instance of GenerateChunkRequest.
-     * @throws Will throw an error if the message type is not "chunkRequest".
-     */
-    static from(message) {
-        const data = message.data;
-        if (data.type !== "generateChunkRequest") {
-            throw new Error("Invalid message type for GenerateChunkRequest: " + data.type);
-        }
-        return new GenerateChunkRequest(vec3(data.chunkPos.x, data.chunkPos.y, data.chunkPos.z));
-    }
-}
-
-export class GenerateChunkResponse {
-
-    /**
-     * @param {Vec3} chunkPos - The position of the generated chunk.
-     * @param {ChunkBlockData} chunkBlockData - The transferred chunk block data.
-     */
-
-    constructor(chunkPos, chunkBlockData) {
-        this.chunkPos = chunkPos;
-        this.chunkBlockData = chunkBlockData;
-    }
-
-    toMessage() {
-        return new MessageTransportData("generateChunkResponse",
-            { chunkPos: this.chunkPos, chunkBlockData: this.chunkBlockData.data.buffer },
-            [this.chunkBlockData.data.buffer]);
-    }
-
-    /**
-     * Creates a GenerateChunkResponse from a given message event.
-     * @param {MessageEvent} message - The message event containing the chunk response data.
-     * @returns {GenerateChunkResponse} A new instance of GenerateChunkResponse.
-     * @throws Will throw an error if the message type is not "generateChunkResponse".
-     */
-    static from(message) {
-        const data = message.data;
-        if (data.type !== "generateChunkResponse") {
-            throw new Error("Invalid message type for GenerateChunkResponse: " + data.type);
-        }
-        return new GenerateChunkResponse(data.data.chunkPos, new ChunkBlockData(new Uint32Array(data.data.chunkBlockData)));
-    }
-}
-
-export class MeshChunkRequest {
-    /**
-     * @param {Vec3} chunkPos - The position of the chunk to be meshed.
-     * @param {ChunkData} chunkData - The transferred chunk data of the chunk to be meshed.
-     */
-    constructor(chunkPos, chunkData) {
-        this.chunkPos = chunkPos;
-        this.chunkData = chunkData;
-    }
-
-    toMessage() {
-        const tChunkData = CHUNK_DATA_TRANSFER.transfer(this.chunkData);
-        return new MessageTransportData("meshChunkRequest",
-            { chunkPos: this.chunkPos, chunkData: tChunkData.data },
-            tChunkData.transferList);
-    }
-
-    static from(message) {
-        const data = message.data;
-        if (data.type !== "meshChunkRequest") {
-            throw new Error("Invalid message type for MeshChunkRequest: " + data.type);
-        }
-        return new MeshChunkRequest(data.data.chunkPos, CHUNK_DATA_TRANSFER.createFrom(data.data.chunkData));
-    }
-}
-
-export class MeshChunkResponse {
-    /**
-     * @param {Vec3} chunkPos - The position of the chunk to be meshed.
-     * @param {MeshData} meshData - The transferrable mesh data of the meshed chunk.
-     */
-    constructor(chunkPos, meshData) {
-        this.chunkPos = chunkPos;
-        this.meshData = meshData;
-    }
-
-    toMessage() {
-        const tMeshData = MESH_DATA_TRANSFER.transfer(this.meshData);
-        return new MessageTransportData("meshChunkResponse", { chunkPos: this.chunkPos, meshData: tMeshData.data }, tMeshData.transferList);
-    }
-
-    /**
-     * Creates a MeshChunkResponse from a given message event.
-     * @param {MessageEvent} message - The message event containing the mesh chunk response data.
-     * @returns {MeshChunkResponse} A new instance of MeshChunkResponse.
-     * @throws Will throw an error if the message type is not "meshChunkResponse".
-     */
-    static from(message) {
-        const data = message.data;
-        if (data.type !== "meshChunkResponse") {
-            throw new Error("Invalid message type for MeshChunkResponse: " + data.type);
-        }
-        return new MeshChunkResponse(data.data.chunkPos, MESH_DATA_TRANSFER.createFrom(data.data.meshData));
+        return new WorkerConnectReject(data.endpointName, data.connectionId, data.reason);
     }
 }
 
@@ -335,14 +222,16 @@ export class ChunkRequest extends WorkerMessage {
 
     /**
      * @param {Vec3} chunkPos - The position of the chunk to be generated.
+     * @param {number} requestId - Returned in the {@link ChunkResponse}, lets the requester drop responses to outdated requests.
      */
-    constructor(chunkPos) {
+    constructor(chunkPos, requestId) {
         super();
         this.chunkPos = chunkPos;
+        this.requestId = requestId;
     }
 
     static toMessage(chunkRequest) {
-        return new MessageTransportData(ChunkRequest.type, { chunkPos: chunkRequest.chunkPos });
+        return new MessageTransportData(ChunkRequest.type, { chunkPos: chunkRequest.chunkPos, requestId: chunkRequest.requestId });
     }
 
     /**
@@ -354,7 +243,7 @@ export class ChunkRequest extends WorkerMessage {
     static from(message) {
         checkType(this, message);
         const data = message.data;
-        return new ChunkRequest(new Vec3(data.chunkPos.x, data.chunkPos.y, data.chunkPos.z));
+        return new ChunkRequest(toVec3(data.chunkPos), data.requestId);
     }
 }
 
@@ -369,33 +258,21 @@ export class ChunkResponse extends WorkerMessage {
      * @param {Vec3} chunkPos - The position of the generated chunk.
      * @param {ChunkData} chunkData - Chunk data to transfer.
      * @param {ChunkMesh} chunkMesh - Mesh data to transfer.
+     * @param {number} requestId - The id of the {@link ChunkRequest} this responds to.
      */
-
-    constructor(chunkPos, chunkData, chunkMesh) {
+    constructor(chunkPos, chunkData, chunkMesh, requestId) {
         super();
         this.chunkPos = chunkPos;
         this.chunkData = chunkData;
         this.chunkMesh = chunkMesh;
+        this.requestId = requestId;
     }
 
     static toMessage(chunkResponse) {
         const tMeshData = MESH_DATA_TRANSFER.transfer(chunkResponse.chunkMesh);
         const tChunkData = CHUNK_DATA_TRANSFER.transfer(chunkResponse.chunkData);
         return new MessageTransportData(ChunkResponse.type, {
-            chunkPos: chunkResponse.chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data
-        }, [...tChunkData.transferList, ...tMeshData.transferList]);
-    }
-
-    /**
-     * @param {Vec3} chunkPos - The position of the generated chunk.
-     * @param {ChunkData} chunkData - Chunk data to transfer.
-     * @param {ChunkMesh} chunkMesh - Mesh data to transfer.
-     */
-    static from(chunkPos, chunkData, chunkMesh) {
-        const tMeshData = MESH_DATA_TRANSFER.transfer(chunkMesh);
-        const tChunkData = CHUNK_DATA_TRANSFER.transfer(chunkData);
-        return new MessageTransportData(ChunkResponse.type, {
-            chunkPos: chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data
+            chunkPos: chunkResponse.chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data, requestId: chunkResponse.requestId
         }, [...tChunkData.transferList, ...tMeshData.transferList]);
     }
 
@@ -403,32 +280,229 @@ export class ChunkResponse extends WorkerMessage {
      * Creates a ChunkResponse from a given message event.
      * @param {MessageEvent} message - The message event containing the chunk response data.
      * @returns {ChunkResponse} A new instance of ChunkResponse.
-     * @throws Will throw an error if the message type is not "chunkResponse".
+     * @throws Will throw an error if the message type is not "chunk_response".
      */
-    static fromMessage(message) {
+    static from(message) {
         checkType(this, message);
         const data = message.data;
-        return new ChunkResponse(data.chunkPos,
+        return new ChunkResponse(toVec3(data.chunkPos),
             CHUNK_DATA_TRANSFER.createFrom(data.chunkData),
-            MESH_DATA_TRANSFER.createFrom(data.chunkMesh));
+            MESH_DATA_TRANSFER.createFrom(data.chunkMesh),
+            data.requestId);
     }
 }
 
+/**
+ * The chunk the camera is in and the load range. The chunk loader processes pending requests nearest to this chunk
+ * first and drops pending requests out of the range, by the same rule the requester uses to drop chunks that are
+ * not loaded yet, so no cancel message is needed for them.
+ */
+export class ChunkLoadCenter extends WorkerMessage {
 
-// export function connectWorker(worker) {
-//     worker.onmessage = (message) => {
-//         switch (message.data.type) {
-//             case "ready":
-//                 const workerReady = WorkerReadyResponse.from(message);
-//                 logger.info(() => `generator worker ${workerReady.workerId} ready, sending connection port`);
-//                 new ConnectionPortRequest(genChannel.port1).toMessage().post(generatorWorker);
-//                 break;
-//             case "connectionResponse":
-//                 const connectionResponse = ConnectionPortResponse.from(message);
-//                 logger.info(() => `generator worker ${connectionResponse.connectionId} connected`);
-//                 break;
-//             default:
-//                 logger.warn(() => "unknown message type: " + message.data.type);
-//         }
-//     }
-// }
+    static get type() {
+        return "chunk_load_center";
+    }
+
+    /**
+     * @param {Vec3} chunkPos - The chunk the camera is in.
+     * @param {number} rangeSq - Squared load range in chunks; requests with a larger squared distance are dropped.
+     */
+    constructor(chunkPos, rangeSq) {
+        super();
+        this.chunkPos = chunkPos;
+        this.rangeSq = rangeSq;
+    }
+
+    static toMessage(chunkLoadCenter) {
+        return MessageTransportData.create(ChunkLoadCenter.type, { chunkPos: chunkLoadCenter.chunkPos, rangeSq: chunkLoadCenter.rangeSq });
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {ChunkLoadCenter}
+     */
+    static from(message) {
+        checkType(this, message);
+        return new ChunkLoadCenter(toVec3(message.data.chunkPos), message.data.rangeSq);
+    }
+}
+
+/**
+ * Cancels pending {@link ChunkRequest}s. Requests the loader already processed are answered anyway,
+ * the requester drops those responses by request id.
+ */
+export class ChunkCancel extends WorkerMessage {
+
+    static get type() {
+        return "chunk_cancel";
+    }
+
+    /**
+     * @param {Array<number>} requestIds - Ids of the requests to cancel.
+     */
+    constructor(requestIds) {
+        super();
+        this.requestIds = requestIds;
+    }
+
+    static toMessage(chunkCancel) {
+        return MessageTransportData.create(ChunkCancel.type, { requestIds: chunkCancel.requestIds });
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {ChunkCancel}
+     */
+    static from(message) {
+        checkType(this, message);
+        return new ChunkCancel(message.data.requestIds);
+    }
+}
+
+export class GenerateChunkRequest extends WorkerMessage {
+
+    static get type() {
+        return "generate_chunk_request";
+    }
+
+    /**
+     * @param {Vec3} chunkPos - The position of the chunk to generate.
+     */
+    constructor(chunkPos) {
+        super();
+        this.chunkPos = chunkPos;
+    }
+
+    static toMessage(generateChunkRequest) {
+        return MessageTransportData.create(GenerateChunkRequest.type, { chunkPos: generateChunkRequest.chunkPos });
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {GenerateChunkRequest}
+     */
+    static from(message) {
+        checkType(this, message);
+        return new GenerateChunkRequest(toVec3(message.data.chunkPos));
+    }
+}
+
+export class GenerateChunkResponse extends WorkerMessage {
+
+    static get type() {
+        return "generate_chunk_response";
+    }
+
+    /**
+     * @param {Vec3} chunkPos - The position of the generated chunk.
+     * @param {ChunkBlockData} chunkBlockData - Generated blocks, transferred.
+     */
+    constructor(chunkPos, chunkBlockData) {
+        super();
+        this.chunkPos = chunkPos;
+        this.chunkBlockData = chunkBlockData;
+    }
+
+    static toMessage(generateChunkResponse) {
+        const buffer = generateChunkResponse.chunkBlockData.data.buffer;
+        return MessageTransportData.create(GenerateChunkResponse.type,
+            { chunkPos: generateChunkResponse.chunkPos, chunkBlockData: buffer },
+            [buffer]);
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {GenerateChunkResponse}
+     */
+    static from(message) {
+        checkType(this, message);
+        const data = message.data;
+        return new GenerateChunkResponse(toVec3(data.chunkPos), new ChunkBlockData(new Uint32Array(data.chunkBlockData)));
+    }
+}
+
+export class MeshChunkRequest extends WorkerMessage {
+
+    static get type() {
+        return "mesh_chunk_request";
+    }
+
+    /**
+     * @param {Vec3} chunkPos - The position of the chunk to mesh.
+     * @param {ChunkData} chunkData - Chunk data with borders, transferred.
+     */
+    constructor(chunkPos, chunkData) {
+        super();
+        this.chunkPos = chunkPos;
+        this.chunkData = chunkData;
+    }
+
+    static toMessage(meshChunkRequest) {
+        const tChunkData = CHUNK_DATA_TRANSFER.transfer(meshChunkRequest.chunkData);
+        return MessageTransportData.create(MeshChunkRequest.type,
+            { chunkPos: meshChunkRequest.chunkPos, chunkData: tChunkData.data },
+            tChunkData.transferList);
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {MeshChunkRequest}
+     */
+    static from(message) {
+        checkType(this, message);
+        const data = message.data;
+        return new MeshChunkRequest(toVec3(data.chunkPos), CHUNK_DATA_TRANSFER.createFrom(data.chunkData));
+    }
+}
+
+/**
+ * The mesher sends the chunk data back together with the mesh, so the requester can forward it
+ * (for example to the main thread) without keeping a copy while the chunk is being meshed.
+ */
+export class MeshChunkResponse extends WorkerMessage {
+
+    static get type() {
+        return "mesh_chunk_response";
+    }
+
+    /**
+     * @param {Vec3} chunkPos - The position of the meshed chunk.
+     * @param {MeshData} meshData - Mesh data, transferred.
+     * @param {ChunkData} chunkData - The chunk data the mesh was created from, transferred back.
+     */
+    constructor(chunkPos, meshData, chunkData) {
+        super();
+        this.chunkPos = chunkPos;
+        this.meshData = meshData;
+        this.chunkData = chunkData;
+    }
+
+    static toMessage(meshChunkResponse) {
+        const tMeshData = MESH_DATA_TRANSFER.transfer(meshChunkResponse.meshData);
+        const tChunkData = CHUNK_DATA_TRANSFER.transfer(meshChunkResponse.chunkData);
+        return MessageTransportData.create(MeshChunkResponse.type, {
+            chunkPos: meshChunkResponse.chunkPos, meshData: tMeshData.data, chunkData: tChunkData.data
+        }, [...tMeshData.transferList, ...tChunkData.transferList]);
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {MeshChunkResponse}
+     */
+    static from(message) {
+        checkType(this, message);
+        const data = message.data;
+        return new MeshChunkResponse(toVec3(data.chunkPos),
+            MESH_DATA_TRANSFER.createFrom(data.meshData),
+            CHUNK_DATA_TRANSFER.createFrom(data.chunkData));
+    }
+}
+
+/**
+ * Structured clone drops the prototype, so positions arrive as plain objects.
+ * @param {{x: number, y: number, z: number}} pos
+ * @returns {Vec3}
+ */
+function toVec3(pos) {
+    return new Vec3(pos.x, pos.y, pos.z);
+}

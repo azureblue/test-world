@@ -7,12 +7,9 @@ import { MeshHandler } from "./mesh/mesh.js";
 import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
 import { UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
-import { ChunkRequest, ChunkResponse } from "./worker/common.js";
+import { ChunkLoadCenter, ChunkRequest, ChunkResponse, MessageTransportData } from "./worker/common.js";
 import { WorkerClient } from "./worker/worker.js";
 
-/**
- * @typedef {import("./chunkLoader.js").ChunkResponseData} ChunkResponseData
- */
 const params = new URL(self.location.href).searchParams;
 const generatorName = params.get("gen") ?? "default";
 const fastMesher = params.get("fastMesher") === "true";
@@ -34,6 +31,8 @@ class ChunkEntry {
     loaded = false;
     shouldRemove = false;
     dirty = false;
+    /** id of the latest request for this chunk, responses to older requests are dropped */
+    requestId = 0;
 
     /** @param {Vec3} position */
     constructor(position) {
@@ -91,7 +90,6 @@ export class World {
     #chunkLoaderWorkerClient;
     /** @type {MessagePort} */
     #chunkLoadPort;
-    #loaderIndex = 0;
     #tmpBuffer = new GenericBuffer(1000);
     #pos = fvec3();
     #chunkPos = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
@@ -112,8 +110,10 @@ export class World {
     /** @type {Map<string, object} */
     #chunkDataQueue = new Map();
 
-    /**@type {GenericBuffer<IVec3>} */
-    #initialChunkRequestQueue = [];
+    /** messages to the chunk loader posted before it was connected, sent in order once it is
+     * @type {Array<MessageTransportData>} */
+    #initialMessageQueue = [];
+    #nextRequestId = 1;
 
     /**@type {ChunkLoadPromise} */
     #currentChunkPromise = null;
@@ -147,60 +147,14 @@ export class World {
             this.#workerReady = true;
             this.#chunkLoadPort = messagePort;
             this.#chunkLoadPort.onmessage = (message) => {
-                const chunkResponse = ChunkResponse.fromMessage(message.data);
+                const chunkResponse = ChunkResponse.from(message.data);
                 this.onChunk(chunkResponse);
             }
-            for (let cpos of this.#initialChunkRequestQueue) {
-                this.#sendChunkRequestToWorker(0, cpos);
+            for (const message of this.#initialMessageQueue) {
+                message.post(this.#chunkLoadPort);
             }
-            this.#initialChunkRequestQueue = [];
+            this.#initialMessageQueue = [];
         });
-        // this.#chunkLoader = new Worker(Resources.relativeToRoot(`./worker/worldWorker.js?workerId=world0`), { type: "module" });
-        // this.#chunkLoader.onmessage = (message) => {
-        //     switch (message.data.type) {
-        //         case "ready":
-        //             const workerReady = WorkerReadyResponse.from(message);
-        //             logger.info(() => `world worker ${workerReady.workerId} ready, sending connection port`);
-        //             new ConnectionPortRequest(this.#messageChannel.port1, "asd").toMessage().post(this.#chunkLoader);
-        //             break;
-        //         case "connectionPortResponse":
-        //             const connectionResponse = ConnectionPortResponse.from(message);
-        //             logger.info(() => `worker world0 connected to World with connection id ${connectionResponse.connectionId}`);
-        //             this.#workerReady = true;
-        //             for (let cpos of this.#initialChunkRequestQueue) {
-        //                 this.#sendChunkRequestToWorker(0, cpos);
-        //             }
-        //             this.#initialChunkRequestQueue = [];
-        //             break;
-        //         default:
-        //             logger.warn(() => "unknown message type: " + message.data.type);
-        //     }
-        // };
-        // this.#messageChannel.port2.onmessage = (message) => {
-        //     const chunkResponse = ChunkResponse.from(message);          
-        //     this.onChunk(chunkResponse);  
-        // }
-
-        // for (let i = 0; i < 4; i++) {
-        //     const id = i;
-        //     const worker = new Worker(Resources.relativeToRoot(`./chunkLoader.js?workerId=${id}`), { type: "module" });
-        //     worker.ready = false;
-        //     worker.initialChunkRequestQueue = []
-        //     worker.onmessage = (me) => {
-        //         if (me.data.type === "ready") {
-        //             worker.ready = true;
-        //             console.log("chunk loader worker ready: " + me.data.data.workerId);
-        //             for (let cpos of worker.initialChunkRequestQueue) {
-        //                 this.#sendChunkRequestToWorker(id, cpos);
-        //             }
-        //             worker.initialChunkRequestQueue = [];
-        //         } else if (me.data.type === "chunkResponse") {
-        //             this.onChunk(me.data.data);
-        //         }
-        //     }
-        //     this.#chunkLoaders.push(worker);
-        // }
-
         /** @type {GenericBuffer<Vec3>} */
         const tmpBuff = new GenericBuffer(512);
         for (let dx = -CHUNK_RENDER_DIST; dx <= CHUNK_RENDER_DIST; dx++)
@@ -216,22 +170,19 @@ export class World {
         this.#rangeDeltas.sort((a, b) => (a.x * a.x + a.y * a.y + a.z * a.z) - (b.x * b.x + b.y * b.y + b.z * b.z));
     }
 
-    #sendChunkRequestToWorker(workerId, chunkPos) {
-        ChunkRequest.toMessage(new ChunkRequest(chunkPos)).post(this.#chunkLoadPort);
-        // this.#chunkLoaders[workerId].postMessage({
-        //     type: "chunkRequest",
-        //     data: { chunkPos: chunkPos }
-        // });
+    /** @param {MessageTransportData} message */
+    #postToChunkLoader(message) {
+        if (!this.#workerReady) {
+            this.#initialMessageQueue.push(message);
+        } else {
+            message.post(this.#chunkLoadPort);
+        }
     }
 
-    #requestChunk(cx, cy, cz) {
-        const workerId = this.#loaderIndex;
-        if (!this.#workerReady) {
-            this.#initialChunkRequestQueue.push(vec3(cx, cy, cz));
-        } else {
-            this.#sendChunkRequestToWorker(workerId, vec3(cx, cy, cz));
-        }
-        // this.#loaderIndex = (this.#loaderIndex + 1) % this.#chunkLoaders.length;
+    /** @param {ChunkEntry} entry */
+    #requestChunk(entry) {
+        entry.requestId = this.#nextRequestId++;
+        this.#postToChunkLoader(ChunkRequest.toMessage(new ChunkRequest(entry.position, entry.requestId)));
     }
 
     /**
@@ -240,9 +191,13 @@ export class World {
     onChunk(data) {
         const chunkPos = data.chunkPos;
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
-        if (this.#currentChunkPromise != null && this.#currentChunkPromise.key == key)
+        if (this.#currentChunkPromise != null && this.#currentChunkPromise.key == key) {
             this.processChunkData(data);
-        else
+            return;
+        }
+        // keep the response to the newest request, also when responses arrive out of order
+        const queued = this.#chunkDataQueue.get(key);
+        if (queued === undefined || data.requestId > queued.requestId)
             this.#chunkDataQueue.set(key, data);
     }
 
@@ -267,11 +222,13 @@ export class World {
             return false;
         }
         const entry = this.#chunks.get(key);
-        if (entry.loaded) {
-            if (!entry.dirty) {
-                logger.warn(() => "got chunk data, but not dirty" + key);
-            }
-            // logger.warn("got chunk data, but already loaded" + key);
+        if (data.requestId !== entry.requestId) {
+            // the chunk left the range and was requested again while the old request was still in the worker queue
+            logger.debug(() => `dropping response to outdated request ${data.requestId} for ${key}, current ${entry.requestId}`);
+            return false;
+        }
+        if (entry.loaded && !entry.dirty) {
+            logger.warn(() => "got chunk data, but not dirty " + key);
         }
 
         const now = performance.now();
@@ -283,6 +240,10 @@ export class World {
             mesh = this.#meshHandler.upload(meshData);
         }
 
+        const oldMesh = entry.chunk?.mesh;
+        if (oldMesh) {
+            this.#meshHandler.dispose(oldMesh);
+        }
         const chunk = new Chunk(chunkPos, chunkData, mesh);
         entry.chunk = chunk;
         entry.loaded = true;
@@ -315,6 +276,10 @@ export class World {
     }
 
     #updateChunksInRange() {
+        // the loader picks pending requests nearest to this chunk first and drops the ones out of range,
+        // by the same rule as below for entries that are not loaded yet
+        const center = vec3(this.#chunkPos.x, this.#chunkPos.y, this.#chunkPos.z);
+        this.#postToChunkLoader(ChunkLoadCenter.toMessage(new ChunkLoadCenter(center, CHUNK_RENDER_DIST_SQ)));
         // if (this.#frame == 1) {
         this.#tmpBuffer.reset();
         for (const key of this.#chunks.keys()) {
@@ -331,7 +296,12 @@ export class World {
             const dx = x - this.#chunkPos.x;
             const dy = y - this.#chunkPos.y;
             const dz = z - this.#chunkPos.z;
-            if (dx * dx + dy * dy + dz * dz > CHUNK_RETAIN_DIST_SQ) {
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (!chunkEntry.loaded && distSq > CHUNK_RENDER_DIST_SQ) {
+                // not loaded yet and out of range: the loader drops the request too (see ChunkLoadCenter),
+                // it's requested again when it gets back in range
+                this.#chunks.delete(key);
+            } else if (distSq > CHUNK_RETAIN_DIST_SQ) {
                 // logger.info("removing chunk: " + x + " " + y + " " + z);
                 const mesh = chunkEntry.chunk?.mesh;
                 if (mesh) {
@@ -354,7 +324,7 @@ export class World {
                 const entry = new ChunkEntry(vec3(cx, cy, cz));
                 // logger.info(`requesting chunk  (${cx}, ${cy}, ${cz})`);
                 this.#chunks.set(key, entry);
-                this.#requestChunk(cx, cy, cz);
+                this.#requestChunk(entry);
             }
         }
         this.#chunkKeysSorted.trimToSize();

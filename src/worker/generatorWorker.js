@@ -1,56 +1,35 @@
-import { ChunkExtDataFactory, ChunkDataExtTransfer as ChunkExtDataTransfer } from "../chunk/extChunk.js";
-import { createGenerator } from "../gen/generator.js";
+import { ChunkGeneratorFactory } from "../gen/registry.js";
 import { Logger } from "../logging.js";
-import { ConnectionPortRequest, ConnectionPortResponse, GenerateChunkRequest, GenerateChunkResponse, WorkerReadyResponse } from "./common.js";
+import { perfDiff } from "../utils.js";
+import { GenerateChunkRequest, GenerateChunkResponse } from "./common.js";
+import { WorkerConnection, WorkerServer } from "./worker.js";
+
+// Generates block data only: chunk position in, block data out. Keeps no state between requests,
+// so any number of these can run in parallel behind a coordinator (see docs/proposals/worker-pipeline.md).
 
 const params = new URL(self.location.href).searchParams;
-const WORKER_ID = params.get("workerId");
-const logger = new Logger("chunk generator worker " + WORKER_ID);
+const workerId = params.get("workerId");
+const generatorName = params.get("gen") ?? "default";
 
-logger.info(() => "booted " + self.location?.href);
+const logger = new Logger("chunk generator worker " + workerId);
+const generator = await ChunkGeneratorFactory.createForName(generatorName);
 
-const generator = createGenerator(); // new Generator02();
-const chunkDataFactory = new ChunkExtDataFactory();
-const chunkDataTransfer = new ChunkExtDataTransfer();
+const workerServer = new WorkerServer(self, workerId, {
 
-/** * Loads chunk data for the specified chunk position and posts it back to the main thread.
- * @param {MessagePort} port - The message port to post the chunk data to.
- * @param {Vec3} chunkPos - The position of the chunk to load as [cx, cy, cz].
- */
-function loadAndPost(port, chunkPos) {
-    const chunkLoadStart = performance.now();
-    const cx = chunkPos.x;
-    const cy = chunkPos.y;
-    const cz = chunkPos.z;
-    logger.debug(() => `handling chunk request (${cx}, ${cy}, ${cz})`);
-    const chunkBlockData = generator.generateChunk(chunkPos);
+    generate: {
+        /**
+         * @param {any} data
+         * @param {WorkerConnection} connection
+         */
+        onMessage: (data, connection) => {
+            const chunkPos = GenerateChunkRequest.from(data).chunkPos;
+            const start = performance.now();
+            const chunkBlockData = generator.generateChunk(chunkPos);
+            logger.debug(() => `generated chunk (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z}) in ${perfDiff(start)} ms`);
 
-    const chunkLoadTime = performance.now() - chunkLoadStart;
-    logger.debug(() => chunkBlockData.data.reduce((acc, val) => acc + val, 0) + " blocks generated");
-    logger.debug(() => `complete loading chunk (${cx}, ${cy}, ${cz}) in ${chunkLoadTime} - posting`);
-
-    // const chunkDataTransferObject = chunkDataTransfer.transfer(chunkData);
-
-    const generateChunkResponseMessage = new GenerateChunkResponse(
-        chunkPos, chunkBlockData).toMessage();
-
-    generateChunkResponseMessage.post(port);
-}
-
-
-onmessage = (message) => {
-    const connectionPortMessage = ConnectionPortRequest.from(message);
-    const port = connectionPortMessage.port;
-    logger.info(() => "received connection port, setting up message handler");
-    port.onmessage = (chunkRequestMessage) => {
-        const generateChunkRequest = GenerateChunkRequest.from(chunkRequestMessage);
-        const chunkPos = generateChunkRequest.chunkPos;
-        logger.debug(() => "generate chunk request: " + chunkPos.x + " " + chunkPos.y + " " + chunkPos.z);
-        loadAndPost(port, chunkPos);
+            GenerateChunkResponse.toMessage(new GenerateChunkResponse(chunkPos, chunkBlockData)).post(connection.port);
+        }
     }
-    new ConnectionPortResponse(connectionPortMessage.connectionId).toMessage().post(self);
-};
+});
 
-logger.info(() => "initialized");
-const readyMessage = new WorkerReadyResponse(WORKER_ID);
-postMessage(readyMessage.toMessage());
+workerServer.start();

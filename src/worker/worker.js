@@ -8,7 +8,7 @@ export class WorkerClient {
      * @param {Worker} worker
      * @param {Logger} [logger]
      */
-    constructor(worker, logger = {}) {
+    constructor(worker, logger = new Logger("WorkerClient")) {
         this.worker = worker;
         this.logger = logger;
 
@@ -76,7 +76,7 @@ export class WorkerClient {
             const workerConnectAck = WorkerConnectAck.from(msg);
             const pending = this.pendingConnections.get(workerConnectAck.connectionId);
             if (!pending) {
-                this.logger.warn(`Unexpected connect ack: ${workerConnectAck.connectionId}`);
+                this.logger.warn(() => `Unexpected connect ack: ${workerConnectAck.connectionId}`);
                 return;
             }
 
@@ -89,7 +89,7 @@ export class WorkerClient {
             const workerConnectReject = WorkerConnectReject.from(msg);
             const pending = this.pendingConnections.get(workerConnectReject.connectionId);
             if (!pending) {
-                this.logger.warn(`Unexpected connect reject: ${workerConnectReject.connectionId}`);
+                this.logger.warn(() => `Unexpected connect reject: ${workerConnectReject.connectionId}`);
                 return;
             }
 
@@ -160,15 +160,19 @@ export class WorkerServer {
             this.endpointConnections[endpointName].add(connection);
 
             connection.port.onmessage = (portEvent) => {
+                const logError = (err) => this.logger.error(() => `Endpoint ${endpointName} onMessage failed: ${err}`);
                 try {
-                    endpoint.onMessage(portEvent.data, connection);
-                } catch (err) {                    
-                    this.logger.error(() => `Endpoint ${endpointName} onMessage failed: ${err}`);
+                    // handlers may be async, their rejections would otherwise be lost
+                    const result = endpoint.onMessage(portEvent.data, connection);
+                    if (result instanceof Promise)
+                        result.catch(logError);
+                } catch (err) {
+                    logError(err);
                 }
             };
 
             try {
-                endpoint.onConnect?.(connection);
+                await endpoint.onConnect?.(connection);
             } catch (err) {
                 this.logger.error(() => `Endpoint ${endpointName} onConnect failed: ${err}`);
                 this.endpointConnections[endpointName].delete(connection);
@@ -249,182 +253,3 @@ export class WorkerConnection {
         }
     }
 }
-
-// export class WorkerReadyMessage {
-//     /**
-//      * @param {string} workerId
-//      * @param {string[]} supportedEndpoints
-//      */
-//     constructor(workerId, supportedEndpoints = []) {
-//         this.workerId = workerId;
-//         this.supportedEndpoints = supportedEndpoints;
-//     }
-
-//     toMessage() {
-//         return {
-//             kind: "worker_ready",
-//             workerId: this.workerId,
-//             supportedEndpoints: this.supportedEndpoints
-//         };
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {boolean}
-//      */
-//     static is(msg) {
-//         return msg?.kind === "worker_ready";
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {WorkerReadyMessage}
-//      */
-//     static fromWire(msg) {
-//         if (!WorkerReadyMessage.is(msg)) {
-//             throw new Error(`Invalid WorkerReadyMessage: ${msg?.kind}`);
-//         }
-
-//         return new WorkerReadyMessage(
-//             msg.workerId,
-//             Array.isArray(msg.supportedEndpoints) ? msg.supportedEndpoints : []
-//         );
-//     }
-// }
-
-// export class WorkerConnectRequestMessage {
-//     /**
-//      * @param {string} endpointName
-//      * @param {number} connectionId
-//      * @param {MessagePort} port
-//      */
-//     constructor(endpointName, connectionId, port) {
-//         this.endpointName = endpointName;
-//         this.connectionId = connectionId;
-//         this.port = port;
-//     }
-
-//     toWire() {
-//         return {
-//             message: {
-//                 kind: "worker_connect_request",
-//                 endpointName: this.endpointName,
-//                 connectionId: this.connectionId,
-//                 port: this.port
-//             },
-//             transferList: [this.port]
-//         };
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {boolean}
-//      */
-//     static is(msg) {
-//         return msg?.kind === "worker_connect_request";
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {WorkerConnectRequestMessage}
-//      */
-//     static fromWire(msg) {
-//         if (!WorkerConnectRequestMessage.is(msg)) {
-//             throw new Error(`Invalid WorkerConnectRequestMessage: ${msg?.kind}`);
-//         }
-
-//         return new WorkerConnectRequestMessage(
-//             msg.endpointName,
-//             msg.connectionId,
-//             msg.port
-//         );
-//     }
-// }
-
-// export class WorkerConnectAckMessage {
-//     /**
-//      * @param {string} endpointName
-//      * @param {number} connectionId
-//      */
-//     constructor(endpointName, connectionId) {
-//         this.endpointName = endpointName;
-//         this.connectionId = connectionId;
-//     }
-
-//     toWire() {
-//         return {
-//             kind: "worker_connect_ack",
-//             endpointName: this.endpointName,
-//             connectionId: this.connectionId
-//         };
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {boolean}
-//      */
-//     static is(msg) {
-//         return msg?.kind === "worker_connect_ack";
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {WorkerConnectAckMessage}
-//      */
-//     static fromWire(msg) {
-//         if (!WorkerConnectAckMessage.is(msg)) {
-//             throw new Error(`Invalid WorkerConnectAckMessage: ${msg?.kind}`);
-//         }
-
-//         return new WorkerConnectAckMessage(
-//             msg.endpointName,
-//             msg.connectionId
-//         );
-//     }
-// }
-
-// export class WorkerConnectRejectMessage {
-//     /**
-//      * @param {string} endpointName
-//      * @param {number} connectionId
-//      * @param {string} error
-//      */
-//     constructor(endpointName, connectionId, error) {
-//         this.endpointName = endpointName;
-//         this.connectionId = connectionId;
-//         this.error = error;
-//     }
-
-//     toWire() {
-//         return {
-//             kind: "worker_connect_reject",
-//             endpointName: this.endpointName,
-//             connectionId: this.connectionId,
-//             error: this.error
-//         };
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {boolean}
-//      */
-//     static is(msg) {
-//         return msg?.kind === "worker_connect_reject";
-//     }
-
-//     /**
-//      * @param {any} msg
-//      * @returns {WorkerConnectRejectMessage}
-//      */
-//     static fromWire(msg) {
-//         if (!WorkerConnectRejectMessage.is(msg)) {
-//             throw new Error(`Invalid WorkerConnectRejectMessage: ${msg?.kind}`);
-//         }
-
-//         return new WorkerConnectRejectMessage(
-//             msg.endpointName,
-//             msg.connectionId,
-//             msg.error
-//         );
-//     }
-// }
