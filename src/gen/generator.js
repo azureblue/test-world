@@ -548,7 +548,7 @@ export class NoiseChunkGenerator extends ChunkGenerator {
                 r++;
                 if (r < chunkEndH && r === height) {
                     if (Math.random() < 0.05)
-                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT);
+                    blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT_0);
                 }
 
                 for (let w = r; w < Math.min(waterLevel, chunkEndH); w++) {
