@@ -268,14 +268,16 @@ export class UIntMeshDrawer {
 
     /**
      * @param {UIntMesh} mesh 
+     * @param {WebGLUniformLocation} [uTranslation] the translation uniform of the program in use, when it's not the
+     *   water program (the water depth-only pre-pass)
      */
-    drawNonSolids(mesh) {
+    drawNonSolids(mesh, uTranslation = this.#uWaterTranslation) {
         if (mesh.liquidLen === 0)
             return;
         const gl = this.#gl;
         gl.bindVertexArray(mesh.vaWater);
         const modelTranslation = mesh.modelTranslation;
-        gl.uniform3f(this.#uWaterTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+        gl.uniform3f(uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
         gl.drawArrays(gl.TRIANGLES, 0, mesh.liquidLen);
         this.stats.waterDraws++;
         this.stats.waterTris += mesh.liquidLen / 3;

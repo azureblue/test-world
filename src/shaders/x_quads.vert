@@ -1,5 +1,4 @@
 #version 300 es
-#define VIEW_DISTANCE_SQ 409600.0 /* @viewDistanceSq */
 #define b1 1u
 #define b11 3u
 #define b111 7u
@@ -16,16 +15,23 @@
 // ttttTTTThwzzzzzzzyyyyyyyxxxxxxx
 //10987654321098765432109876543210
 layout (location = 0) in uint a_in;
+// Camera block: identical in every shader, see README.md
 layout (std140) uniform Camera {
-    mat4 cam_projection_view;
-    vec3 cam_pos;
+    highp mat4 cam_projection_view;
+    highp vec3 cam_pos;
+    highp float fog_inv_dist_sq;
+    highp vec3 fog_color;
+    highp float fog_scale;
+    highp float fog_bias;
+    highp float fog_min;
+    highp float fog_range;
 };
 uniform vec3 m_translation;
 
-const float INV_VIEW_DISTANCE_SQ = 1.0f / VIEW_DISTANCE_SQ;
 
 out highp vec3 v_tex_coord;
-smooth out float fading;
+// vertex to camera; linear across a triangle, so the fragment shader gets the exact distance for the fog
+smooth out highp vec3 v_to_cam;
 
 void main() {
     uint x = (a_in >> 0) & b111_1111;
@@ -40,9 +46,6 @@ void main() {
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 
-    vec3 pos_to_cam_diff = cam_pos - pos;
-    float cam_to_pos_dist_sq = dot(pos_to_cam_diff, pos_to_cam_diff);
-
-    fading = clamp(cam_to_pos_dist_sq * INV_VIEW_DISTANCE_SQ, 0.0f, 1.0f);
+    v_to_cam = cam_pos - pos;
     v_tex_coord = vec3(m_x, m_y, float(tex_idx));
 }

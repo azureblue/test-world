@@ -94,7 +94,7 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == WATER_TEXTURE) {
-        water_encoder::encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
+        water_encoder::encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, shadows, texture_id);
     } else {
         solid_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows);
     }
@@ -108,7 +108,7 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == WATER_TEXTURE) {
-        water_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
+        water_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, shadows, texture_id);
     } else {
         solid_sort::encode_face<Direction::Up>(buffers, x, y, h, width, height, texture_id, shadows);
     }
@@ -122,7 +122,7 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == WATER_TEXTURE) {
-        water_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, texture_id);
+        water_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, shadows, texture_id);
     } else {
         solid_sort::encode_face<Direction::Down>(buffers, x, y, h, width, height, texture_id, shadows);
     }
@@ -296,21 +296,29 @@ extern "C"
                     continue;
                 }
 
-                bool is_water = block_id == BLOCK_WATER;
                 uint above = data.get_hxy(h + 1, x, y);
-                if (!is_solid(above)) {
-                    if (is_water && decode_block_id(above) == BLOCK_WATER) {
-                        continue;
-                    }
-                    uint shadows = 0;
-                    if (!is_water) {
-                        shadows = ao_shadows::encode<Direction::Up>(data, h, x, y);
-                    }
-                    layers.set_hxy(0, real_x, real_y, (block_textures[0] << 8) | (shadows));
+
+                if (block_id == BLOCK_WATER) {
+                    // no AO on water, the low byte of the face data holds the water level instead
+                    uint level = water_level(above);
+                    if (!hides_water_face(above))
+                        layers.set_hxy(0, real_x, real_y, (block_textures[0] << 8) | level);
+                    if (!hides_water_face(data.get_hxy(h - 1, x, y)))
+                        layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, (block_textures[5] << 8) | level);
+                    if (!hides_water_face(data.get_hxy(h, x, y - 1)))
+                        layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, (block_textures[1] << 8) | level);
+                    if (!hides_water_face(data.get_hxy(h, x - 1, y)))
+                        layers.set_hxy(current_layer_offset + Direction::Left, CHUNK_SIZE - 1 - real_y, real_x, (block_textures[2] << 8) | level);
+                    if (!hides_water_face(data.get_hxy(h, x, y + 1)))
+                        layers.set_hxy(current_layer_offset + Direction::Back, CHUNK_SIZE - 1 - real_x, CHUNK_SIZE - 1 - real_y, (block_textures[3] << 8) | level);
+                    if (!hides_water_face(data.get_hxy(h, x + 1, y)))
+                        layers.set_hxy(current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, (block_textures[4] << 8) | level);
+                    continue;
                 }
 
-                if (is_water) {
-                    continue;
+                if (!is_solid(above)) {
+                    uint shadows = ao_shadows::encode<Direction::Up>(data, h, x, y);
+                    layers.set_hxy(0, real_x, real_y, (block_textures[0] << 8) | (shadows));
                 }
 
                 if (!is_solid(data.get_hxy(h - 1, x, y))) {

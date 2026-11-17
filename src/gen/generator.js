@@ -1,5 +1,5 @@
 import { blend, BLEND_FUNCTION } from "../blend.js";
-import { BLOCK_IDS } from "../blocks.js";
+import { BLOCK_IDS, isSolid } from "../blocks.js";
 import { CHUNK_SIZE, ChunkBlockData, ChunkData, ChunkGenerator } from "../chunk/chunk.js";
 import { Vec2, Vec3 } from "../geom.js";
 import { hash01, hash32 } from "../noise/hash.js";
@@ -552,7 +552,8 @@ export class NoiseChunkGenerator extends ChunkGenerator {
                 }
 
                 for (let w = r; w < Math.min(waterLevel, chunkEndH); w++) {
-                    if (blockData.getHXY(w - chunkStartH, x, y) == BLOCK_IDS.EMPTY)
+                    // water fills everything that isn't a solid cube, plants under water included
+                    if (!isSolid(blockData.getHXY(w - chunkStartH, x, y)))
                         blockData.setHXY(w - chunkStartH, x, y, BLOCK_IDS.WATER);
                 }
             }

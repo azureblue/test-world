@@ -25,10 +25,20 @@ extern "C"
 
                 uint above = data.get_hxy(h + 1, x, y);
                 if (block_id == BLOCK_WATER) {
-                    if (!is_solid(above) && decode_block_id(above) != BLOCK_WATER) {
-                        water_encoder::encode_face_q<Direction::Up>(
-                            buffers.mesh_water_cur, x - 1, y - 1, h - 1, block_textures[Direction::Up]);
-                    }
+                    auto& water_buffer = buffers.mesh_water_cur;
+                    uint level = water_level(above);
+                    if (!hides_water_face(above))
+                        water_encoder::encode_face_q<Direction::Up>(water_buffer, x - 1, y - 1, h - 1, level, block_textures[Direction::Up]);
+                    if (!hides_water_face(data.get_hxy(h - 1, x, y)))
+                        water_encoder::encode_face_q<Direction::Down>(water_buffer, x - 1, y - 1, h - 1, level, block_textures[Direction::Down]);
+                    if (!hides_water_face(data.get_hxy(h, x, y - 1)))
+                        water_encoder::encode_face_q<Direction::Front>(water_buffer, x - 1, y - 1, h - 1, level, block_textures[Direction::Front]);
+                    if (!hides_water_face(data.get_hxy(h, x - 1, y)))
+                        water_encoder::encode_face_q<Direction::Left>(water_buffer, x - 1, y - 1, h - 1, level, block_textures[Direction::Left]);
+                    if (!hides_water_face(data.get_hxy(h, x, y + 1)))
+                        water_encoder::encode_face_q<Direction::Back>(water_buffer, x - 1, y - 1, h - 1, level, block_textures[Direction::Back]);
+                    if (!hides_water_face(data.get_hxy(h, x + 1, y)))
+                        water_encoder::encode_face_q<Direction::Right>(water_buffer, x - 1, y - 1, h - 1, level, block_textures[Direction::Right]);
                     continue;
                 }
                 auto& face_buffer = buffers.mesh_solid_cur;

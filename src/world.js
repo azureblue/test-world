@@ -1,4 +1,4 @@
-import { BLOCK_IDS, isSolid } from "./blocks.js";
+import { BLOCK_IDS, isLiquid, isSolid } from "./blocks.js";
 import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "./chunk/chunk.js";
 import { ChunkDataExt, ChunkDataExtTransfer } from "./chunk/extChunk.js";
 import { FVec2, FVec3, fvec3, IVec3, ivec3, Vec3, vec3 } from "./geom.js";
@@ -6,13 +6,10 @@ import { Logger } from "./logging.js";
 import { MeshHandler } from "./mesh/mesh.js";
 import { UIntMeshDataTransfer } from "./mesh/uIntMesh.js";
 import { UIntExtWasmMesher } from "./mesh/uIntWasmMesher.js";
+import { Settings } from "./settings.js";
 import { GenericBuffer, perfDiff, Resources } from "./utils.js";
 import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse, MeshChunkRequest, MeshChunkResponse, MessageTransportData } from "./worker/common.js";
 import { WorkerClient } from "./worker/worker.js";
-
-const params = new URL(self.location.href).searchParams;
-const generatorName = params.get("gen") ?? "default";
-const fastMesher = params.get("fastMesher") === "true";
 
 const logger = new Logger("World");
 
@@ -20,9 +17,9 @@ const logger = new Logger("World");
 const editMesher = await UIntExtWasmMesher.createFastMesher();
 
 
-const CHUNK_RENDER_DIST = 8;
+const CHUNK_RENDER_DIST = Settings.world.renderDistance;
 const CHUNK_RENDER_DIST_SQ = CHUNK_RENDER_DIST * CHUNK_RENDER_DIST;
-const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * 4;
+const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * Settings.world.retainDistanceFactor ** 2;
 
 class ChunkEntry {
     /**@type {Vec3} */
@@ -148,7 +145,7 @@ export class World {
     constructor(meshHandler) {
         this.#meshHandler = meshHandler;
         this.#chunkLoaderWorkerClient = new WorkerClient(
-            new Worker(Resources.relativeToRoot(`./worker/chunkLoader.js?workerId=world0&gen=${generatorName}&fastMesher=${fastMesher}`), { type: "module" }),
+            new Worker(Resources.relativeToRoot(`./worker/chunkLoader.js?workerId=world0&gen=${Settings.world.generator}&fastMesher=${Settings.world.fastMesher}`), { type: "module" }),
             logger
         );
         this.#chunkLoaderWorkerClient.connect("chunkLoad").then((messagePort) => {
@@ -437,6 +434,8 @@ export class World {
      * @param {FVec3} pos 
      * @param {FVec3} dir 
      * @param {number} maxDist - Maximum ray distance
+     * Any non-empty block except water stops the ray (solid blocks, plants as full cubes); the starting cell stops it
+     * only if it's solid (standing in a plant's cell doesn't keep targeting the plant).
      * @returns {{hit: boolean, x: number, y: number, z: number, block: number, nx: number, ny: number, nz: number} | null}
      *   the hit block in world coordinates and the normal of the face the ray entered through
      *   (pointing back towards the ray origin; all 0 when the origin itself is inside the block)
@@ -471,12 +470,15 @@ export class World {
         let t = 0;
         // the face the ray entered the current voxel through is opposite to the last step
         let nx = 0, ny = 0, nz = 0;
+        let first = true;
 
         while (t <= maxDist) {
             const block = this.blockWorldAt(x, y, z);
-            if (isSolid(block)) {
+            const stops = first ? isSolid(block) : block !== BLOCK_IDS.EMPTY && !isLiquid(block);
+            if (stops) {
                 return { hit: true, x, y, z, block, nx, ny, nz };
             }
+            first = false;
 
             // Step to the next voxel
             if (tMax.x < tMax.y && tMax.x < tMax.z) {
@@ -639,6 +641,21 @@ export class World {
 
     blockWorldAt(iwx, iwy, iwz) {
         return this.blockAt(iwx, -iwz - 1, iwy);
+    }
+
+    /**
+     * Whether a point is under the water surface. The top water cell is filled up to settings.water.surfaceLevel,
+     * unless water or a solid block is above it (as the mesher draws it).
+     * @param {number} wx world position
+     * @param {number} wy
+     * @param {number} wz
+     */
+    isInWater(wx, wy, wz) {
+        const ix = Math.floor(wx), iy = Math.floor(wy), iz = Math.floor(wz);
+        if (!isLiquid(this.blockWorldAt(ix, iy, iz)))
+            return false;
+        const above = this.blockWorldAt(ix, iy + 1, iz);
+        return isLiquid(above) || isSolid(above) || wy - iy < Settings.water.surfaceLevel;
     }
 
     blockAt(ix, iy, iz) {

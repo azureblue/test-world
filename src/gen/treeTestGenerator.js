@@ -8,7 +8,7 @@ const GROUND_LEVEL = 0;
 const TREE_SPACING = 14;
 
 /**
- * Tree gallery (?gen=trees): flat grass at level 0 with a grid of trees.
+ * Tree gallery (?world.generator=trees): flat grass at level 0 with a grid of trees.
  * Each grid column along x is one tree type, each row along y a different seed.
  */
 export class TreeTestGenerator extends ChunkGenerator {

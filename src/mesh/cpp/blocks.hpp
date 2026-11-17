@@ -29,6 +29,10 @@ static inline bool is_solid(uint block) {
     return (block & 0x8000'0000u) != 0;
 }
 
+// water level in 1/8 of a block: the surface sits slightly lower, a cell covered by water or a solid block is full
+constexpr uint WATER_LEVEL_SURFACE = 7;
+constexpr uint WATER_LEVEL_FULL = 8;
+
 static inline bool is_x_quads(uint block) {
     return (block >> 29) & 1;
 }
@@ -39,4 +43,17 @@ static inline uint is_solid_01(uint block) {
 
 static inline uint decode_block_id(uint id) {
     return id & 0x7fff'fff;
+}
+
+static inline bool is_water(uint block) {
+    return decode_block_id(block) == BLOCK_WATER;
+}
+
+// a water face is drawn only towards a neighbour that is neither solid nor water
+static inline bool hides_water_face(uint neighbour) {
+    return is_solid(neighbour) || is_water(neighbour);
+}
+
+static inline uint water_level(uint above) {
+    return hides_water_face(above) ? WATER_LEVEL_FULL : WATER_LEVEL_SURFACE;
 }

@@ -1,3 +1,4 @@
+import { Settings } from "./settings.js";
 import { is2Pow } from "./utils.js";
 
 class ImageFilters {
@@ -27,7 +28,7 @@ const textureFilters = {
         {
             "name": "SetAlpha",
             "params": {
-                alpha: 220
+                alpha: Settings.water.textureAlpha
             }
         }
     ]
