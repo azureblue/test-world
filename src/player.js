@@ -103,26 +103,20 @@ export class Player {
     }
 
     /**
-     * Whether a block placed into the body (see {@link intersectsBlock}) at height iy can lift the player onto it
-     * ({@link stepOnto}): walking and in water or not standing (swimming, jumping, falling), the block is in the
-     * lowest layer the body is in, and the body fits on top.
+     * Whether a block can be placed into the body (see {@link intersectsBlock}) at height iy, the physics then pushing
+     * the player up onto it: walking, the block is in the lowest layer the body is in, the lift is at most
+     * Settings.player.placeLiftMax (near the top of a jump, floating in water; not standing on the ground, and once per
+     * jump: at the top of it the next block would need most of a block), and the body fits on top.
      */
     canStepOnto(iy) {
-        if (this.mode !== "walk" || (this.onGround && !this.inWater) || iy !== Math.floor(this.y))
+        const lift = iy + 1 + this.#settings.skin - this.y;
+        if (this.mode !== "walk" || iy !== Math.floor(this.y) || lift > this.#settings.placeLiftMax)
             return false;
         const y = this.y;
         this.y = iy + 1 + this.#settings.skin;
         const fits = !this.#overlapsBlocks();
         this.y = y;
         return fits;
-    }
-
-    /**
-     * Lifts the player onto a block placed at height iy (see {@link canStepOnto}).
-     */
-    stepOnto(iy) {
-        this.y = iy + 1 + this.#settings.skin;
-        this.vy = Math.max(this.vy, 0);
     }
 
     /**
@@ -197,6 +191,14 @@ export class Player {
             this.z += this.vz * dt;
             this.onGround = false;
             return;
+        }
+        // a block placed into the feet (see canStepOnto) pushes the player up onto it at placeLiftSpeed: no jump in
+        // position, a jump going up faster isn't changed, falling into it stops
+        const lift = this.#feetLift();
+        if (lift > 0) {
+            if (this.vy < 0)
+                this.vy = 0;
+            this.y += Math.max(0, Math.min(lift, s.placeLiftSpeed * dt) - this.vy * dt);
         }
         // vertical first: standing on a block edge doesn't catch the horizontal move
         const hitY = this.#moveAxis(1, this.vy * dt);
@@ -446,6 +448,24 @@ export class Player {
                     if (isSolid(this.#world.blockWorldAt(ix, iy, iz)))
                         return true;
         return false;
+    }
+
+    /**
+     * How far the box has to go up to get out of blocks in its lowest layer (a block placed into the feet), if that's at
+     * most placeLiftMax and it fits there; 0 otherwise (not in a block, or too deep: see #moveToFreeSpot).
+     */
+    #feetLift() {
+        if (!this.#overlapsBlocks())
+            return 0;
+        const s = this.#settings;
+        const top = Math.floor(this.y) + 1 + s.skin;
+        if (top - this.y > s.placeLiftMax)
+            return 0;
+        const y = this.y;
+        this.y = top;
+        const fits = !this.#overlapsBlocks();
+        this.y = y;
+        return fits ? top - y : 0;
     }
 
     /**

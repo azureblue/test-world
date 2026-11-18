@@ -55,6 +55,11 @@ export const Settings = {
         eyeHeight: 1.62,
         // the box always stays this far from blocks it touches, in blocks (> 0: no exact contact, no float trouble)
         skin: 0.001,
+        // a block can be placed into the body if it lifts the player onto it by at most this much, in blocks: near the top
+        // of a jump (one block per jump), floating in water; not when standing
+        placeLiftMax: 0.5,
+        // how fast such a block pushes the player up onto it, in blocks per second
+        placeLiftSpeed: 4,
         // physics steps per second at least: a tick is split into substeps no longer than 1 / physicsRate, so jumps and
         // collisions behave the same at any simulation.tickRate
         physicsRate: 120,
@@ -136,8 +141,9 @@ export const Settings = {
     interaction: {
         // how far blocks can be selected, in blocks
         reach: 5,
-        // the block placed with the right mouse button, a key of BLOCK_IDS
-        placeBlock: "WATER"
+        // the blocks in the bar at the bottom (keys of BLOCK_IDS); the selected one (mouse wheel, 1..9) is placed with the
+        // right mouse button
+        itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0"]
     },
 
     sky: {

@@ -1,4 +1,5 @@
-import { BLOCK_HEIGHT_FULL, BLOCK_IDS, getBlockById, isLiquid, removed, WATER_SURFACE_LEVEL, withHeight } from "./blocks.js";
+import { BLOCK_HEIGHT_FULL, blockHeight, flooded, getBlockById, isFlowing, isLiquid, isXQuads, removed, WATER_SURFACE_LEVEL, withHeight } from "./blocks.js";
+import { ItemBar } from "./itemBar.js";
 import { Camera, FrustumCuller } from "./camera.js";
 import { Fog } from "./fog.js";
 import { FVec3, mat4, Projection } from "./geom.js";
@@ -195,12 +196,15 @@ export async function start() {
         [controls.forward, controls.back, controls.left, controls.right, controls.jump, controls.down, controls.sprint], {
         [controls.pause]: (pressed) => pressed && (pause = !pause),
         [controls.toggleFly]: (pressed) => pressed && player.toggleFly(),
-        [controls.toggleNoclip]: (pressed) => pressed && player.toggleNoclip()
+        [controls.toggleNoclip]: (pressed) => pressed && player.toggleNoclip(),
+        // 1..9 select a slot of the bar
+        ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i + 1), (pressed) => pressed && itemBar.select(i)]))
     });
+    const itemBar = new ItemBar(document.body, Settings.interaction.itemBar, textures, 16);
+    mouseInput.onWheel((direction) => pause || itemBar.scroll(direction));
 
     const fpsCounter = new FPSCounter();
     const pos = new Position();
-    const placeBlock = BLOCK_IDS[Settings.interaction.placeBlock];
     let raycastBlock = null;
     mouseInput.onMouseDown((button) => {
         if (pause) {
@@ -223,13 +227,17 @@ export async function start() {
             if (intoPlayer && !player.canStepOnto(py)) {
                 return;
             }
-            // placed water gets the level water has there: full under other water, the surface level otherwise
-            const block = isLiquid(placeBlock)
-                ? withHeight(placeBlock, isLiquid(world.blockWorldAt(px, py + 1, pz)) ? BLOCK_HEIGHT_FULL : WATER_SURFACE_LEVEL)
-                : placeBlock;
-            if (world.setBlockWorld(px, py, pz, block) && intoPlayer) {
-                player.stepOnto(py);
+            const placeBlock = itemBar.block;
+            const target = world.blockWorldAt(px, py, pz);
+            let block = placeBlock;
+            if (isLiquid(placeBlock)) {
+                // placed water gets the level water has there: full under other water, the surface level otherwise
+                block = withHeight(placeBlock, isLiquid(world.blockWorldAt(px, py + 1, pz)) ? BLOCK_HEIGHT_FULL : WATER_SURFACE_LEVEL);
+            } else if (isXQuads(placeBlock) && isLiquid(target)) {
+                // a plant placed into water stays in it
+                block = flooded(placeBlock, blockHeight(target), isFlowing(target));
             }
+            world.setBlockWorld(px, py, pz, block);
         }
     });
 

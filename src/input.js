@@ -1,6 +1,7 @@
 export class MouseInput {
     #movement = { x: 0, y: 0 };
     #mouseDownHandler = null;
+    #wheelHandler = null;
     #pause = false;
     constructor(element, pointerLocking = false) {
         this.#movement = { x: 0, y: 0 };
@@ -22,6 +23,18 @@ export class MouseInput {
         }
         // right button is used in the game
         element.addEventListener("contextmenu", (e) => e.preventDefault());
+        element.addEventListener("wheel", (e) => {
+            e.preventDefault();
+            if (this.#wheelHandler && e.deltaY !== 0)
+                this.#wheelHandler(Math.sign(e.deltaY));
+        }, { passive: false });
+    }
+
+    /**
+     * @param {(direction: number) => void} handler - 1 for scrolling down, -1 for up
+     */
+    onWheel(handler) {
+        this.#wheelHandler = handler;
     }
 
     /**
