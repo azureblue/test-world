@@ -32,14 +32,18 @@ export class Block {
     }
 }
 
-// A block value: bit 31 solid cube, bit 30 liquid, bit 29 x-quads (plants), bits 24..26 the height in 1/8 of a block
-// (0 meaning full: water levels, later slabs; see mesh/cpp/blocks.hpp), bits 0..23 the block id. A plant in water
-// (waterlogged) is the plant with the liquid bit and the water level: it's water for everything that checks isLiquid.
+// A block value: bit 31 solid cube, bit 30 liquid, bit 29 x-quads (plants), bit 27 flowing (water that isn't a
+// source, see world/waterFlow.js), bits 24..26 the height in 1/8 of a block (0 meaning full: water levels, later
+// slabs; see mesh/cpp/blocks.hpp), bits 0..23 the block id. A plant in water (waterlogged) is the plant with the
+// liquid bit, the water level and maybe the flowing bit: it's water for everything that checks isLiquid.
 const SOLID_CUBE_BIT = 31;
 const LIQUID_BIT = 30;
 const X_QUADS = 29;
+const FLOWING_BIT = 27;
 const HEIGHT_SHIFT = 24;
 const ID_MASK = 0xFFFFFF;
+/** the water bits of a cell: liquid, flowing, height */
+const WATER_BITS = (1 << LIQUID_BIT) | (1 << FLOWING_BIT) | (0b111 << HEIGHT_SHIFT);
 export const BLOCK_HEIGHT_FULL = 8;
 /** the level of water open to the air above, in 1/8 of a block (the generator's sea surface) */
 export const WATER_SURFACE_LEVEL = 7;
@@ -127,14 +131,35 @@ export function canFlood(block) {
     return block === BLOCK_IDS.EMPTY || (isXQuads(block) && !isLiquid(block));
 }
 
+/** water that isn't a source: it stays only as long as its neighbours feed it (world/waterFlow.js) */
+export function isFlowing(block) {
+    return (block >>> FLOWING_BIT & 1) !== 0;
+}
+
+/** source water: generated or placed, it never drains */
+export function isSource(block) {
+    return isLiquid(block) && !isFlowing(block);
+}
+
 /**
- * The cell with water at the level in it: water for an empty cell, the plant in water for a plant.
- * @param {number} block a cell that {@link canFlood}, or water (its level changes)
+ * The cell with water at the level in it: water for an empty cell or water, the plant in water for a plant.
+ * @param {number} block a cell that {@link canFlood}, or water (its water changes)
  * @param {number} level in 1/8 of a block, 1..8
+ * @param {boolean} flowing
  * @returns {number} unsigned, as chunk data returns blocks
  */
-export function flooded(block, level) {
-    return withHeight(isXQuads(block) ? block | (1 << LIQUID_BIT) : BLOCK_IDS.WATER, level);
+export function flooded(block, level, flowing = false) {
+    const water = isXQuads(block) ? (block & ~WATER_BITS) | (1 << LIQUID_BIT) : BLOCK_IDS.WATER;
+    return withHeight(flowing ? water | (1 << FLOWING_BIT) : water, level);
+}
+
+/**
+ * The cell without its water: nothing for water, the plant for a plant in water.
+ * @param {number} block
+ * @returns {number} unsigned
+ */
+export function drained(block) {
+    return isXQuads(block) ? (block & ~WATER_BITS) >>> 0 : BLOCK_IDS.EMPTY;
 }
 
 /**
@@ -142,7 +167,7 @@ export function flooded(block, level) {
  * @param {number} block
  */
 export function removed(block) {
-    return isXQuads(block) && isLiquid(block) ? withHeight(BLOCK_IDS.WATER, blockHeight(block)) : BLOCK_IDS.EMPTY;
+    return isXQuads(block) && isLiquid(block) ? flooded(BLOCK_IDS.EMPTY, blockHeight(block), isFlowing(block)) : BLOCK_IDS.EMPTY;
 }
 
 export function isLiquidInt(block) {

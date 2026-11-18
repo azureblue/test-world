@@ -1,7 +1,7 @@
 # Water flow
 
-Status: flowing water with fixed levels done (`src/world/waterFlow.js`, run by the world worker
-`src/worker/worldWorker.js`, `Settings.water.flow`); levels that drop with distance still to do.
+Status: done: water levels, source and flowing water like Minecraft's (`src/world/waterFlow.js`, run by the world
+worker `src/worker/worldWorker.js`, `Settings.water.flow`). Further ideas under Next.
 
 ## Done: water levels in the block data
 
@@ -20,24 +20,27 @@ Status: flowing water with fixed levels done (`src/world/waterFlow.js`, run by t
   sea level in the water; flowing water floods plant cells and keeps the plant. Removing a plant in water leaves its
   water (`removed`).
 
-## Done: flow
+## Done: flow with levels (like Minecraft's)
 
-- Runs in the world worker, which owns the world (see [worker pipeline](worker-pipeline.md), block edits). Its
-  edits are applied there like the client's, and the client sees them in chunk updates.
-- A block change wakes the changed cell and the water above and beside it (`WorldState.setBlock` →
-  `WaterFlow.onBlockChanged`). Generated water stays still until then.
-- Woken water flows one step `interval` seconds later (rounded to simulation ticks): into the empty cell below as
-  full water, or, if the cell below isn't empty, into the empty cells beside it at its own level (full water spreads
-  full, surface water 7/8). Water with a lower level fills up to full when water is above it. New water cells are
-  block changes too, so the flow goes on from them; a change wakes the water above, below and beside it.
-- At most `maxUpdatesPerTick` cells per tick; the rest move to the next tick, in order.
-- The simulated range is the client's load range; water in a chunk outside it, or flowing into one, waits until the
-  range moves there (`resumeWaiting`).
+- **Source and flowing water.** Generated and placed water is a source: it never drains, its level is 7/8 under air
+  and full under water (a block above keeps it). Flowing water has the flowing bit (block bit 27).
+- **Flowing water is computed from the neighbours**, again whenever they change (`#flowingState`):
+  - under water (falling): full;
+  - beside water that spreads sideways: the highest level they give. A source or a falling column gives 6/8,
+    flowing water one less than its own, so water reaches 6 blocks from a source. Flowing water spreads sideways only
+    resting on solid ground: a falling column doesn't spread before it lands, nor over a lake it falls into;
+  - nothing feeding it: it drains step by step (a plant in it stays).
+- **New sources:** a cell between two or more sources, on solid ground or a source, becomes a source (Minecraft's
+  rule), so a hole dug in a lake fills up for good. A hole dug next to a lake gets a curtain of falling water along
+  the lake and flowing water on its floor, as in Minecraft. (A rule making water seek its level, filling such holes
+  up to the surface, was tried and dropped: it only worked next to deep water, not at beaches, which made it hard to
+  predict.)
+- **Waking:** a change wakes the cell, the cells above, below and beside it, and beside the cell above (whether water
+  there spreads depends on what it rests on). Woken cells are updated `interval` seconds later (rounded to ticks); at
+  most `maxUpdatesPerTick` per tick, the rest in order in the next tick.
+- **Chunks:** the simulated range is the client's load range. A block outside reads as solid, and the cell reading it
+  waits; when the range moves there (`resumeWaiting`), the cell and its neighbours are updated again.
 - Changed chunks are sent with their optimized mesh at most every `Settings.world.chunkUpdateInterval` per chunk.
-
-Levels don't drop with distance yet, so water fills everything connected to it at or below its height, and spreads
-without end over open ground. Placed water is full, so water placed on the sea's surface spreads a full layer over
-it.
 
 ### Ready for multiplayer
 
@@ -49,11 +52,11 @@ it.
 
 ## Next
 
-1. **Levels that drop.** Spreading sideways lowers the level, source blocks keep theirs, water without a source
-   drains. This bounds the spread. The block height field and the mesher already handle any level 1..8.
-2. **Falling water** as its own state, so a falling column doesn't spread sideways at every height.
-3. **Cost of chunk updates:** each update rebuilds the chunk's extended data and greedy mesh (a few ms); a large flood
+1. **Looks of flowing water:** sloped surfaces (corner heights from the neighbours' levels) and a moving texture in
+   the flow direction, so flowing sheets and falling curtains read as water running, not as blocks. Faster flowing
+   downhill.
+2. **Cost of chunk updates:** each update rebuilds the chunk's extended data and greedy mesh (a few ms); a large flood
    front keeps the worker busy. Per-step budgets, or meshing in mesher workers (worker pipeline step 4).
-4. **Persisting the flow state** (scheduled and waiting cells) with the world, once the world is saved.
-5. **Server:** the world worker's role; its client protocol (requests, edits with seq, chunk snapshots with
+3. **Persisting the flow state** (scheduled and waiting cells) with the world, once the world is saved.
+4. **Server:** the world worker's role; its client protocol (requests, edits with seq, chunk snapshots with
    editAck) is what a network server would speak.
