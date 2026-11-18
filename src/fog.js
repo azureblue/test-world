@@ -41,9 +41,11 @@ export class Fog {
     /**
      * @param {typeof import("./settings.js").Settings.sky} sky
      * @param {typeof import("./settings.js").Settings.water} water
+     * @param {number} autoDistance in blocks: the fog distance when sky.fogDistance is 0
      */
-    constructor(sky, water) {
-        this.aboveWater = new FogState(sky.fogDistance, sky.color, sky.fogStart, 0, 1, [1, 1, 1, 1]);
+    constructor(sky, water, autoDistance) {
+        const fogDistance = sky.fogDistance > 0 ? sky.fogDistance : autoDistance;
+        this.aboveWater = new FogState(fogDistance, sky.color, sky.fogStart, 0, 1, [1, 1, 1, 1]);
 
         // Seen from above, the water surface (texture alpha a, not premultiplied, blended with ONE, ONE_MINUS_SRC_ALPHA)
         // gives tex.rgb + (1 - a) * scene, i.e. the scene mixed by a towards tex.rgb / a: that is the water colour.

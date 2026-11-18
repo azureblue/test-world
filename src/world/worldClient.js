@@ -1,5 +1,6 @@
 import { Vec3 } from "../geom.js";
 import { Logger } from "../logging.js";
+import { settingsParams } from "../settings.js";
 import { Resources } from "../utils.js";
 import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse, MessageTransportData } from "../worker/common.js";
 import { WorkerClient } from "../worker/worker.js";
@@ -25,11 +26,11 @@ export class WorldClient {
      * @param {(response: ChunkResponse) => void} onChunk
      */
     constructor(onChunk) {
-        // the page's URL parameters, so the worker's Settings get the same overrides
-        const pageParams = new URL(self.location.href).searchParams;
-        pageParams.set("workerId", "world0");
+        // the settings changed from their defaults (URL parameters, overrideSettings), so the worker has the same
+        const params = settingsParams();
+        params.set("workerId", "world0");
         this.#workerClient = new WorkerClient(
-            new Worker(Resources.relativeToRoot(`./worker/worldWorker.js?${pageParams}`), { type: "module" }),
+            new Worker(Resources.relativeToRoot(`./worker/worldWorker.js?${params}`), { type: "module" }),
             logger
         );
         this.#workerClient.connect("world").then((messagePort) => {

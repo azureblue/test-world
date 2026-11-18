@@ -30,6 +30,16 @@ export class World {
         return this.#chunks.chunksInRange;
     }
 
+    /** the number of chunks in the render range that are loaded */
+    get chunksLoaded() {
+        return this.#chunks.loadedInRange;
+    }
+
+    /** chunk messages received from the world worker so far */
+    get chunkMessages() {
+        return this.#chunks.messagesReceived;
+    }
+
     /**
      * Moves the center of the loaded range. World coordinates.
      */

@@ -31,6 +31,7 @@ export class ChunkManager {
      * @type {Map<string, ChunkResponse>} */
     #responseQueue = new Map();
 
+    #messagesReceived = 0;
     #center = ivec3(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
     #centerChanged = false;
     /** offsets of the chunks in the render range, nearest first
@@ -69,6 +70,18 @@ export class ChunkManager {
     /** the number of chunks in the render range */
     get chunksInRange() {
         return this.#rangeDeltas.length;
+    }
+
+    /** the number of chunks in the render range that are loaded */
+    get loadedInRange() {
+        let count = 0;
+        this.#forEachLoaded(this.#chunkKeysSorted, () => count++);
+        return count;
+    }
+
+    /** chunk messages received from the world worker so far (a test can wait until they stop) */
+    get messagesReceived() {
+        return this.#messagesReceived;
     }
 
     /**
@@ -154,6 +167,7 @@ export class ChunkManager {
 
     /** @param {ChunkResponse} response */
     #onChunk(response) {
+        this.#messagesReceived++;
         const chunkPos = response.chunkPos;
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
         // only the newest message per chunk is applied

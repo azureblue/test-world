@@ -148,8 +148,10 @@ export const Settings = {
 
     sky: {
         color: [0.522, 0.855, 1],
-        // in blocks, terrain fades into the sky towards this distance
-        fogDistance: 256,
+        // in blocks, terrain fades into the sky towards this distance; 0: as far as the loaded chunks reach in every
+        // direction (see WorldRenderer), so the world's edge, and chunks dropped there when the camera moves, are
+        // always in the fog
+        fogDistance: 0,
         // where the fade starts, as a fraction of fogDistance squared
         fogStart: 0.6
     },
@@ -216,7 +218,18 @@ function parseAs(text, current) {
     }
     if (typeof current === "string")
         return /^(["']).*\1$/.test(text) ? text.slice(1, -1) : text;
+    if (Array.isArray(current) && current.length > 0 && current.every(v => typeof v === "string")) {
+        // a list of names: comma separated (quotes optional) or a JSON array, any length
+        let value;
+        try {
+            value = text.startsWith("[") ? JSON.parse(text) : text.split(",").map(v => parseAs(v.trim(), ""));
+        } catch {
+            return undefined;
+        }
+        return Array.isArray(value) && value.length > 0 && value.every(v => typeof v === "string" && v !== "") ? value : undefined;
+    }
     if (Array.isArray(current)) {
+        // a vector (a colour, a position): the same length and types
         let value;
         try {
             value = JSON.parse(text.startsWith("[") ? text : `[${text}]`);
@@ -230,6 +243,43 @@ function parseAs(text, current) {
     return undefined;
 }
 
+/** every setting changed from its default (URL parameters, overrideSettings): path -> value */
+const overrides = new Map();
+
+/**
+ * The parent object and current value of a setting path, or null if there's no such setting (a group isn't one).
+ * @param {string} path
+ * @returns {{parent: object, key: string, current: any} | null}
+ */
+function findSetting(path) {
+    const keys = path.split(".");
+    const key = keys.pop();
+    let parent = Settings;
+    for (const k of keys) {
+        parent = Object.hasOwn(parent, k) ? parent[k] : undefined;
+        if (typeof parent !== "object" || parent === null || Array.isArray(parent))
+            return null;
+    }
+    if (!Object.hasOwn(parent, key))
+        return null;
+    const current = parent[key];
+    return typeof current === "object" && !Array.isArray(current) ? null : { parent, key, current };
+}
+
+/**
+ * Whether a value fits a setting: the default's type; a list of names any length, a vector (colour, position) the
+ * same length and types.
+ */
+function fits(value, current) {
+    if (!Array.isArray(current))
+        return typeof value === typeof current && !(typeof value === "number" && Number.isNaN(value));
+    if (!Array.isArray(value))
+        return false;
+    if (current.length > 0 && current.every(v => typeof v === "string"))
+        return value.length > 0 && value.every(v => typeof v === "string" && v !== "");
+    return value.length === current.length && value.every((v, i) => typeof v === typeof current[i]);
+}
+
 /**
  * Applies the parameters whose names are setting paths (contain a dot); other parameters are left alone.
  * @param {URLSearchParams} params
@@ -238,27 +288,50 @@ function applyUrlParams(params) {
     for (const [path, text] of params) {
         if (!path.includes("."))
             continue;
-        const keys = path.split(".");
-        const last = keys.pop();
-        let parent = Settings;
-        for (const key of keys) {
-            parent = Object.hasOwn(parent, key) ? parent[key] : undefined;
-            if (typeof parent !== "object" || parent === null || Array.isArray(parent))
-                break;
-        }
-        const exists = typeof parent === "object" && parent !== null && !Array.isArray(parent) && Object.hasOwn(parent, last);
-        const current = exists ? parent[last] : undefined;
-        if (!exists || (typeof current === "object" && !Array.isArray(current))) {
+        const setting = findSetting(path);
+        if (setting === null) {
             console.warn(`Settings: no setting "${path}", URL parameter ignored`);
             continue;
         }
-        const value = parseAs(text, current);
+        const value = parseAs(text, setting.current);
         if (value === undefined) {
-            console.warn(`Settings: "${text}" doesn't fit ${path} (default ${JSON.stringify(current)}), URL parameter ignored`);
+            console.warn(`Settings: "${text}" doesn't fit ${path} (default ${JSON.stringify(setting.current)}), URL parameter ignored`);
             continue;
         }
-        parent[last] = value;
+        setting.parent[setting.key] = value;
+        overrides.set(path, value);
     }
+}
+
+/**
+ * Changes settings from code, like URL parameters do (tests). Call it before the modules that read settings when
+ * they're loaded (world/chunkManager.js, game.js) are imported. The world worker gets the overrides too
+ * ({@link settingsParams}).
+ * @param {{[path: string]: any}} values setting path (as in URL parameters) -> value of the setting's type
+ * @throws if a path isn't a setting or a value doesn't fit it
+ */
+export function overrideSettings(values) {
+    for (const [path, value] of Object.entries(values)) {
+        const setting = findSetting(path);
+        if (setting === null)
+            throw new Error(`Settings: no setting "${path}"`);
+        if (!fits(value, setting.current))
+            throw new Error(`Settings: ${JSON.stringify(value)} doesn't fit ${path} (default ${JSON.stringify(setting.current)})`);
+        setting.parent[setting.key] = value;
+        overrides.set(path, value);
+    }
+}
+
+/**
+ * The settings changed from their defaults, as URL parameters (for the world worker, which reads its settings from
+ * its URL).
+ * @returns {URLSearchParams}
+ */
+export function settingsParams() {
+    const params = new URLSearchParams();
+    for (const [path, value] of overrides)
+        params.set(path, typeof value === "object" ? JSON.stringify(value) : String(value));
+    return params;
 }
 
 applyUrlParams(new URL(self.location.href).searchParams);
