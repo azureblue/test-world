@@ -20,15 +20,115 @@ export const Settings = {
     },
 
     camera: {
-        startPosition: [-5, 3, 0],
+        // world position of the eye, y up (the player's feet are eyeHeight below)
+        startPosition: [2, 2, 2],
+        // degrees; yaw 0 looks along +x, 90 along +z; pitch is up/down, -89..89
+        startYaw: 0,
+        startPitch: 0,
         // vertical, degrees
         fieldOfView: 60,
         near: 0.1,
         far: 640,
-        // blocks per frame
-        moveSpeed: 0.5,
         // degrees per pixel of mouse movement
         mouseSensitivity: 0.2
+    },
+
+    simulation: {
+        // ticks per second; everything that changes the world over time (player physics, later water, block
+        // updates) runs per tick, rendering runs per frame
+        tickRate: 60,
+        // more ticks due in one frame (after a stall, a hidden tab) are dropped: the simulation slows down instead
+        maxTicksPerFrame: 10,
+        // draw the camera between the last two ticks; without it movement judders when ticks and frames don't line up
+        interpolate: true
+    },
+
+    player: {
+        // "walk" (gravity, jumping, swimming in water) or "fly" (free movement)
+        mode: "walk",
+        // the body is a box: width x width x height, the feet at the bottom centre
+        width: 0.6,
+        height: 1.8,
+        // camera height above the feet
+        eyeHeight: 1.62,
+        // the box always stays this far from blocks it touches, in blocks (> 0: no exact contact, no float trouble)
+        skin: 0.001,
+        // physics steps per second at least: a tick is split into substeps no longer than 1 / physicsRate, so jumps and
+        // collisions behave the same at any simulation.tickRate
+        physicsRate: 120,
+        walk: {
+            // blocks per second
+            speed: 4.3,
+            sprintMultiplier: 1.3,
+            // how fast the speed changes, blocks per second², on the ground and in the air
+            groundAcceleration: 50,
+            airAcceleration: 3,
+            // blocks per second²; with jumpSpeed 8.1 a jump reaches ~1.27 blocks and lasts ~0.65 s (at physicsRate 120)
+            gravity: 25,
+            jumpSpeed: 8.1,
+            // seconds; holding jump, the next jump starts at the earliest this long after the last one (a new press
+            // jumps at once)
+            jumpCooldown: 0.5,
+            maxFallSpeed: 78
+        },
+        swim: {
+            // the player swims (swim physics, swim speed) while the point this high above the feet is in water
+            enterHeight: 0.1,
+            // the floating point, as a fraction of the height: swimming up pushes only while it is under the surface,
+            // so the player floats with it at the surface; 0.73 keeps the eye ~0.3 above the water
+            depthFraction: 0.73,
+            // with jump held the player rises at depth * floatStiffness (1/s; depth of the floating point under the
+            // surface, at most upSpeed), so it slows down near the surface and settles there smoothly
+            floatStiffness: 4,
+            // sinking back while the floating point is above the surface
+            floatSinkSpeed: 1,
+            // floating at the surface (the floating point within bobRange of it) the view gently rises and sinks:
+            // bobHeight up and down (blocks), one wave per bobPeriod (seconds), fading in and out over bobFade
+            // (seconds); only the camera moves, not the body
+            bobHeight: 0.1,
+            bobPeriod: 1.4,
+            bobFade: 0.5,
+            bobRange: 0.3,
+            speed: 2.5,
+            sprintMultiplier: 1.5,
+            acceleration: 12,
+            // sinking without input
+            gravity: 5,
+            // vertical speed with jump held / the down key held
+            upSpeed: 3.5,
+            downSpeed: 3,
+            maxSinkSpeed: 3,
+            // climbing out: with jump held against a wall near the surface (the point exitDepth above the swimming point
+            // is out of the water) the player hops onto it if its top is at most exitMaxRise above the feet; the hop
+            // lifts the feet exitClearance over the edge. 1.8 lets the player out onto a bank at the water's level
+            // (~1.45 above the feet when floating), not one block higher
+            exitDepth: 0.5,
+            exitMaxRise: 1.8,
+            exitClearance: 0.2
+        },
+        fly: {
+            speed: 20,
+            sprintMultiplier: 3,
+            // collide with blocks (and with chunks that aren't loaded yet, which count as solid); false passes through
+            // terrain (noclip), toggled with controls.toggleNoclip
+            collide: true
+        }
+    },
+
+    controls: {
+        // KeyboardEvent.key values (letters lower case)
+        forward: "w",
+        back: "s",
+        left: "a",
+        right: "d",
+        // jump; flying: up; swimming: up
+        jump: " ",
+        // flying: down; swimming: down
+        down: "Shift",
+        sprint: "Control",
+        toggleFly: "f",
+        toggleNoclip: "n",
+        pause: "p"
     },
 
     interaction: {
@@ -81,7 +181,8 @@ export const Settings = {
         // the overdraw view is read back every this many frames
         overdrawSampleInterval: 30,
         // the stats line is updated every this many frames
-        statsInterval: 5
+        statsInterval: 5,
+        showStats: true
     }
 };
 

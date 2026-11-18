@@ -6,7 +6,9 @@ import { Program } from "./gl.js";
 import { KeyboardInput, MouseInput } from "./input.js";
 import { UIntMeshDrawer, UIntMeshHandler } from "./mesh/uIntMesh.js";
 import { FPSCounter } from "./perf.js";
+import { Player, PlayerInput } from "./player.js";
 import { Settings } from "./settings.js";
+import { Ticker } from "./ticker.js";
 import { TextureArray } from "./textures.js";
 import { GenericBuffer, Resources, writeVoxelWireframe } from "./utils.js";
 import { Position, World } from "./world.js";
@@ -61,6 +63,11 @@ export async function start() {
     // updating a text node's data in place avoids replacing the DOM child on every stats update
     const statsText = document.createTextNode("");
     statsDiv.replaceChildren(statsText);
+    const showStats = Settings.debug.showStats;
+    
+    if (!showStats) {
+        statsDiv.style.display = "none";
+    }
 
     const canvas = document.createElement("canvas");
     document.body.appendChild(canvas);
@@ -171,14 +178,24 @@ export async function start() {
     const world = new World(meshHandler);
 
     const camera = new Camera(new FVec3(...cameraSettings.startPosition));
+    camera.changeYaw(cameraSettings.startYaw);
+    camera.changePitch(cameraSettings.startPitch);
     const frustumCuller = new FrustumCuller(projection.frustum, camera);
+
+    const player = new Player(world, cameraSettings.startPosition);
+    const playerInput = new PlayerInput();
+    const simulation = Settings.simulation;
+    const ticker = new Ticker(simulation.tickRate, simulation.maxTicksPerFrame);
 
     let pause = false;
 
+    const controls = Settings.controls;
     const mouseInput = new MouseInput(canvas, true);
     const keyboardInput = new KeyboardInput(document.body,
-        [" ", "w", "a", "s", "d", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Control"], {
-        " ": (pressed) => pressed && (pause = !pause)
+        [controls.forward, controls.back, controls.left, controls.right, controls.jump, controls.down, controls.sprint], {
+        [controls.pause]: (pressed) => pressed && (pause = !pause),
+        [controls.toggleFly]: (pressed) => pressed && player.toggleFly(),
+        [controls.toggleNoclip]: (pressed) => pressed && player.toggleNoclip()
     });
 
     const fpsCounter = new FPSCounter();
@@ -200,9 +217,8 @@ export async function start() {
                 return; // the camera is inside the block, no face was hit
             }
             const px = raycastBlock.x + nx, py = raycastBlock.y + ny, pz = raycastBlock.z + nz;
-            const camPos = camera.position;
-            if (px === Math.floor(camPos.x) && py === Math.floor(camPos.y) && pz === Math.floor(camPos.z)) {
-                return; // don't place a block where the camera is
+            if (player.intersectsBlock(px, py, pz) && !(player.mode === "fly" && player.noclip)) {
+                return; // don't place a block into the player
             }
             world.setBlockWorld(px, py, pz, placeBlock);
         }
@@ -212,25 +228,41 @@ export async function start() {
     const visibleChunks = new GenericBuffer(2000);
     const overdrawStats = overdraw ? new OverdrawStats() : null;
 
+    // one simulation tick: the keys held now, the direction the camera looks now
+    function tick() {
+        const pressed = (key) => keyboardInput.isKeyPressed(key);
+        playerInput.forward = (pressed(controls.forward) ? 1 : 0) - (pressed(controls.back) ? 1 : 0);
+        playerInput.right = (pressed(controls.right) ? 1 : 0) - (pressed(controls.left) ? 1 : 0);
+        playerInput.jump = pressed(controls.jump);
+        playerInput.down = pressed(controls.down);
+        playerInput.sprint = pressed(controls.sprint);
+        player.tick(ticker.tickTime, playerInput, camera.directionXZ, camera.direction, camera.right);
+    }
+
+    let lastFrameTime = performance.now();
+
     function draw() {
+        const now = performance.now();
+        const frameTime = (now - lastFrameTime) / 1000;
+        lastFrameTime = now;
         if (pause) {
             requestAnimationFrame(draw);
             return;
         }
-        const moveSpeed = cameraSettings.moveSpeed;
-        if (keyboardInput.isKeyPressed("w"))
-            camera.moveForward(moveSpeed);
-        if (keyboardInput.isKeyPressed("s"))
-            camera.moveForward(-moveSpeed);
-        if (keyboardInput.isKeyPressed("a"))
-            camera.moveRight(-moveSpeed);
-        if (keyboardInput.isKeyPressed("d"))
-            camera.moveRight(moveSpeed);
 
         const mouseDelta = mouseInput.getDeltaAndReset();
         camera.changeYaw(mouseDelta.x * cameraSettings.mouseSensitivity);
         camera.changePitch(-mouseDelta.y * cameraSettings.mouseSensitivity);
         camera.update();
+
+        ticker.advance(frameTime, tick);
+        if (simulation.interpolate) {
+            player.interpolatedEye(ticker.alpha, camera.position);
+        } else {
+            camera.position.x = player.eyeX;
+            camera.position.y = player.eyeY;
+            camera.position.z = player.eyeZ;
+        }
 
         camera.calculateViewMatrix(mView);
         mProjection.mulOut(mView, mProjectionView);
@@ -332,7 +364,8 @@ export async function start() {
             gl.cullFace(gl.BACK);
         }
 
-        if (fpsCounter.getCurrentFrame() % Settings.debug.statsInterval === 0) {
+
+        if (showStats && fpsCounter.getCurrentFrame() % Settings.debug.statsInterval === 0) {
             const block = world.blockAt(pos.ix, pos.iy, pos.iz);
             const drawStats = meshDrawer.stats;
 
@@ -341,6 +374,8 @@ export async function start() {
                 `dir ${camDir.x.toFixed(1)}x ${camDir.z.toFixed(1)}z ${camDir.y.toFixed(1)}y ` +
                 `cam ${camera.pitch.toFixed(1)}p ${camera.yaw.toFixed(1)}y ` +
                 `fps ${fpsCounter.fps()} ` +
+                `${player.mode}${player.mode === "fly" && player.noclip ? " noclip" : ""}` +
+                `${player.mode === "walk" ? (player.inWater ? " swimming" : player.onGround ? " ground" : " air") : ""} ` +
                 `chunks ${chunksDrawn}/${allChunks}/${world.chunksInView} ` +
                 `draws s:${drawStats.solidDraws} w:${drawStats.waterDraws} x:${drawStats.xQuadDraws} ` +
                 `tris s:${formatK(drawStats.solidTris)} w:${formatK(drawStats.waterTris)} x:${formatK(drawStats.xQuadTris)} ` +

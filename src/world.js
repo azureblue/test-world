@@ -644,6 +644,18 @@ export class World {
     }
 
     /**
+     * Whether the chunk holding a block is loaded (blockWorldAt returns EMPTY for blocks of chunks that aren't).
+     * @param {number} iwx world block position
+     * @param {number} iwy
+     * @param {number} iwz
+     */
+    isLoadedWorld(iwx, iwy, iwz) {
+        const iy = -iwz - 1;
+        const entry = this.#chunks.get(pos3ToKey(iwx >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iwy >> CHUNK_SIZE_BIT_LEN));
+        return entry !== undefined && entry.loaded;
+    }
+
+    /**
      * Whether a point is under the water surface. The top water cell is filled up to settings.water.surfaceLevel,
      * unless water or a solid block is above it (as the mesher draws it).
      * @param {number} wx world position

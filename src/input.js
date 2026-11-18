@@ -91,24 +91,30 @@ export class KeyboardInput {
         });
 
         for (const [key, handler] of Object.entries(customHandlers)) {
+            this.#keys[key] ??= { pressed: false, handler: null };
             this.#keys[key].handler = handler;
         }
 
+        // letters are tracked lower case: with Shift held "w" arrives as "W", and its keyup would otherwise be missed
+        const keyOf = (ev) => ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
+
         targetElement.addEventListener("keydown", (ev) => {
-            if (ev.key in this.#keys) {
-                this.#keys[ev.key].pressed = true;
-                if (this.#keys[ev.key].handler) {
-                    this.#keys[ev.key].handler(true);
+            const key = keyOf(ev);
+            if (key in this.#keys) {
+                if (this.#keys[key].handler && !ev.repeat) {
+                    this.#keys[key].handler(true);
                 }
+                this.#keys[key].pressed = true;
                 ev.preventDefault();
             }
         }, true);
 
         targetElement.addEventListener("keyup", (ev) => {
-            if (ev.key in this.#keys) {
-                this.#keys[ev.key].pressed = false;
-                if (this.#keys[ev.key].handler) {
-                    this.#keys[ev.key].handler(false);
+            const key = keyOf(ev);
+            if (key in this.#keys) {
+                this.#keys[key].pressed = false;
+                if (this.#keys[key].handler) {
+                    this.#keys[key].handler(false);
                 }
                 ev.preventDefault();
             }
