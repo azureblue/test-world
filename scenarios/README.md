@@ -24,3 +24,4 @@ The page keeps the `TestGame` in `window.testGame`, for the console.
 |---|---|
 | `pool` | a pool dug in flat ground, a rock slab over one end, plants in the water |
 | `waterfall` | a rock pillar on flat ground, a water source placed on top once loaded |
+| `landscape` | the default terrain from above, towards the horizon (fog, sky) |

@@ -3,7 +3,7 @@
  * they're used (for example the fog uniforms in fog.js).
  *
  * Any value can be overridden with a URL parameter named by its path, applied when this module is first imported:
- *   ?world.generator=trees&camera.far=123&debug.overdraw=true&sky.color=0.5,0.7,1
+ *   ?world.generator=trees&camera.far=123&debug.overdraw=true&sky.horizonColor=0.5,0.7,1
  * The text is read as the type of the default value: a number, true/false, a string (quotes optional) or an array
  * (comma separated, or JSON). Unknown paths and values that don't fit are reported and ignored.
  */
@@ -147,13 +147,19 @@ export const Settings = {
     },
 
     sky: {
-        color: [0.522, 0.855, 1],
+        // the sky's colour straight up and at the horizon (and below it); terrain fades into the horizon colour (the
+        // fog's), so the far world reads as haze, with the sky going on above it
+        zenithColor: [0.30, 0.56, 0.95],
+        horizonColor: [0.68, 0.85, 0.98],
+        // where the sky is the zenith colour: the view direction's height, 0 at the horizon, 1 straight up
+        gradientHeight: 0.5,
         // in blocks, terrain fades into the sky towards this distance; 0: as far as the loaded chunks reach in every
         // direction (see WorldRenderer), so the world's edge, and chunks dropped there when the camera moves, are
         // always in the fog
         fogDistance: 0,
-        // where the fade starts, as a fraction of fogDistance squared
-        fogStart: 0.6
+        // where the fade starts, as a fraction of fogDistance squared (0.5: at about 0.7 of the distance): clear up to
+        // there, then hazier towards the edge; 0: haze from close by, higher: crisp closer to the edge, a quicker fade
+        fogStart: 0.5
     },
 
     water: {

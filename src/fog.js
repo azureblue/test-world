@@ -45,7 +45,7 @@ export class Fog {
      */
     constructor(sky, water, autoDistance) {
         const fogDistance = sky.fogDistance > 0 ? sky.fogDistance : autoDistance;
-        this.aboveWater = new FogState(fogDistance, sky.color, sky.fogStart, 0, 1, [1, 1, 1, 1]);
+        this.aboveWater = new FogState(fogDistance, sky.horizonColor, sky.fogStart, 0, 1, [1, 1, 1, 1]);
 
         // Seen from above, the water surface (texture alpha a, not premultiplied, blended with ONE, ONE_MINUS_SRC_ALPHA)
         // gives tex.rgb + (1 - a) * scene, i.e. the scene mixed by a towards tex.rgb / a: that is the water colour.

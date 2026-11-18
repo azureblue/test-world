@@ -35,7 +35,16 @@ fragment shaders default to `mediump`. When the block changes, change it in all 
 Fog amount: `fog = fog_min + fog_range * t * t * (3 - 2 * t)` (smoothstep), then `mix(color, fog_color, fog)`.
 Scale and bias are precomputed so the shaders don't divide.
 
-The values are written by `main.js` each frame. The matrix and the camera position are written separately; the fog
+The values are written by `WorldRenderer` (`render/worldRenderer.js`) each frame. The matrix and the camera position are written separately; the fog
 part (`fog_inv_dist_sq` .. `fog_range`) is one `bufferSubData` from `Fog` in `fog.js`. In std140, `fog_inv_dist_sq`
 fills the slot after the `vec3 cam_pos` and the rest follows without padding, so the fog part is 8 consecutive floats.
 Above and under water the values differ; see `Settings.sky` and `Settings.water` in `settings.js`.
+
+## Sky
+
+`sky.vert` / `sky.frag` draw the sky after the opaque blocks: one triangle covering the screen (no vertex buffer, from
+`gl_VertexID`), on the far plane, with depth test `LEQUAL` and no depth writes, so only the pixels the blocks left
+empty run the fragment shader. The colour goes from `sky_horizon` to `sky_zenith` with the view direction's height
+(`smoothstep(0, sky_height, up)`); the horizon colour is the fog's, so the far terrain fades into it. The view direction per pixel
+comes from three vectors set per frame (`sky_forward`, and `sky_right`, `sky_up` scaled to the screen's edges), not a
+matrix inverse. Not drawn under water (the clear colour, the water fog, stays). No Camera block.

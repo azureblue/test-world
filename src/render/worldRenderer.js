@@ -82,6 +82,7 @@ export class WorldRenderer {
     #visibleChunks = new GenericBuffer(2000);
     #overdraw = Settings.debug.overdraw;
     #overdrawStats;
+    #sky;
 
     /**
      * @param {WebGL2RenderingContext} gl
@@ -97,7 +98,8 @@ export class WorldRenderer {
             xQuads: await program("x_quads.vert", "x_quads.frag"),
             water: await program("water.vert", "water.frag"),
             waterDepth: await program("water_depth.vert", "water_depth.frag"),
-            blockHighlight: await program("blockhighlight.vert", "blockhighlight.frag")
+            blockHighlight: await program("blockhighlight.vert", "blockhighlight.frag"),
+            sky: await program("sky.vert", "sky.frag")
         };
         return new WorldRenderer(gl, programs, textures, camera);
     }
@@ -160,6 +162,20 @@ export class WorldRenderer {
         // the camera counts as in water, otherwise the clipped surface leaves the lower part of the view without water
         this.#nearPlaneReach = cameraSettings.near * Math.hypot(1, Math.tan(fieldOfView / 2), Math.tan(fieldOfView / 2) * aspect);
 
+        // the sky: the colours don't change, the view vectors are set per frame (scaled to the screen's edges)
+        const sky = programs.sky;
+        sky.use();
+        gl.uniform3fv(sky.getUniformLocation("sky_zenith"), Settings.sky.zenithColor);
+        gl.uniform3fv(sky.getUniformLocation("sky_horizon"), Settings.sky.horizonColor);
+        gl.uniform1f(sky.getUniformLocation("sky_height"), Settings.sky.gradientHeight);
+        this.#sky = {
+            forward: sky.getUniformLocation("sky_forward"),
+            right: sky.getUniformLocation("sky_right"),
+            up: sky.getUniformLocation("sky_up"),
+            scaleX: Math.tan(fieldOfView / 2) * aspect,
+            scaleY: Math.tan(fieldOfView / 2)
+        };
+
         this.#locations.waterFaceMul = water.getUniformLocation("water_face_mul");
         this.#locations.waterTranslation = water.getUniformLocation("m_translation");
         this.#locations.waterDepthTranslation = waterDepth.getUniformLocation("m_translation");
@@ -182,6 +198,25 @@ export class WorldRenderer {
     /** with Settings.debug.overdraw: shader invocations per covered pixel, sampled every overdrawSampleInterval frames */
     get overdrawStats() {
         return this.#overdrawStats;
+    }
+
+    /**
+     * The sky, after the opaque blocks: on the far plane with depth test LEQUAL, so only the pixels they left empty run
+     * its fragment shader. Under water there's no sky to see; the clear colour (the water fog) stays.
+     */
+    #drawSky() {
+        const gl = this.#gl;
+        const sky = this.#sky;
+        const { direction, right, up } = this.#camera;
+        this.#programs.sky.use();
+        gl.uniform3f(sky.forward, direction.x, direction.y, direction.z);
+        gl.uniform3f(sky.right, right.x * sky.scaleX, right.y * sky.scaleX, right.z * sky.scaleX);
+        gl.uniform3f(sky.up, up.x * sky.scaleY, up.y * sky.scaleY, up.z * sky.scaleY);
+        gl.depthFunc(gl.LEQUAL);
+        gl.depthMask(false);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.depthMask(true);
+        gl.depthFunc(gl.LESS);
     }
 
     /**
@@ -243,6 +278,9 @@ export class WorldRenderer {
                 this.#overdrawStats.sample(gl);
             return { chunksInRange, chunksDrawn, inWater };
         }
+
+        if (!inWater)
+            this.#drawSky();
 
         if (highlight !== null) {
             gl.useProgram(blockHighlight.program);
