@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="icon" href="../favicon.png" type="image/png">
+    <link rel="stylesheet" href="../style.css" />
+</head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test scenario</title>
+
+<body>
+    <div id="stats"></div>
+    <div class="crosshair-line vertical"></div>
+    <div class="crosshair-line horizontal"></div>
+</body>
+<script type="module">
+    // scenarios/index.html?name=pool runs scenarios/pool.js: its world() makes the scene (in the world worker),
+    // its settings start the game, its run(game) does the rest (a TestGame, see testGame.js)
+    import { TestGame } from "./testGame.js";
+
+    const name = new URLSearchParams(location.search).get("name");
+    if (name === null || !/^[\w-]+$/.test(name)) {
+        document.body.textContent = "Add ?name=<scenario>, a module in scenarios/, e.g. ?name=pool";
+    } else {
+        const path = new URL(`./${name}.js`, import.meta.url).pathname;
+        const scenario = await import(path);
+        const game = await TestGame.start({ ...scenario.settings, "world.generator": path });
+        window.testGame = game;
+        await scenario.run?.(game);
+    }
+</script>
+
+</html>
