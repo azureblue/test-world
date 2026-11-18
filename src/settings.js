@@ -153,6 +153,16 @@ export const Settings = {
         horizonColor: [0.68, 0.85, 0.98],
         // where the sky is the zenith colour: the view direction's height, 0 at the horizon, 1 straight up
         gradientHeight: 0.5,
+        // the sun, in degrees: height above the horizon, direction around it (0 towards +x, 90 towards +z), radius
+        sunElevation: 40,
+        sunAzimuth: 120,
+        sunSize: 2.5,
+        // the sun is blocky: this many square pixels across its radius (more: rounder)
+        sunPixels: 4,
+        sunColor: [1, 0.96, 0.84],
+        // the glow around the sun: strength (added to the sky) and how far it reaches, in degrees (where it's 10%)
+        sunGlow: 0.35,
+        sunGlowSize: 20,
         // in blocks, terrain fades into the sky towards this distance; 0: as far as the loaded chunks reach in every
         // direction (see WorldRenderer), so the world's edge, and chunks dropped there when the camera moves, are
         // always in the fog

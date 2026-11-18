@@ -168,6 +168,26 @@ export class WorldRenderer {
         gl.uniform3fv(sky.getUniformLocation("sky_zenith"), Settings.sky.zenithColor);
         gl.uniform3fv(sky.getUniformLocation("sky_horizon"), Settings.sky.horizonColor);
         gl.uniform1f(sky.getUniformLocation("sky_height"), Settings.sky.gradientHeight);
+        const s = Settings.sky, rad = Math.PI / 180;
+        const elevation = s.sunElevation * rad, azimuth = s.sunAzimuth * rad;
+        const sunDir = [Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.sin(azimuth)];
+        gl.uniform3fv(sky.getUniformLocation("sun_dir"), sunDir);
+        gl.uniform3fv(sky.getUniformLocation("sun_color"), s.sunColor);
+        // the sun's pixels: two axes across it (one horizontal, unless the sun is straight up), scaled to the pixel size
+        const cell = Math.tan(s.sunSize * rad) / s.sunPixels;
+        let u = [-sunDir[2], 0, sunDir[0]];
+        let length = Math.hypot(...u);
+        if (length < 1e-6) {
+            u = [1, 0, 0];
+            length = 1;
+        }
+        u = u.map(c => c / length);
+        const v = [sunDir[1] * u[2] - sunDir[2] * u[1], sunDir[2] * u[0] - sunDir[0] * u[2], sunDir[0] * u[1] - sunDir[1] * u[0]];
+        gl.uniform3fv(sky.getUniformLocation("sun_u"), u.map(c => c / cell));
+        gl.uniform3fv(sky.getUniformLocation("sun_v"), v.map(c => c / cell));
+        gl.uniform1f(sky.getUniformLocation("sun_radius"), s.sunPixels);
+        // the exponent that makes the glow 10% at sunGlowSize degrees from the sun's centre
+        gl.uniform2f(sky.getUniformLocation("sun_glow"), s.sunGlow, Math.log(0.1) / Math.log(Math.cos(s.sunGlowSize * rad)));
         this.#sky = {
             forward: sky.getUniformLocation("sky_forward"),
             right: sky.getUniformLocation("sky_right"),

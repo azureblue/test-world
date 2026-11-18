@@ -48,3 +48,11 @@ empty run the fragment shader. The colour goes from `sky_horizon` to `sky_zenith
 (`smoothstep(0, sky_height, up)`); the horizon colour is the fog's, so the far terrain fades into it. The view direction per pixel
 comes from three vectors set per frame (`sky_forward`, and `sky_right`, `sky_up` scaled to the screen's edges), not a
 matrix inverse. Not drawn under water (the clear colour, the water fog, stays). No Camera block.
+
+The sun is drawn in the same shader, blocky: the view direction is projected onto a plane facing the sun and cut
+into square pixels (`sun_u`, `sun_v`: two axes across the sun, scaled so one unit is one pixel); a pixel is in the
+disc if its centre is within `sun_radius` pixels. The glow around it is smooth (`sun_glow`: strength, and the exponent
+of the cosine of the angle to the sun). Everything is set once from `Settings.sky` (elevation and azimuth in
+degrees, size, `sunPixels` across the radius). The glow fades out towards the horizon, where the sky has to stay the
+fog colour so far terrain fading into the fog doesn't stand out. Being part of the sky, the sun is hidden by terrain
+in front of it; nothing is lit by it. `highp`: the pixels are fractions of a degree, beyond `mediump`.
