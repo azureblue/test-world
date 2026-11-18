@@ -1,4 +1,5 @@
 import { ChunkGenerator } from "../chunk/chunk.js";
+import { FlatGenerator } from "./collection/flat.js";
 import { NoiseChunkGenerator, TestGenerator } from "./generator.js";
 import { TreeTestGenerator } from "./treeTestGenerator.js";
 
@@ -6,6 +7,7 @@ const ChunkGeneratorRegistry = {
     "default": NoiseChunkGenerator,
     "test": TestGenerator,
     "trees": TreeTestGenerator,
+    "flat": FlatGenerator
 }
 
 Object.freeze(ChunkGeneratorRegistry);
