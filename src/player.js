@@ -1,7 +1,7 @@
 import { isLiquid, isSolid } from "./blocks.js";
 import { Settings } from "./settings.js";
 
-/** @typedef {import("./world.js").World} World */
+/** @typedef {import("./world/world.js").World} World */
 
 /**
  * What the player wants to do this tick: movement keys as -1..1 axes (relative to where the camera looks) and the

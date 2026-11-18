@@ -1,0 +1,294 @@
+import { BLOCK_IDS, isLiquid, isSolid } from "../blocks.js";
+import { Chunk, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk/chunk.js";
+import { FVec3 } from "../geom.js";
+import { MeshHandler } from "../mesh/mesh.js";
+import { Settings } from "../settings.js";
+import { ChunkEditor } from "./chunkEditor.js";
+import { ChunkManager } from "./chunkManager.js";
+
+/**
+ * The world as the rest of the game sees it: blocks to read and change, raycasts, the chunks to draw. Chunk loading
+ * is in {@link ChunkManager}, block edits in {@link ChunkEditor}.
+ *
+ * Two coordinate systems: world coordinates (y up, the *World methods) and chunk space (x, y, and z as the height).
+ */
+export class World {
+    #chunks;
+    #editor;
+
+    /**
+     * @param {MeshHandler} meshHandler
+     */
+    constructor(meshHandler) {
+        this.#chunks = new ChunkManager(meshHandler);
+        this.#editor = new ChunkEditor(this.#chunks, this.#chunks.loader, meshHandler);
+    }
+
+    /** the number of chunks in the render range */
+    get chunksInView() {
+        return this.#chunks.chunksInRange;
+    }
+
+    /**
+     * Moves the center of the loaded range. World coordinates.
+     */
+    moveToWorldPos(x, y, z) {
+        this.#chunks.setCenter(
+            Math.floor(x) >> CHUNK_SIZE_BIT_LEN,
+            Math.floor(-z - 1) >> CHUNK_SIZE_BIT_LEN,
+            Math.floor(y) >> CHUNK_SIZE_BIT_LEN);
+    }
+
+    /** Call once per frame. */
+    update() {
+        this.#editor.update();
+        this.#chunks.update();
+    }
+
+    /**
+     * @param {(chunk: Chunk) => void} chunkProcessor
+     */
+    forEachChunkInRangeFarToNear(chunkProcessor) {
+        this.#chunks.forEachChunkInRangeFarToNear(chunkProcessor);
+    }
+
+    /**
+     * @param {(chunk: Chunk) => void} chunkProcessor
+     */
+    forEachChunkInRangeNearToFar(chunkProcessor) {
+        this.#chunks.forEachChunkInRangeNearToFar(chunkProcessor);
+    }
+
+    /**
+     * Performs voxel-accurate DDA raycast without integer casting.
+     * @param {FVec3} pos 
+     * @param {FVec3} dir 
+     * @param {number} maxDist - Maximum ray distance
+     * Any non-empty block except water stops the ray (solid blocks, plants as full cubes); the starting cell stops it
+     * only if it's solid (standing in a plant's cell doesn't keep targeting the plant).
+     * @returns {{hit: boolean, x: number, y: number, z: number, block: number, nx: number, ny: number, nz: number} | null}
+     *   the hit block in world coordinates and the normal of the face the ray entered through
+     *   (pointing back towards the ray origin; all 0 when the origin itself is inside the block)
+     */
+    raycasti(pos, dir, maxDist = 5) {
+        let x = Math.floor(pos.x);
+        let y = Math.floor(pos.y);
+        let z = Math.floor(pos.z);
+
+        // Direction of step in each axis (+1 or -1)
+        const stepX = Math.sign(dir.x);
+        const stepY = Math.sign(dir.y);
+        const stepZ = Math.sign(dir.z);
+
+        // How far along the ray we must move in order to cross a voxel boundary on each axis
+        const tDeltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity;
+        const tDeltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity;
+        const tDeltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity;
+
+        // Calculate initial tMax values: distance to the first voxel boundary
+        const tMaxX = dir.x !== 0
+            ? ((stepX > 0 ? (x + 1 - pos.x) : (pos.x - x)) * tDeltaX)
+            : Infinity;
+        const tMaxY = dir.y !== 0
+            ? ((stepY > 0 ? (y + 1 - pos.y) : (pos.y - y)) * tDeltaY)
+            : Infinity;
+        const tMaxZ = dir.z !== 0
+            ? ((stepZ > 0 ? (z + 1 - pos.z) : (pos.z - z)) * tDeltaZ)
+            : Infinity;
+
+        let tMax = { x: tMaxX, y: tMaxY, z: tMaxZ };
+        let t = 0;
+        // the face the ray entered the current voxel through is opposite to the last step
+        let nx = 0, ny = 0, nz = 0;
+        let first = true;
+
+        while (t <= maxDist) {
+            const block = this.blockWorldAt(x, y, z);
+            const stops = first ? isSolid(block) : block !== BLOCK_IDS.EMPTY && !isLiquid(block);
+            if (stops) {
+                return { hit: true, x, y, z, block, nx, ny, nz };
+            }
+            first = false;
+
+            // Step to the next voxel
+            if (tMax.x < tMax.y && tMax.x < tMax.z) {
+                x += stepX;
+                t = tMax.x;
+                tMax.x += tDeltaX;
+                nx = -stepX; ny = 0; nz = 0;
+            } else if (tMax.y < tMax.z) {
+                y += stepY;
+                t = tMax.y;
+                tMax.y += tDeltaY;
+                nx = 0; ny = -stepY; nz = 0;
+            } else {
+                z += stepZ;
+                t = tMax.z;
+                tMax.z += tDeltaZ;
+                nx = 0; ny = 0; nz = -stepZ;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * World coordinates, as returned by {@link World#raycasti}.
+     * @returns {boolean} whether the block was changed
+     */
+    setBlockWorld(iwx, iwy, iwz, value) {
+        return this.setBlock(iwx, -iwz - 1, iwy, value);
+    }
+
+    /**
+     * Changes a block in a loaded chunk, see {@link ChunkEditor}. Chunk space coordinates (iz is the height), like
+     * {@link World#blockAt}.
+     * @returns {boolean} whether the block was changed
+     */
+    setBlock(ix, iy, iz, value) {
+        return this.#editor.setBlock(ix, iy, iz, value);
+    }
+
+    blockWorldAt(iwx, iwy, iwz) {
+        return this.blockAt(iwx, -iwz - 1, iwy);
+    }
+
+    /**
+     * Whether the chunk holding a block is loaded (blockWorldAt returns EMPTY for blocks of chunks that aren't).
+     * @param {number} iwx world block position
+     * @param {number} iwy
+     * @param {number} iwz
+     */
+    isLoadedWorld(iwx, iwy, iwz) {
+        const iy = -iwz - 1;
+        return this.#chunks.getLoaded(iwx >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iwy >> CHUNK_SIZE_BIT_LEN) !== undefined;
+    }
+
+    /**
+     * Whether a point is under the water surface. The top water cell is filled up to settings.water.surfaceLevel,
+     * unless water or a solid block is above it (as the mesher draws it).
+     * @param {number} wx world position
+     * @param {number} wy
+     * @param {number} wz
+     */
+    isInWater(wx, wy, wz) {
+        const ix = Math.floor(wx), iy = Math.floor(wy), iz = Math.floor(wz);
+        if (!isLiquid(this.blockWorldAt(ix, iy, iz)))
+            return false;
+        const above = this.blockWorldAt(ix, iy + 1, iz);
+        return isLiquid(above) || isSolid(above) || wy - iy < Settings.water.surfaceLevel;
+    }
+
+    /**
+     * Chunk space coordinates (iz is the height).
+     * @returns {number} the block, EMPTY in chunks that aren't loaded
+     */
+    blockAt(ix, iy, iz) {
+        const entry = this.#chunks.getLoaded(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN);
+        if (entry === undefined)
+            return BLOCK_IDS.EMPTY;
+        return entry.chunk.data.getVoxelXYZ(ix & CHUNK_SIZE_MASK, iy & CHUNK_SIZE_MASK, iz & CHUNK_SIZE_MASK);
+    }
+}
+
+export class Position {
+    #x; #y; #z;
+
+    constructor(x = 0, y = 0, z = 0, world = false) {
+        if (world) {
+            this.setWorld(x, y, z);
+        } else {
+            this.set(x, y, z);
+        }
+    }
+
+    set(x, y, z) {
+        this.#x = x;
+        this.#y = y;
+        this.#z = z;
+    }
+
+    setWorld(x, y, z) {
+        this.set(x, -z - 1, y);
+    }
+
+    get cx() {
+        return this.#x >> CHUNK_SIZE_BIT_LEN;
+    }
+
+    get cz() {
+        return this.#z >> CHUNK_SIZE_BIT_LEN;
+    }
+
+    get cy() {
+        return this.#y >> CHUNK_SIZE_BIT_LEN;
+    }
+
+    get bx() {
+        return this.#x & CHUNK_SIZE_MASK;
+    }
+
+    get bz() {
+        return this.#z & CHUNK_SIZE_MASK;
+    }
+
+    get by() {
+        return this.#y & CHUNK_SIZE_MASK;
+    }
+
+    get x() {
+        return this.#x;
+    }
+
+    get y() {
+        return this.#y;
+    }
+
+    get z() {
+        return this.#z;
+    }
+
+    get ix() {
+        return Math.floor(this.#x);
+    }
+
+    get iy() {
+        return Math.floor(this.#y);
+    }
+
+    get iz() {
+        return Math.floor(this.#z);
+    }
+
+    get wx() {
+        return this.#x;
+    }
+
+    get wy() {
+        return this.#z;
+    }
+
+    get wz() {
+        return -this.#y - 1;
+    }
+
+    get iwx() {
+        return Math.floor(this.#x);
+    }
+
+    get iwy() {
+        return Math.floor(this.#z);
+    }
+
+    get iwz() {
+        return Math.floor(-this.#y - 1);
+    }
+
+    static from(x, y, z) {
+        return new Position(x, y, z, false);
+    }
+
+    static fromWorld(x, y, z) {
+        return new Position(x, y, z, true);
+    }
+}

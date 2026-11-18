@@ -11,7 +11,7 @@ import { Settings } from "./settings.js";
 import { Ticker } from "./ticker.js";
 import { TextureArray } from "./textures.js";
 import { GenericBuffer, Resources, writeVoxelWireframe } from "./utils.js";
-import { Position, World } from "./world.js";
+import { Position, World } from "./world/world.js";
 
 /**
  * Reads back the overdraw view and counts fragment shader invocations per covered pixel

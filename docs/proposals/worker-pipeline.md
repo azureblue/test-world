@@ -7,8 +7,8 @@ Status: proposed, partly done. Done so far:
   (not used yet, ready for the coordinator);
 - scheduling in the current chunk loader: request ids, nearest chunk first, out-of-range requests dropped
   (see [Chunk loading scheduler](#chunk-loading-scheduler-done));
-- removing and placing blocks with a quick mesh on the main thread and an optimized remesh in the mesher worker
-  (see [Block edits](#block-edits-done)).
+- removing and placing blocks with a quick mesh on the main thread and the changed chunks requested again from the
+  chunk loader for the optimized mesh (see [Block edits](#block-edits-done)).
 
 The coordinator from design B was never ported to the current protocol; its code was removed and is in git
 history (commit `96ca241`).
@@ -167,15 +167,17 @@ if it's solid. Water can't be selected, placing on a face under water replaces t
   grow the chunk's bounds and culling box for a placed block (removing doesn't shrink them); update the border copy
   in every loaded neighbour whose extended data contains the block (up to 7 more chunks at a corner; a neighbour whose border cell already has the value,
   because it never loaded that side, is skipped). Each changed chunk gets a mesh from the quick (non-greedy) mesher.
-- **Mesher worker, in the background:** each changed chunk gets a remesh request with a copy of its data (the main
-  thread keeps its own for raycasts and further edits) and a remesh id; the optimized mesh replaces the quick one
-  unless the chunk was dropped, reloaded or edited again since (the id no longer matches).
 - **Chunk loader:** gets a `BlockEdit` message before anything else. `ChunkDataLoader` keeps the edits per chunk and
   applies them to its cached data and to every later generation, so edits survive dropping and reloading, and
-  neighbours loaded later get them in their border data. Neighbours that are requested but not loaded yet are
-  requested again (and the old request cancelled), because their response may already be on the way without the edit.
+  neighbours loaded later get them in their border data.
+- **In the background:** every changed chunk is requested from the chunk loader again (an earlier pending request
+  cancelled), once it hasn't been edited for `Settings.world.editRequestDelay` (300 ms), so a burst of edits sends one
+  request per chunk; while edits go on, at least every `editRequestMaxDelay` (1.5 s). Its response, with the edit, replaces the chunk's data and the quick mesh with the optimized one, unless
+  the chunk was edited again since (the request id no longer matches). No data is copied from the main thread.
+  Neighbours that are requested but not loaded yet are requested again too, because their response may already be on
+  the way without the edit.
 
-Measured in Node (real `World`, chunk loader and mesher worker): main thread per edit median 0.15 ms inside a chunk,
+Measured in Node (real `World`, chunk loader and mesher worker, before the remesh moved to the chunk loader): main thread per edit median 0.15 ms inside a chunk,
 0.31 ms on a border (2 chunks), 0.20 ms per placement, not counting the WebGL upload of the quick mesh (about 3000 quads, ~150 KB, for a
 grass chunk). The quick mesh is about 3.6× larger than the greedy one (3058 vs 858 quads) until the remesh arrives.
 
@@ -183,6 +185,12 @@ Not done yet:
 
 - **Remesh on the coordinator.** With the world worker, the edit and the remesh move there, and the main thread only
   sends the edit and receives meshes.
+- **Edits faster than the loader replies.** Each edit gives the chunk a new request id, so a reply that arrives after
+  a later edit is dropped (it lacks that edit). Correct, but while edits keep coming faster than the round trip, the
+  chunk keeps its quick mesh (about 3.6× more quads) and every `editRequestMaxDelay` request is built and thrown
+  away. Negligible for one chunk edited by hand; with many chunks changing for a long time (water flooding) it adds
+  up. Fix if needed: keep the reply and reapply the edits made after its request on top of it. Likely moot if
+  flooding runs in a worker next to the block data (see remesh on the coordinator above).
 - The "requested but not loaded yet" neighbour path has no deterministic test yet.
 - Main thread memory: every loaded chunk keeps its full 34³ extended data (157 KB), about 330 MB for the 2109
   chunks in range, more within the retain range.

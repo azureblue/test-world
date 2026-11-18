@@ -16,7 +16,12 @@ export const Settings = {
         // in chunks; chunks are loaded and drawn within this distance
         renderDistance: 8,
         // loaded chunks are kept until they're this many times the render distance away
-        retainDistanceFactor: 2
+        retainDistanceFactor: 2,
+        // ms without edits before an edited chunk is requested again from the chunk loader for its optimized mesh
+        // (until then it keeps the quick mesh), so a burst of edits sends one request per chunk instead of one per edit
+        editRequestDelay: 300,
+        // ms after the first edit: while edits go on, the chunk is requested at least this often
+        editRequestMaxDelay: 1500
     },
 
     camera: {
