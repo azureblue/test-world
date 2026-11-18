@@ -1,14 +1,15 @@
-import { BLOCK_IDS, isLiquid, isSolid } from "../blocks.js";
+import { BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, isLiquid, isSolid, isXQuads } from "../blocks.js";
 import { Chunk, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk/chunk.js";
 import { FVec3 } from "../geom.js";
 import { MeshHandler } from "../mesh/mesh.js";
-import { Settings } from "../settings.js";
 import { ChunkEditor } from "./chunkEditor.js";
 import { ChunkManager } from "./chunkManager.js";
 
 /**
- * The world as the rest of the game sees it: blocks to read and change, raycasts, the chunks to draw. Chunk loading
- * is in {@link ChunkManager}, block edits in {@link ChunkEditor}.
+ * The world as the rest of the game sees it: blocks to read and change, raycasts, the chunks to draw. It's the
+ * client's copy: the world worker (worker/worldWorker.js) owns the world and runs the simulation (flowing water);
+ * chunks come from it through {@link ChunkManager}, the client's edits go to it through {@link ChunkEditor}, which
+ * predicts them until the worker's chunk messages include them.
  *
  * Two coordinate systems: world coordinates (y up, the *World methods) and chunk space (x, y, and z as the height).
  */
@@ -20,8 +21,8 @@ export class World {
      * @param {MeshHandler} meshHandler
      */
     constructor(meshHandler) {
-        this.#chunks = new ChunkManager(meshHandler);
-        this.#editor = new ChunkEditor(this.#chunks, this.#chunks.loader, meshHandler);
+        this.#chunks = new ChunkManager(meshHandler, (entry, response) => this.#editor.onChunkData(entry, response));
+        this.#editor = new ChunkEditor(this.#chunks, this.#chunks.worldClient, meshHandler);
     }
 
     /** the number of chunks in the render range */
@@ -41,8 +42,9 @@ export class World {
 
     /** Call once per frame. */
     update() {
-        this.#editor.update();
+        // chunk messages first, so a chunk with edits applied again on top gets its quick mesh in the same frame
         this.#chunks.update();
+        this.#editor.update();
     }
 
     /**
@@ -64,8 +66,8 @@ export class World {
      * @param {FVec3} pos 
      * @param {FVec3} dir 
      * @param {number} maxDist - Maximum ray distance
-     * Any non-empty block except water stops the ray (solid blocks, plants as full cubes); the starting cell stops it
-     * only if it's solid (standing in a plant's cell doesn't keep targeting the plant).
+     * Any non-empty block except water stops the ray (solid blocks, plants as full cubes, also plants in water); the
+     * starting cell stops it only if it's solid (standing in a plant's cell doesn't keep targeting the plant).
      * @returns {{hit: boolean, x: number, y: number, z: number, block: number, nx: number, ny: number, nz: number} | null}
      *   the hit block in world coordinates and the normal of the face the ray entered through
      *   (pointing back towards the ray origin; all 0 when the origin itself is inside the block)
@@ -104,7 +106,7 @@ export class World {
 
         while (t <= maxDist) {
             const block = this.blockWorldAt(x, y, z);
-            const stops = first ? isSolid(block) : block !== BLOCK_IDS.EMPTY && !isLiquid(block);
+            const stops = first ? isSolid(block) : block !== BLOCK_IDS.EMPTY && (!isLiquid(block) || isXQuads(block));
             if (stops) {
                 return { hit: true, x, y, z, block, nx, ny, nz };
             }
@@ -160,23 +162,26 @@ export class World {
      * @param {number} iwz
      */
     isLoadedWorld(iwx, iwy, iwz) {
-        const iy = -iwz - 1;
-        return this.#chunks.getLoaded(iwx >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iwy >> CHUNK_SIZE_BIT_LEN) !== undefined;
+        return this.isLoaded(iwx, -iwz - 1, iwy);
     }
 
     /**
-     * Whether a point is under the water surface. The top water cell is filled up to settings.water.surfaceLevel,
-     * unless water or a solid block is above it (as the mesher draws it).
+     * Whether the chunk holding a block is loaded. Chunk space coordinates (iz is the height).
+     */
+    isLoaded(ix, iy, iz) {
+        return this.#chunks.getLoaded(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN) !== undefined;
+    }
+
+    /**
+     * Whether a point is under the water surface: in a water cell, below its level (as the mesher draws it).
      * @param {number} wx world position
      * @param {number} wy
      * @param {number} wz
      */
     isInWater(wx, wy, wz) {
-        const ix = Math.floor(wx), iy = Math.floor(wy), iz = Math.floor(wz);
-        if (!isLiquid(this.blockWorldAt(ix, iy, iz)))
-            return false;
-        const above = this.blockWorldAt(ix, iy + 1, iz);
-        return isLiquid(above) || isSolid(above) || wy - iy < Settings.water.surfaceLevel;
+        const iy = Math.floor(wy);
+        const block = this.blockWorldAt(Math.floor(wx), iy, Math.floor(wz));
+        return isLiquid(block) && wy - iy < blockHeight(block) / BLOCK_HEIGHT_FULL;
     }
 
     /**

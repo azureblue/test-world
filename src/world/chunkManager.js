@@ -6,7 +6,7 @@ import { Settings } from "../settings.js";
 import { GenericBuffer, perfDiff } from "../utils.js";
 import { ChunkResponse } from "../worker/common.js";
 import { ChunkEntry, pos3ToKey } from "./chunkEntry.js";
-import { ChunkLoaderClient } from "./chunkLoaderClient.js";
+import { WorldClient } from "./worldClient.js";
 
 const logger = new Logger("ChunkManager");
 
@@ -17,16 +17,17 @@ const CHUNK_RETAIN_DIST_SQ = CHUNK_RENDER_DIST_SQ * Settings.world.retainDistanc
 const RESPONSES_PER_FRAME = 10;
 
 /**
- * The chunks around the center: requests the ones that come into the render range from the chunk loader, applies the
- * responses, drops the ones beyond the retain range. Chunk coordinates.
+ * The chunks around the center: requests the ones that come into the render range from the world worker, applies its
+ * chunk responses and updates, drops the chunks beyond the retain range. Chunk coordinates.
  */
 export class ChunkManager {
-    #loader;
+    #worldClient;
     #meshHandler;
+    #onChunkData;
 
     /** @type {Map<string, ChunkEntry>} */
     #chunks = new Map();
-    /** the newest response per chunk, applied in {@link update}
+    /** the newest chunk message per chunk, applied in {@link update}
      * @type {Map<string, ChunkResponse>} */
     #responseQueue = new Map();
 
@@ -41,10 +42,13 @@ export class ChunkManager {
 
     /**
      * @param {MeshHandler} meshHandler
+     * @param {(entry: ChunkEntry, response: ChunkResponse) => void} onChunkData called after a chunk message was
+     *   applied to the entry, and for messages about chunks that aren't kept (entry undefined)
      */
-    constructor(meshHandler) {
+    constructor(meshHandler, onChunkData) {
         this.#meshHandler = meshHandler;
-        this.#loader = new ChunkLoaderClient((response) => this.#onChunk(response));
+        this.#onChunkData = onChunkData;
+        this.#worldClient = new WorldClient((response) => this.#onChunk(response));
         /** @type {GenericBuffer<Vec3>} */
         const tmpBuff = new GenericBuffer(512);
         for (let dx = -CHUNK_RENDER_DIST; dx <= CHUNK_RENDER_DIST; dx++)
@@ -58,8 +62,8 @@ export class ChunkManager {
         this.#rangeDeltas.sort((a, b) => (a.x * a.x + a.y * a.y + a.z * a.z) - (b.x * b.x + b.y * b.y + b.z * b.z));
     }
 
-    get loader() {
-        return this.#loader;
+    get worldClient() {
+        return this.#worldClient;
     }
 
     /** the number of chunks in the render range */
@@ -152,9 +156,9 @@ export class ChunkManager {
     #onChunk(response) {
         const chunkPos = response.chunkPos;
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
-        // keep the response to the newest request, also when responses arrive out of order
+        // only the newest message per chunk is applied
         const queued = this.#responseQueue.get(key);
-        if (queued === undefined || response.requestId > queued.requestId)
+        if (queued === undefined || response.version > queued.version)
             this.#responseQueue.set(key, response);
     }
 
@@ -163,15 +167,12 @@ export class ChunkManager {
         const chunkPos = response.chunkPos;
         const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
         const entry = this.#chunks.get(key);
-        if (entry === undefined)
-            return;
-        if (response.requestId !== entry.requestId) {
-            // the chunk was requested again (back in range, edited) while the old request was in the worker queue
-            logger.debug(() => `dropping response to outdated request ${response.requestId} for ${key}, current ${entry.requestId}`);
+        if (entry === undefined || response.version <= entry.version) {
+            // not kept (left the range, an update for a chunk never requested), or older than what it has; every
+            // message is a whole snapshot, so a newer one has all an older one had
+            this.#onChunkData(undefined, response);
             return;
         }
-        if (entry.loaded && !entry.dirty)
-            logger.warn(() => "got chunk data, but not dirty " + key);
 
         const now = performance.now();
         const meshData = response.chunkMesh;
@@ -181,15 +182,16 @@ export class ChunkManager {
             this.#meshHandler.dispose(oldMesh);
         entry.chunk = new Chunk(chunkPos, response.chunkData, mesh);
         entry.loaded = true;
-        entry.dirty = false;
+        entry.version = response.version;
         logger.debug(() => `uploading mesh time: ${perfDiff(now)}`);
+        this.#onChunkData(entry, response);
     }
 
     #updateChunksInRange() {
         const center = this.#center;
         // the loader picks pending requests nearest to this chunk first and drops the ones out of range,
         // by the same rule as below for entries that are not loaded yet
-        this.#loader.setCenter(vec3(center.x, center.y, center.z), CHUNK_RENDER_DIST_SQ);
+        this.#worldClient.setCenter(vec3(center.x, center.y, center.z), CHUNK_RENDER_DIST_SQ);
         this.#tmpBuffer.reset();
         for (const key of this.#chunks.keys())
             this.#tmpBuffer.put(key);
@@ -221,7 +223,7 @@ export class ChunkManager {
             if (!this.#chunks.has(key)) {
                 const entry = new ChunkEntry(vec3(cx, cy, cz));
                 this.#chunks.set(key, entry);
-                this.#loader.request(entry);
+                this.#worldClient.request(entry);
             }
         }
         this.#chunkKeysSorted.trimToSize();

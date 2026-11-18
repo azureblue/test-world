@@ -11,17 +11,14 @@ export const Settings = {
     world: {
         // chunk generator, see gen/registry.js
         generator: "default",
-        // the chunk loader meshes with the fast, unoptimized mesher
+        // the world worker meshes with the fast, unoptimized mesher
         fastMesher: false,
         // in chunks; chunks are loaded and drawn within this distance
         renderDistance: 8,
         // loaded chunks are kept until they're this many times the render distance away
         retainDistanceFactor: 2,
-        // ms without edits before an edited chunk is requested again from the chunk loader for its optimized mesh
-        // (until then it keeps the quick mesh), so a burst of edits sends one request per chunk instead of one per edit
-        editRequestDelay: 300,
-        // ms after the first edit: while edits go on, the chunk is requested at least this often
-        editRequestMaxDelay: 1500
+        // seconds: a chunk changed in the world worker (edits, flowing water) is sent again at most this often
+        chunkUpdateInterval: 0.1
     },
 
     camera: {
@@ -39,7 +36,7 @@ export const Settings = {
     },
 
     simulation: {
-        // ticks per second; everything that changes the world over time (player physics, later water, block
+        // ticks per second; everything that changes the world over time (player physics, flowing water, block
         // updates) runs per tick, rendering runs per frame
         tickRate: 60,
         // more ticks due in one frame (after a stall, a hidden tab) are dropped: the simulation slows down instead
@@ -140,7 +137,7 @@ export const Settings = {
         // how far blocks can be selected, in blocks
         reach: 5,
         // the block placed with the right mouse button, a key of BLOCK_IDS
-        placeBlock: "ROCK"
+        placeBlock: "WATER"
     },
 
     sky: {
@@ -156,13 +153,20 @@ export const Settings = {
         textureAlpha: 220,
         // average colour of the water texture
         textureColor: [0, 0.29, 0.69],
-        // height of the water surface in its cell; must match WATER_LEVEL_SURFACE in mesh/cpp/blocks.hpp (7/8)
-        surfaceLevel: 0.875,
         // pre-pass of the water faces:
         // "depth" - depth-only program, then the colour pass; only the nearest water face is blended into a pixel
         // "full" - the same with the water program in the pre-pass (for comparison)
         // "off" - no pre-pass; overlapping water faces blend depending on the draw order
         prepass: "off",
+        // flowing water (world/waterFlow.js, run by the world worker), no levels yet: water woken by a block change
+        // next to it flows down into an empty cell, or sideways into empty cells if it can't flow down
+        flow: {
+            enabled: true,
+            // seconds per flow step (rounded to whole simulation ticks)
+            interval: 0.25,
+            // cells updated per tick at most, the rest wait for the next tick
+            maxUpdatesPerTick: 256
+        },
         underwater: {
             // the fog colour is the water colour scaled by this
             colorScale: 0.6,

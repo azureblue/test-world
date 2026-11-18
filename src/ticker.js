@@ -1,5 +1,5 @@
 /**
- * The simulation clock: everything that changes the world over time (player physics now, later water, block updates)
+ * The simulation clock: everything that changes the world over time (player physics, flowing water, later block updates)
  * runs in ticks of a fixed length (Settings.simulation.tickRate per second), independent of the frame rate. Rendering
  * runs per frame and can interpolate between the last two ticks with `alpha`.
  */

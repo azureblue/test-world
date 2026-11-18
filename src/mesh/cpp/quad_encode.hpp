@@ -120,12 +120,13 @@ class quad_encoder {
 
 class water_encoder {
    public:
-    // level: water height in the cell in 1/8 of a block; a side face spans level * h, so merged side faces must
-    // share the level (the mesher keeps the level in the face data, faces with different levels don't merge)
+    // level: water height in the cell in 1/8 of a block, where the top face is; bottom: where side faces start
+    // (above 0 next to lower water); a side face spans (level - bottom) * h, so merged side faces must share both
+    // (the mesher keeps them in the face data, faces that differ don't merge)
     template <Direction DIR>
-    inline_always static void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint level, uint tex) {
+    inline_always static void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint level, uint bottom, uint tex) {
         uint64 v0, v1, v2, v3;
-        encode_water_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, level, tex);
+        encode_water_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, level, bottom, tex);
         out[0] = v0;
         out[1] = v1;
         out[2] = v2;
@@ -136,28 +137,30 @@ class water_encoder {
     }
 
     template <Direction DIR>
-    inline_always static void encode_face_q(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint level, uint tex) {
-        encode_face<DIR>(out, vx_x, vx_y, vx_z, 1, 1, level, tex);
+    inline_always static void encode_face_q(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint level, uint bottom, uint tex) {
+        encode_face<DIR>(out, vx_x, vx_y, vx_z, 1, 1, level, bottom, tex);
     }
 
     template <Direction DIR>
-    inline_always static void encode_water_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint level, uint tex_id) {
-        uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, level, tex_id);
-        // texture coordinates follow the face size, a side face is level/8 of a block high
+    inline_always static void encode_water_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint level, uint bottom, uint tex_id) {
+        uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, level, bottom, tex_id);
+        // texture coordinates follow the face size, a side face is (level - bottom)/8 of a block high
+        uint span = level - bottom;
         uint64 merge_w = MERGE_BIT_W * 8 * w;
-        uint64 merge_h = MERGE_BIT_H * (quad_encoding::MERGE_VECTOR_H[DIR][Z] != 0 ? level : 8) * h;
+        uint64 merge_h = MERGE_BIT_H * (quad_encoding::MERGE_VECTOR_H[DIR][Z] != 0 ? span : 8) * h;
         v0 = base_bits;
-        v1 = base_bits + pos_offset_w<DIR>(level) * w | merge_w;
-        v2 = base_bits + pos_offset_w<DIR>(level) * w + pos_offset_h<DIR>(level) * h | merge_w | merge_h;
-        v3 = base_bits + pos_offset_h<DIR>(level) * h | merge_h;
+        v1 = base_bits + pos_offset_w<DIR>(span) * w | merge_w;
+        v2 = base_bits + pos_offset_w<DIR>(span) * w + pos_offset_h<DIR>(span) * h | merge_w | merge_h;
+        v3 = base_bits + pos_offset_h<DIR>(span) * h | merge_h;
     }
 
    private:
     template <Direction DIR>
-    inline_always static uint64 encode_base_bits(uint vx_x, uint vx_y, uint vx_z, uint level, uint tex_id) {
+    inline_always static uint64 encode_base_bits(uint vx_x, uint vx_y, uint vx_z, uint level, uint bottom, uint tex_id) {
         int x = vx_x + quad_encoding::VERTEX_OFFSETS[DIR][X];
         int y = vx_y + quad_encoding::VERTEX_OFFSETS[DIR][Y];
-        int z = vx_z * 8 + quad_encoding::VERTEX_OFFSETS[DIR][Z] * level;
+        // the top face at the level, side faces from their bottom (0 for the bottom face)
+        int z = vx_z * 8 + (quad_encoding::VERTEX_OFFSETS[DIR][Z] != 0 ? level : bottom);
         return encode_pos_bits(x, y, z) | encode_tex_bits(tex_id);
     }
 

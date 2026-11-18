@@ -1,254 +1,302 @@
-import { CHUNK_SIZE, ChunkBlockData, ChunkData, posToKey3 } from "../chunk/chunk.js";
-import { ChunkDataExt, ChunkExtDataFactory, ChunkDataExtTransfer as ChunkExtDataTransfer } from "../chunk/extChunk.js";
-import { Dir27, vec3 } from "../geom.js";
+import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataLoader } from "../chunk/chunk.js";
+import { ChunkExtDataFactory } from "../chunk/extChunk.js";
+import { ChunkGeneratorFactory } from "../gen/registry.js";
+import { Vec3 } from "../geom.js";
 import { Logger } from "../logging.js";
-import { ChunkMesh } from "../mesh/mesh.js";
-import { FixedSizeMap, Resources } from "../utils.js";
-import { ChunkRequest, ChunkResponse, ConnectionPortRequest, ConnectionPortResponse, GenerateChunkRequest, GenerateChunkResponse, MeshChunkRequest, MeshChunkResponse, WorkerReadyResponse } from "./common.js";
+import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
+import { Settings } from "../settings.js";
+import { Ticker } from "../ticker.js";
+import { perfDiff } from "../utils.js";
+import { pos3ToKey } from "../world/chunkEntry.js";
+import { WaterFlow } from "../world/waterFlow.js";
+import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse } from "./common.js";
+import { WorkerConnection, WorkerServer } from "./worker.js";
 
-const params = new URL(self.location.href).searchParams;
-const WORKER_ID = params.get("workerId");
-const logger = new Logger("world worker " + WORKER_ID);
+// The world worker owns the world: the block data (generated, with every edit applied), the simulation (flowing
+// water) and the meshes. Clients (the main thread now, players over the network later) request chunks, send their
+// edits and get chunk responses and updates; their own copy of the world only predicts their edits until an update
+// confirms them. Settings come from the same URL parameters as the page's (World passes them on).
 
-logger.info(() => "booted " + self.location?.href);
+const workerId = new URL(self.location.href).searchParams.get("workerId");
 
-/** @type {Map<string, ChunkBlockData>} */
-const blockDataCache = new FixedSizeMap(27 * 30);
+const logger = new Logger("world worker " + workerId);
+const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator);
 
-class CompletableChunkBlockDataPromise {
+const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory());
+const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher() : UIntExtWasmMesher.createMesher());
+
+/**
+ * A connected client: where its chunks go and the last of its edits applied.
+ */
+class Client {
+    editAck = 0;
+
+    /** @param {WorkerConnection} connection */
+    constructor(connection) {
+        this.connection = connection;
+    }
+}
+
+/**
+ * The authoritative world: blocks, the simulated range, the chunks changed since they were last sent. Implements the
+ * water flow's {@link import("../world/waterFlow.js").BlockAccess}.
+ */
+class WorldState {
+    /** @type {Map<WorkerConnection, Client>} */
+    clients = new Map();
+    /** @type {WaterFlow | null} */
+    water = null;
+
+    /** @type {Vec3 | null} null until the first client sets it */
+    #center = null;
+    #rangeSq = 0;
+    #version = 0;
+    /** chunks changed since they were last sent: key -> position
+     * @type {Map<string, Vec3>} */
+    #changed = new Map();
+    /** key -> when it was last sent (performance.now)
+     * @type {Map<string, number>} */
+    #lastSent = new Map();
+
     /**
-     * Creates a new CompletableChunkBlockDataPromise.
+     * @param {WorkerConnection} connection
+     * @returns {Client}
      */
-    constructor() {
-        /** @type {Promise<ChunkBlockData>} */
-        this.promise = new Promise((resolve, reject) => {
-            this.resolve = resolve;
-            this.reject = reject;
-
-        });
+    client(connection) {
+        let client = this.clients.get(connection);
+        if (client === undefined) {
+            client = new Client(connection);
+            this.clients.set(connection, client);
+        }
+        return client;
     }
-}
 
-class CompletableChunkMeshPromise {
     /**
-     * Creates a new CompletableChunkMeshPromise.
+     * The simulated range: the client's load range. One client for now; with more, the union of their ranges.
+     * @param {Vec3} chunkPos
+     * @param {number} rangeSq
      */
-    constructor() {
-        /** @type {Promise<ChunkMesh>} */
-        this.promise = new Promise((resolve, reject) => {
-            this.resolve = resolve;
-            this.reject = reject;
-        });
+    setRange(chunkPos, rangeSq) {
+        this.#center = chunkPos;
+        this.#rangeSq = rangeSq;
+        this.water?.resumeWaiting();
     }
-}
 
-
-/** @type {Map<string, CompletableChunkBlockDataPromise>} */
-const blockDataPromiseCache = new Map();
-
-/** @type {Map<string, CompletableChunkMeshPromise>} */
-const meshPromiseCache = new Map();
-
-const chunkDataFactory = new ChunkExtDataFactory();
-const chunkDataTransfer = new ChunkExtDataTransfer();
-
-const genChannel = new MessageChannel();
-const mesherChannel = new MessageChannel();
-
-const generatorWorker = new Worker(Resources.relativeToRoot(`./worker/generatorWorker.js?workerId=gen0`), { type: "module" });
-
-/**
- * Handles the response from the generator worker when a chunk has been generated.
- * @param {GenerateChunkResponse} generateChunkResponse - The response containing the generated chunk data and mesh.
- */
-function handleGenerateChunkResponse(generateChunkResponse) {
-    logger.debug(() => `received generated chunk for (${generateChunkResponse.chunkPos.x}, ${generateChunkResponse.chunkPos.y}, ${generateChunkResponse.chunkPos.z})`);
-    const chunkPos = generateChunkResponse.chunkPos;
-    const key = posToKey3(chunkPos.x, chunkPos.y, chunkPos.z);    
-    blockDataCache.set(key, generateChunkResponse.chunkBlockData);
-    if (blockDataPromiseCache.has(key)) {
-        const completablePromise = blockDataPromiseCache.get(key);
-        completablePromise.resolve(generateChunkResponse.chunkBlockData);
-        blockDataPromiseCache.delete(key);
+    blockAt(ix, iy, iz) {
+        return chunkDataLoader.getBlock(ix, iy, iz);
     }
-}
 
-/**
- * Handles the response from the mesher worker when a chunk mesh has been generated.
- * @param {MeshChunkResponse} chunkMeshResponse - The response containing the generated chunk mesh.
- */
-function handleChunkMeshResponse(chunkMeshResponse) {
-    logger.debug(() => `received generated chunk mesh for (${chunkMeshResponse.chunkPos.x}, ${chunkMeshResponse.chunkPos.y}, ${chunkMeshResponse.chunkPos.z})`);
-    const chunkPos = chunkMeshResponse.chunkPos;
-    const key = posToKey3(chunkPos.x, chunkPos.y, chunkPos.z);
-    const meshData = chunkMeshResponse.meshData;
-    if (meshPromiseCache.has(key)) {
-        meshPromiseCache.get(key).resolve(meshData);
-        meshPromiseCache.delete(key);
+    isLoaded(ix, iy, iz) {
+        if (this.#center === null)
+            return false;
+        const dx = (ix >> CHUNK_SIZE_BIT_LEN) - this.#center.x;
+        const dy = (iy >> CHUNK_SIZE_BIT_LEN) - this.#center.y;
+        const dz = (iz >> CHUNK_SIZE_BIT_LEN) - this.#center.z;
+        return dx * dx + dy * dy + dz * dz <= this.#rangeSq;
     }
-}
 
-genChannel.port2.onmessage = (message) => {
-    handleGenerateChunkResponse(GenerateChunkResponse.from(message));
-}
-
-mesherChannel.port2.onmessage = (message) => {
-    handleChunkMeshResponse(MeshChunkResponse.from(message));
-}
-
-generatorWorker.onmessage = (message) => {
-    switch (message.data.type) {
-        case "ready":
-            const workerReady = WorkerReadyResponse.from(message);
-            logger.info(() => `generator worker ${workerReady.workerId} ready, sending connection port`);
-            new ConnectionPortRequest(genChannel.port1).toMessage().post(generatorWorker);
-            break;
-        case "connectionPortResponse":
-            const connectionResponse = ConnectionPortResponse.from(message);
-            logger.info(() => `worker gen0 connected to ${WORKER_ID} with connection id ${connectionResponse.connectionId}`);
-            break;
-        default:
-            logger.warn(() => "unknown message type: " + message.data.type);
+    /**
+     * Changes a block: the loader keeps the edit (later requests and regenerations get it), the chunks whose data
+     * contains the block are sent again, the water around it is woken. Chunk space coordinates (iz is the height).
+     * @returns {boolean} whether the block was changed
+     */
+    setBlock(ix, iy, iz, value) {
+        value >>>= 0;
+        if (chunkDataLoader.getBlock(ix, iy, iz) === value)
+            return false;
+        chunkDataLoader.setBlock(ix, iy, iz, value);
+        const cx = ix >> CHUNK_SIZE_BIT_LEN, cy = iy >> CHUNK_SIZE_BIT_LEN, cz = iz >> CHUNK_SIZE_BIT_LEN;
+        const bx = ix & CHUNK_SIZE_MASK, by = iy & CHUNK_SIZE_MASK, bh = iz & CHUNK_SIZE_MASK;
+        for (let dz = -1; dz <= 1; dz++)
+            for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++) {
+                    // the block's cell in this chunk's extended data (32^3 plus a 1 block border from the neighbours)
+                    const ex = bx + 1 - dx * CHUNK_SIZE;
+                    const ey = by + 1 - dy * CHUNK_SIZE;
+                    const eh = bh + 1 - dz * CHUNK_SIZE;
+                    if (ex < 0 || ex > CHUNK_SIZE + 1 || ey < 0 || ey > CHUNK_SIZE + 1 || eh < 0 || eh > CHUNK_SIZE + 1)
+                        continue;
+                    const key = pos3ToKey(cx + dx, cy + dy, cz + dz);
+                    if (!this.#changed.has(key))
+                        this.#changed.set(key, new Vec3(cx + dx, cy + dy, cz + dz));
+                }
+        this.water?.onBlockChanged(ix, iy, iz);
+        return true;
     }
-}
-const mesherWorker = new Worker(Resources.relativeToRoot(`./worker/mesherWorker.js?workerId=mesh0`), { type: "module" });
 
-mesherWorker.onmessage = (message) => {
-    switch (message.data.type) {
-        case "ready":
-            const workerReady = WorkerReadyResponse.from(message);
-            logger.info(() => `mesher worker ${workerReady.workerId} ready, sending connection port`);
-            new ConnectionPortRequest(mesherChannel.port1).toMessage().post(mesherWorker);
-            break;
-        case "connectionPortResponse":
-            const connectionResponse = ConnectionPortResponse.from(message);
-            logger.info(() => `worker mesh0 connected to ${WORKER_ID} with connection id ${connectionResponse.connectionId}`);
-            break;
-        default:
-            logger.warn(() => "unknown message type: " + message.data.type);
-    }
-}
-
-/**
- * Sends a request to load chunk block data for the specified chunk position.
- * @param {number} cx - The x-coordinate of the chunk.
- * @param {number} cy - The y-coordinate of the chunk.
- * @param {number} cz - The z-coordinate of the chunk.
- */
-function sendChunkBlockDataRequest(cx, cy, cz) {
-    const chunkRequestMessage = new GenerateChunkRequest(vec3(cx, cy, cz)).toMessage();
-    chunkRequestMessage.post(genChannel.port2);
-}
-
-/**
- * Sends a request to mesh chunk.
- * @param {number} cx - The x-coordinate of the chunk.
- * @param {number} cy - The y-coordinate of the chunk.
- * @param {number} cz - The z-coordinate of the chunk.
- * @param {ChunkData} chunkData - The chunk data to mesh.
- */
-function sendChunkMeshRequest(cx, cy, cz, chunkData) {
-    new MeshChunkRequest(vec3(cx, cy, cz), chunkData).toMessage().post(mesherChannel.port2);
-}
-
-/**
- * @returns {ChunkBlockData}
- */
-async function loadChunkBlockData(cx, cy, cz) {
-    const key = posToKey3(cx, cy, cz);
-    if (blockDataCache.has(key)) {
-        logger.debug(() => `cache hit for chunk (${cx}, ${cy}, ${cz})`);
-        return blockDataCache.get(key);
-    }
-    logger.debug(() => `cache miss for chunk (${cx}, ${cy}, ${cz}), loading from generator worker`);
-    if (blockDataPromiseCache.has(key)) {
-        logger.debug(() => `already loading chunk (${cx}, ${cy}, ${cz}), waiting for existing promise`);
-        return await blockDataPromiseCache.get(key).promise;
-    }
-    const chunkDataPromise = new CompletableChunkBlockDataPromise();
-    blockDataPromiseCache.set(key, chunkDataPromise);
-    sendChunkBlockDataRequest(cx, cy, cz);
-    return await chunkDataPromise.promise;
-}
-
-
-/**
- * @returns {ChunkMesh}
- */
-async function loadChunkMesh(cx, cy, cz, chunkData) {
-    const key = posToKey3(cx, cy, cz);
-    if (meshPromiseCache.has(key)) {
-        logger.debug(() => `already meshing chunk (${cx}, ${cy}, ${cz}), waiting for existing promise`);
-        return await meshPromiseCache.get(key).promise;
-    }
-    const chunkMeshPromise = new CompletableChunkMeshPromise();
-    meshPromiseCache.set(key, chunkMeshPromise);
-    const dataCopy = new ChunkDataExt();
-    dataCopy.array3d.data.set(chunkData.array3d.data);
-    sendChunkMeshRequest(cx, cy, cz, dataCopy);
-    return await chunkMeshPromise.promise;
-}
-
-async function handleChunkRequest(port, chunkPos) {
-    const cx = chunkPos.x;
-    const cy = chunkPos.y;
-    const cz = chunkPos.z;
-    logger.debug(() => "handling chunk request: " + chunkPos.x + " " + chunkPos.y + " " + chunkPos.z);
-    const blockChunkData = await loadChunkBlockData(chunkPos.x, chunkPos.y, chunkPos.z);
-    const chunkData = chunkDataFactory.createChunkDataFrom(blockChunkData, chunkPos);
-
-    const bounds = chunkData.calculateBounds();
-
-    let adj27Needed = (1 << 27) - 1
-    if (bounds) {
-        if (bounds.minH > 0) {
-            adj27Needed &= 0b111111111111101111000000000;
-        }
-        if (bounds.maxH < CHUNK_SIZE) {
-            adj27Needed &= 0b000000000111101111111111111;
-        }
-        if (bounds.minX > 0) {
-            adj27Needed &= 0b110110110110100110110110110;
-        }
-        if (bounds.maxX < CHUNK_SIZE) {
-            adj27Needed &= 0b011011011011001011011011011;
-        }
-        if (bounds.minY > 0) {
-            adj27Needed &= 0b111111000111101000111111000;
-        }
-        if (bounds.maxY < CHUNK_SIZE) {
-            adj27Needed &= 0b000111111000101111000111111;
-        }
-
-        for (let dir27 = 0; dir27 < 27; dir27++, adj27Needed >>>= 1) {          
-            if ((adj27Needed & 1) === 0) continue;
-            const dirOffset = Dir27[dir27];
-            const adjChunkBlockData = await loadChunkBlockData(cx + dirOffset.x, cy + dirOffset.y, cz + dirOffset.z);
-            if (!adjChunkBlockData) 
+    /**
+     * Sends the changed chunks that weren't sent within Settings.world.chunkUpdateInterval.
+     * @param {number} now performance.now()
+     */
+    sendChanged(now) {
+        if (this.#changed.size === 0)
+            return;
+        const interval = Settings.world.chunkUpdateInterval * 1000;
+        for (const [key, chunkPos] of this.#changed) {
+            if (now - (this.#lastSent.get(key) ?? -Infinity) < interval)
                 continue;
-            chunkData.updateAdjBlockData(dir27, adjChunkBlockData);
+            this.#changed.delete(key);
+            this.sendChunk(chunkPos, 0, null);
         }
     }
-    const mesh = await loadChunkMesh(cx, cy, cz, chunkData);
 
-    const chunkResponseMessage = new ChunkResponse(chunkPos, chunkData, mesh).toMessage();
-    chunkResponseMessage.post(port);
+    /**
+     * Builds the chunk's data and mesh from the current state and sends them: to the requesting client, or to every
+     * client for an update (clients that don't keep the chunk drop it).
+     * @param {Vec3} chunkPos
+     * @param {number} requestId 0 for an update
+     * @param {Client | null} client null for every client
+     */
+    sendChunk(chunkPos, requestId, client) {
+        const start = performance.now();
+        const key = pos3ToKey(chunkPos.x, chunkPos.y, chunkPos.z);
+        this.#lastSent.set(key, start);
+        const targets = client === null ? this.clients.values() : [client];
+        for (const target of targets) {
+            const chunkData = chunkDataLoader.loadChunk(chunkPos);
+            const meshData = mesher.createMesh(chunkPos, chunkData);
+            const response = new ChunkResponse(chunkPos, chunkData, meshData, requestId, ++this.#version, target.editAck);
+            ChunkResponse.toMessage(response).post(target.connection.port);
+        }
+        logger.debug(() => `sent chunk (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z}) ${requestId === 0 ? "update" : "response"} in ${perfDiff(start)} ms`);
+    }
 }
 
-onmessage = (message) => {
-    const connectionPortMessage = ConnectionPortRequest.from(message);
-    const port = connectionPortMessage.port;
-    logger.info(() => "received connection port, setting up message handler");
+const world = new WorldState();
+if (Settings.water.flow.enabled) {
+    const flow = Settings.water.flow;
+    world.water = new WaterFlow(world, Math.max(1, Math.round(flow.interval * Settings.simulation.tickRate)), flow.maxUpdatesPerTick);
+}
 
-    port.onmessage = (message) => {
-        const chunkRequest = ChunkRequest.from(message);
-        const chunkPos = chunkRequest.chunkPos;
-        logger.debug(() => "chunk request: " + chunkPos.x + " " + chunkPos.y + " " + chunkPos.z);
-        handleChunkRequest(port, chunkPos);
+/**
+ * Requests are not processed when they arrive. They wait in `pending`, and one chunk is loaded per step, nearest to
+ * the latest load center first; requests out of the load range are dropped in the same pass. Between steps the worker
+ * yields, so new messages (a new center, cancels, edits) and the simulation run before the next chunk; otherwise they
+ * would only be seen after all requests queued before them were processed.
+ */
+class ChunkLoadScheduler {
+    /** @type {Map<number, {request: ChunkRequest, client: Client}>} requestId -> pending request */
+    #pending = new Map();
+    #center = new Vec3(0, 0, 0);
+    #rangeSq = Infinity;
+    #stepScheduled = false;
+    // a message to ourselves yields without the minimum delay of nested setTimeout
+    #yieldChannel = new MessageChannel();
+
+    constructor() {
+        this.#yieldChannel.port1.onmessage = () => this.#step();
     }
-    new ConnectionPortResponse(connectionPortMessage.connectionId).toMessage().post(self);
-};
 
-logger.info(() => "initialized");
-const readyMessage = new WorkerReadyResponse(WORKER_ID);
-postMessage(readyMessage.toMessage());
+    /**
+     * @param {ChunkRequest} request
+     * @param {Client} client
+     */
+    add(request, client) {
+        this.#pending.set(request.requestId, { request, client });
+        this.#scheduleStep();
+    }
+
+    /** @param {Array<number>} requestIds */
+    cancel(requestIds) {
+        for (const requestId of requestIds)
+            this.#pending.delete(requestId);
+        logger.debug(() => `cancelled ${requestIds.length} requests, ${this.#pending.size} pending`);
+    }
+
+    /**
+     * @param {Vec3} chunkPos
+     * @param {number} rangeSq
+     */
+    setCenter(chunkPos, rangeSq) {
+        this.#center = chunkPos;
+        this.#rangeSq = rangeSq;
+    }
+
+    #scheduleStep() {
+        if (this.#stepScheduled || this.#pending.size === 0)
+            return;
+        this.#stepScheduled = true;
+        this.#yieldChannel.port2.postMessage(null);
+    }
+
+    #step() {
+        this.#stepScheduled = false;
+        const next = this.#takeNearest();
+        if (next !== null) {
+            try {
+                world.sendChunk(next.request.chunkPos, next.request.requestId, next.client);
+            } catch (err) {
+                const p = next.request.chunkPos;
+                logger.error(() => `loading chunk (${p.x}, ${p.y}, ${p.z}) failed: ${err}`);
+            }
+        }
+        this.#scheduleStep();
+    }
+
+    #takeNearest() {
+        let best = null;
+        let bestDistSq = Infinity;
+        const c = this.#center;
+        const rangeSq = this.#rangeSq;
+        for (const entry of this.#pending.values()) {
+            const p = entry.request.chunkPos;
+            const dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq > rangeSq) {
+                // left the range; the requester dropped it by the same rule (deleting while iterating a Map is safe)
+                this.#pending.delete(entry.request.requestId);
+                continue;
+            }
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                best = entry;
+            }
+        }
+        if (best !== null)
+            this.#pending.delete(best.request.requestId);
+        return best;
+    }
+}
+
+const scheduler = new ChunkLoadScheduler();
+
+// the simulation clock, like the main thread's: ticks of a fixed length, the changed chunks sent after them
+const ticker = new Ticker(Settings.simulation.tickRate, Settings.simulation.maxTicksPerFrame);
+let lastStep = performance.now();
+setInterval(() => {
+    const now = performance.now();
+    ticker.advance((now - lastStep) / 1000, () => world.water?.tick(ticker.tick));
+    lastStep = now;
+    world.sendChanged(now);
+}, 1000 / Settings.simulation.tickRate);
+
+const workerServer = new WorkerServer(self, workerId, {
+
+    world: {
+        /**
+         * @param {any} data - Data related to the request.
+         * @param {WorkerConnection} connection
+         */
+        onMessage: (data, connection) => {
+            const client = world.client(connection);
+            if (ChunkRequest.isType(data)) {
+                scheduler.add(ChunkRequest.from(data), client);
+            } else if (ChunkCancel.isType(data)) {
+                scheduler.cancel(ChunkCancel.from(data).requestIds);
+            } else if (BlockEdit.isType(data)) {
+                // applied right away, so requests processed after this message already see the edit
+                const edit = BlockEdit.from(data);
+                world.setBlock(edit.blockPos.x, edit.blockPos.y, edit.blockPos.z, edit.value);
+                client.editAck = edit.seq;
+            } else if (ChunkLoadCenter.isType(data)) {
+                const center = ChunkLoadCenter.from(data);
+                scheduler.setCenter(center.chunkPos, center.rangeSq);
+                world.setRange(center.chunkPos, center.rangeSq);
+            } else {
+                logger.warn(() => `unknown message type: ${data?.type}`);
+            }
+        }
+    }
+});
+
+workerServer.start();

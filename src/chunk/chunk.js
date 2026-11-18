@@ -276,7 +276,9 @@ export class ChunkSpec {
 export class ChunkDataLoader {
     #avgTime = new MovingAverage(200);
 
-    /** @type {FixedSizeMap<string, ChunkBlockData>} */
+    /** generated block data with the edits applied, least recently used dropped first; dropped chunks are generated
+     * again (the generators are deterministic) and get their edits again
+     * @type {FixedSizeMap<string, ChunkBlockData>} */
     #blockDataCache = new FixedSizeMap(27 * 30);
 
     /** @type {ChunkGenerator} */
@@ -319,6 +321,15 @@ export class ChunkDataLoader {
         const cached = this.#blockDataCache.get(key);
         if (cached !== undefined)
             cached.data[index] = value;
+    }
+
+    /**
+     * A block, generating its chunk if it isn't cached. Chunk space coordinates (iz is the height).
+     * @returns {number}
+     */
+    getBlock(ix, iy, iz) {
+        const blockData = this.#loadChunkBlockData(new Vec3(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN));
+        return blockData.data[((iz & CHUNK_SIZE_MASK) * CHUNK_SIZE + (iy & CHUNK_SIZE_MASK)) * CHUNK_SIZE + (ix & CHUNK_SIZE_MASK)];
     }
 
     /**

@@ -1,4 +1,4 @@
-import { BLOCK_IDS, getBlockById } from "./blocks.js";
+import { BLOCK_HEIGHT_FULL, BLOCK_IDS, getBlockById, isLiquid, removed, WATER_SURFACE_LEVEL, withHeight } from "./blocks.js";
 import { Camera, FrustumCuller } from "./camera.js";
 import { Fog } from "./fog.js";
 import { FVec3, mat4, Projection } from "./geom.js";
@@ -210,17 +210,26 @@ export async function start() {
             return;
         }
         if (button === 0) {
-            world.setBlockWorld(raycastBlock.x, raycastBlock.y, raycastBlock.z, BLOCK_IDS.EMPTY);
+            // a plant in water leaves its water
+            world.setBlockWorld(raycastBlock.x, raycastBlock.y, raycastBlock.z, removed(raycastBlock.block));
         } else if (button === 2) {
             const { nx, ny, nz } = raycastBlock;
             if (nx === 0 && ny === 0 && nz === 0) {
                 return; // the camera is inside the block, no face was hit
             }
             const px = raycastBlock.x + nx, py = raycastBlock.y + ny, pz = raycastBlock.z + nz;
-            if (player.intersectsBlock(px, py, pz) && !(player.mode === "fly" && player.noclip)) {
-                return; // don't place a block into the player
+            // a block placed into the player only if it can lift the player onto it (swimming, jumping)
+            const intoPlayer = player.intersectsBlock(px, py, pz) && !(player.mode === "fly" && player.noclip);
+            if (intoPlayer && !player.canStepOnto(py)) {
+                return;
             }
-            world.setBlockWorld(px, py, pz, placeBlock);
+            // placed water gets the level water has there: full under other water, the surface level otherwise
+            const block = isLiquid(placeBlock)
+                ? withHeight(placeBlock, isLiquid(world.blockWorldAt(px, py + 1, pz)) ? BLOCK_HEIGHT_FULL : WATER_SURFACE_LEVEL)
+                : placeBlock;
+            if (world.setBlockWorld(px, py, pz, block) && intoPlayer) {
+                player.stepOnto(py);
+            }
         }
     });
 

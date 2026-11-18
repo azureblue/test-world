@@ -5,10 +5,11 @@ Status: proposed, partly done. Done so far:
 - the connection protocol (`src/worker/worker.js`, `src/worker/common.js`) with the fixes listed below;
 - the generator and mesher workers (`src/worker/generatorWorker.js`, `mesherWorker.js`) ported to it
   (not used yet, ready for the coordinator);
-- scheduling in the current chunk loader: request ids, nearest chunk first, out-of-range requests dropped
+- scheduling: request ids, nearest chunk first, out-of-range requests dropped
   (see [Chunk loading scheduler](#chunk-loading-scheduler-done));
-- removing and placing blocks with a quick mesh on the main thread and the changed chunks requested again from the
-  chunk loader for the optimized mesh (see [Block edits](#block-edits-done)).
+- the world worker (`src/worker/worldWorker.js`, formerly the chunk loader) owns the world: block data with all
+  edits, the simulation (flowing water), chunk updates after changes; the main thread predicts its own edits
+  (see [Block edits](#block-edits-done)). Still single threaded inside.
 
 The coordinator from design B was never ported to the current protocol; its code was removed and is in git
 history (commit `96ca241`).
@@ -161,37 +162,38 @@ the opposite of its last step; none when the camera is inside the block; no bloc
 The ray stops at any non-empty block except water (solid blocks, plants as full cubes); the starting cell stops it only
 if it's solid. Water can't be selected, placing on a face under water replaces the water cell. Per-block boxes (smaller ones for plants) are still to do.
 
-- **Main thread, right away:** update the chunk's data; copy the cells around the block that lie in the chunk's
-  border from the loaded neighbours (a chunk only loads a neighbour's border if it has blocks next to that side, and
-  a placed block may be the first one there; without this the block gets wrong faces and shading towards that side);
-  grow the chunk's bounds and culling box for a placed block (removing doesn't shrink them); update the border copy
-  in every loaded neighbour whose extended data contains the block (up to 7 more chunks at a corner; a neighbour whose border cell already has the value,
-  because it never loaded that side, is skipped). Each changed chunk gets a mesh from the quick (non-greedy) mesher.
-- **Chunk loader:** gets a `BlockEdit` message before anything else. `ChunkDataLoader` keeps the edits per chunk and
-  applies them to its cached data and to every later generation, so edits survive dropping and reloading, and
-  neighbours loaded later get them in their border data.
-- **In the background:** every changed chunk is requested from the chunk loader again (an earlier pending request
-  cancelled), once it hasn't been edited for `Settings.world.editRequestDelay` (300 ms), so a burst of edits sends one
-  request per chunk; while edits go on, at least every `editRequestMaxDelay` (1.5 s). Its response, with the edit, replaces the chunk's data and the quick mesh with the optimized one, unless
-  the chunk was edited again since (the request id no longer matches). No data is copied from the main thread.
-  Neighbours that are requested but not loaded yet are requested again too, because their response may already be on
-  the way without the edit.
+The world worker owns the world; the main thread is a client that predicts its own edits (the same model a
+multiplayer client would use with a server). The messages and rules are described in [World protocol](../world-protocol.md).
 
-Measured in Node (real `World`, chunk loader and mesher worker, before the remesh moved to the chunk loader): main thread per edit median 0.15 ms inside a chunk,
-0.31 ms on a border (2 chunks), 0.20 ms per placement, not counting the WebGL upload of the quick mesh (about 3000 quads, ~150 KB, for a
-grass chunk). The quick mesh is about 3.6× larger than the greedy one (3058 vs 858 quads) until the remesh arrives.
+- **Main thread (`ChunkEditor`), right away:** update the chunk's data; copy the cells around the block that lie in
+  the chunk's border from the loaded neighbours (a chunk only loads a neighbour's border if it has blocks next to
+  that side, and a placed block may be the first one there; without this the block gets wrong faces and shading
+  towards that side); grow the bounds and culling box for a placed block; update the border copy in every loaded
+  neighbour whose extended data contains the block. Each changed chunk gets a quick (non-greedy) mesh once per frame,
+  however many edits it got. The edit goes to the worker as a `BlockEdit` with a seq number and stays in a pending
+  list.
+- **World worker:** applies the edit (`ChunkDataLoader` keeps edits per chunk and applies them to its cached data and
+  to every later generation; the cache drops the least recently used chunks, and the generators are deterministic,
+  so a regenerated chunk is the same), wakes the water around it, and marks every chunk whose extended data contains
+  the block as changed. Changed chunks are sent again, built from the current state, at most every
+  `Settings.world.chunkUpdateInterval` (0.1 s) per chunk.
+- **Chunk messages** (responses to requests and updates after changes) are snapshots with a `version` (increasing)
+  and an `editAck` (the last edit seq the worker had applied). The main thread applies the newest version of each
+  chunk, drops the acknowledged pending edits, and applies the others on top of the new data again (with a quick
+  mesh), so a prediction doesn't flicker back while its edit is on the way. Nothing is dropped for being outdated by
+  an edit, so edits faster than the round trip are fine; request ids are only used to cancel.
+- **Water** (and later anything simulated) changes blocks only in the worker; the main thread sees it through chunk
+  updates, one round trip later.
+
+Measured in the browser (SwiftShader): 20 edits of one block 30 ms apart end with the last value; a flood keeps
+growing on the worker with the main thread only uploading the updated meshes.
 
 Not done yet:
 
-- **Remesh on the coordinator.** With the world worker, the edit and the remesh move there, and the main thread only
-  sends the edit and receives meshes.
-- **Edits faster than the loader replies.** Each edit gives the chunk a new request id, so a reply that arrives after
-  a later edit is dropped (it lacks that edit). Correct, but while edits keep coming faster than the round trip, the
-  chunk keeps its quick mesh (about 3.6× more quads) and every `editRequestMaxDelay` request is built and thrown
-  away. Negligible for one chunk edited by hand; with many chunks changing for a long time (water flooding) it adds
-  up. Fix if needed: keep the reply and reapply the edits made after its request on top of it. Likely moot if
-  flooding runs in a worker next to the block data (see remesh on the coordinator above).
-- The "requested but not loaded yet" neighbour path has no deterministic test yet.
+- The pending edits applied again after a snapshot lack the border sync of the first prediction (a placed block can
+  shade wrongly towards a neighbour's side for one round trip).
+- Multiple clients: the worker keeps an `editAck` per connection and sends updates to all of them, but the simulated
+  range is the last client's load range only.
 - Main thread memory: every loaded chunk keeps its full 34³ extended data (157 KB), about 330 MB for the 2109
   chunks in range, more within the retain range.
 
@@ -204,17 +206,18 @@ Not done yet:
   A message handler (`onChunk`) can never run in the middle of a frame (`update()` / `#updateChunksInRange`) or
   the other way around, so no locks are needed.
 - What does happen is interleaving between tasks: any number of responses between frames, frames between
-  responses, and other tasks at every `await`. The code must be correct in every order; request ids are what
-  makes a response safe to apply after its chunk was dropped and requested again.
+  responses, and other tasks at every `await`. The code must be correct in every order; chunk message versions are
+  what make a message safe to apply in any order (only a newer snapshot replaces an older one).
 
 ## Suggested order
 
 1. ~~Fix the protocol issues; port the generator and mesher workers.~~ Done.
-2. ~~Scheduler: request ids, nearest first, drop out-of-range requests.~~ Done in the current `chunkLoader`.
-3. Move the `chunkLoader` logic and its scheduler into a world worker that keeps the main thread API the same
-   (camera position in, meshes out), still single threaded inside.
+2. ~~Scheduler: request ids, nearest first, drop out-of-range requests.~~ Done.
+3. ~~Move the chunk loader logic and its scheduler into a world worker that keeps the main thread API the same
+   (camera position in, meshes out), still single threaded inside.~~ Done: `worldWorker.js`, which also owns edits
+   and the simulation.
 4. Use generator workers (N) and mesher workers (M) behind the scheduler, with a limit on requests in progress per
    worker; switch the pending scan to the binary heap. Measure chunk loading time and order compared with step 3.
-5. Edits and the remesh queue: removing and placing done at the current stage (main thread + mesher worker);
-   moving edits to the world worker still to do.
+5. ~~Edits and the remesh queue.~~ Done: edits applied in the world worker, changed chunks sent as updates, the main
+   thread predicts its own edits.
 6. Network endpoint for multiplayer; disconnect detection.

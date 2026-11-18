@@ -672,37 +672,42 @@ export function copyData(source, target, byteSourceOffset = 0, byteTargetOffset 
     targetView.set(sourceView);
 }
 
+/**
+ * A map of at most maxSize entries that drops the least recently used one (set or get) when a new key is added.
+ * @template K, V
+ */
 export class FixedSizeMap {
-    #map;
-    #keys;
+    /** @type {Map<K, V>} in order of use, the least recently used first */
+    #map = new Map();
     #maxSize;
-    #nextIndex = 0;
-    #count = 0;
 
     constructor(maxSize) {
-        this.#map = new Map();
-        this.#keys = new Array(maxSize);
         this.#maxSize = maxSize;
     }
 
+    /**
+     * @param {K} key
+     * @param {V} value
+     */
     set(key, value) {
-        if (this.#count === this.#maxSize) {
-            this.#map.delete(this.#keys[this.#nextIndex]);
-        } else {
-            this.#count++;
-        }
-
-        this.#keys[this.#nextIndex] = key;
+        if (this.#map.has(key))
+            this.#map.delete(key);
+        else if (this.#map.size === this.#maxSize)
+            this.#map.delete(this.#map.keys().next().value);
         this.#map.set(key, value);
-
-        this.#nextIndex++;
-        if (this.#nextIndex === this.#maxSize) {
-            this.#nextIndex = 0;
-        }
     }
 
+    /**
+     * @param {K} key
+     * @returns {V | undefined}
+     */
     get(key) {
-        return this.#map.get(key);
+        const value = this.#map.get(key);
+        if (value !== undefined) {
+            this.#map.delete(key);
+            this.#map.set(key, value);
+        }
+        return value;
     }
 
     has(key) {

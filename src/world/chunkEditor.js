@@ -1,44 +1,50 @@
 import { BLOCK_IDS } from "../blocks.js";
+import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk/chunk.js";
+import { ChunkDataExt } from "../chunk/extChunk.js";
 import { vec3 } from "../geom.js";
 import { Logger } from "../logging.js";
 import { MeshHandler } from "../mesh/mesh.js";
 import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
-import { Settings } from "../settings.js";
 import { perfDiff } from "../utils.js";
-import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk/chunk.js";
+import { ChunkResponse } from "../worker/common.js";
 import { ChunkEntry } from "./chunkEntry.js";
-import { ChunkDataExt } from "../chunk/extChunk.js";
-import { ChunkLoaderClient } from "./chunkLoaderClient.js";
 import { ChunkManager } from "./chunkManager.js";
+import { WorldClient } from "./worldClient.js";
 
 const logger = new Logger("ChunkEditor");
 
-// unoptimized but fast mesher for edits on the main thread; the optimized mesh comes from the chunk loader
+// unoptimized but fast mesher for predicted edits; the optimized mesh comes from the world worker
 const editMesher = await UIntExtWasmMesher.createFastMesher();
 
 /**
- * Block edits in the loaded chunks. An edit takes effect right away: the chunk and the neighbours that have the block
- * in their border data get a quick, unoptimized mesh now, and are requested again from the chunk loader, which sends
- * them with the edit and an optimized mesh, once they haven't been edited for Settings.world.editRequestDelay (or at
- * the latest Settings.world.editRequestMaxDelay after the first edit). Neighbours not loaded yet are requested again
- * right away. The loader keeps the edit, so it survives reloads and appears in neighbours loaded later.
+ * The client's own block edits. The world worker owns the world, so an edit is sent there, and predicted here until
+ * the worker's chunk messages include it: the client's chunk data changes right away (reads see it at once), and the
+ * chunks whose data contains the block get a quick, unoptimized mesh in the next {@link update}, once per frame
+ * however many edits they got.
+ *
+ * Every edit has a seq, and every chunk message says the last seq the worker had applied (editAck). A message is a
+ * snapshot of the worker's world, so it replaces the client's data; edits after its editAck aren't in it yet and are
+ * applied again on top ({@link onChunkData}).
  */
 export class ChunkEditor {
     #chunks;
-    #loader;
+    #worldClient;
     #meshHandler;
-    /** loaded chunks changed by edits and not requested again yet
-     * @type {Map<ChunkEntry, {firstEdit: number, lastEdit: number}>} */
-    #editedChunks = new Map();
+    /** edits sent and not acknowledged by the worker yet, in seq order
+     * @type {Array<{seq: number, ix: number, iy: number, iz: number, value: number}>} */
+    #pendingEdits = [];
+    /** loaded chunks whose data changed since the last update, get a quick mesh in it
+     * @type {Set<ChunkEntry>} */
+    #quickMeshQueue = new Set();
 
     /**
      * @param {ChunkManager} chunks
-     * @param {ChunkLoaderClient} loader
+     * @param {WorldClient} worldClient
      * @param {MeshHandler} meshHandler
      */
-    constructor(chunks, loader, meshHandler) {
+    constructor(chunks, worldClient, meshHandler) {
         this.#chunks = chunks;
-        this.#loader = loader;
+        this.#worldClient = worldClient;
         this.#meshHandler = meshHandler;
     }
 
@@ -49,10 +55,7 @@ export class ChunkEditor {
     setBlock(ix, iy, iz, value) {
         const start = performance.now();
         value >>>= 0; // BLOCK_IDS with the solid bit are negative, chunk data (Uint32Array) returns them unsigned
-        const cx = ix >> CHUNK_SIZE_BIT_LEN;
-        const cy = iy >> CHUNK_SIZE_BIT_LEN;
-        const cz = iz >> CHUNK_SIZE_BIT_LEN;
-        const entry = this.#chunks.getLoaded(cx, cy, cz);
+        const entry = this.#chunks.getLoaded(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN);
         if (entry === undefined)
             return false;
         const bx = ix & CHUNK_SIZE_MASK;
@@ -61,77 +64,79 @@ export class ChunkEditor {
         if (entry.chunk.data.getVoxelXYZ(bx, by, bh) === value)
             return false;
 
-        // before any re-request below, so the loader already has the edit when it generates them
-        this.#loader.edit(vec3(ix, iy, iz), value);
+        const seq = this.#worldClient.edit(vec3(ix, iy, iz), value);
+        this.#pendingEdits.push({ seq, ix, iy, iz, value });
 
         // the chunk loads a neighbour's border only if it has blocks next to that side; a placed block may be the
         // first one there, so take the cells around it from the loaded neighbours (its faces and shading need them)
         this.#syncBorderAround(entry, bx, by, bh);
-        if (value !== BLOCK_IDS.EMPTY)
-            entry.chunk.includeBlock(bx, by, bh);
-
-        const outdatedRequestIds = [];
-        let remeshed = 0;
+        let changed = 0;
+        const cx = entry.position.x, cy = entry.position.y, cz = entry.position.z;
         for (let dz = -1; dz <= 1; dz++)
             for (let dy = -1; dy <= 1; dy++)
                 for (let dx = -1; dx <= 1; dx++) {
-                    // the block's cell in this chunk's extended data (32^3 plus a 1 block border from the neighbours)
-                    const ex = bx + 1 - dx * CHUNK_SIZE;
-                    const ey = by + 1 - dy * CHUNK_SIZE;
-                    const eh = bh + 1 - dz * CHUNK_SIZE;
-                    if (ex < 0 || ex > CHUNK_SIZE + 1 || ey < 0 || ey > CHUNK_SIZE + 1 || eh < 0 || eh > CHUNK_SIZE + 1)
-                        continue;
-                    const neighbour = this.#chunks.get(cx + dx, cy + dy, cz + dz);
-                    if (neighbour === undefined)
-                        continue;
-                    // below, a pending request is cancelled, and a response that may already be on the way without the
-                    // edit is dropped by the new request id
-                    if (!neighbour.loaded) {
-                        // requested again right away, waiting for the edits to stop could keep it from loading
-                        outdatedRequestIds.push(neighbour.requestId);
-                        this.#loader.request(neighbour);
-                        continue;
-                    }
-                    const data = /** @type {ChunkDataExt} */ (neighbour.chunk.data);
-                    if (data.getExtVoxel(ex, ey, eh) === value)
-                        continue; // border not loaded on this side (no blocks next to it), nothing to update
-                    data.setExtVoxel(ex, ey, eh, value);
-                    this.#replaceMesh(neighbour);
-                    neighbour.dirty = true;
-                    remeshed++;
-                    // the optimized mesh comes from the loader once the edits stop (see update)
-                    outdatedRequestIds.push(neighbour.requestId);
-                    neighbour.requestId = this.#loader.nextRequestId();
-                    const edited = this.#editedChunks.get(neighbour);
-                    if (edited === undefined)
-                        this.#editedChunks.set(neighbour, { firstEdit: start, lastEdit: start });
-                    else
-                        edited.lastEdit = start;
+                    const neighbour = this.#chunks.getLoaded(cx + dx, cy + dy, cz + dz);
+                    if (neighbour !== undefined && this.#apply(neighbour, ix, iy, iz, value))
+                        changed++;
                 }
-        if (outdatedRequestIds.length > 0)
-            this.#loader.cancel(outdatedRequestIds);
 
-        logger.debug(() => `block (${ix}, ${iy}, ${iz}) set, ${remeshed} chunks remeshed in ${perfDiff(start)} ms`);
+        logger.debug(() => `block (${ix}, ${iy}, ${iz}) set, ${changed} chunks changed in ${perfDiff(start)} ms`);
         return true;
     }
 
     /**
-     * Requests the edited chunks that haven't been edited for Settings.world.editRequestDelay, or were first edited
-     * Settings.world.editRequestMaxDelay ago, under the request id given at their last edit. Call once per frame.
+     * After a chunk message was applied: drops the acknowledged edits, applies the others to the new data.
+     * @param {ChunkEntry | undefined} entry undefined if the message wasn't applied
+     * @param {ChunkResponse} response
+     */
+    onChunkData(entry, response) {
+        let acknowledged = 0;
+        while (acknowledged < this.#pendingEdits.length && this.#pendingEdits[acknowledged].seq <= response.editAck)
+            acknowledged++;
+        if (acknowledged > 0)
+            this.#pendingEdits.splice(0, acknowledged);
+        if (entry === undefined)
+            return;
+        for (const edit of this.#pendingEdits)
+            this.#apply(entry, edit.ix, edit.iy, edit.iz, edit.value);
+    }
+
+    /**
+     * Quick meshes for the chunks changed since the last update. Call once per frame, after the chunk manager applied
+     * chunk messages.
      */
     update() {
-        if (this.#editedChunks.size === 0)
+        if (this.#quickMeshQueue.size === 0)
             return;
-        const now = performance.now();
-        const { editRequestDelay, editRequestMaxDelay } = Settings.world;
-        for (const [entry, edited] of this.#editedChunks) {
-            if (now - edited.lastEdit < editRequestDelay && now - edited.firstEdit < editRequestMaxDelay)
-                continue;
-            this.#editedChunks.delete(entry);
-            if (!this.#chunks.contains(entry))
-                continue; // dropped meanwhile
-            this.#loader.requestAgain(entry);
-        }
+        const start = performance.now();
+        for (const entry of this.#quickMeshQueue)
+            if (entry.loaded && this.#chunks.contains(entry))
+                this.#replaceMesh(entry);
+        logger.debug(() => `${this.#quickMeshQueue.size} quick meshes in ${perfDiff(start)} ms`);
+        this.#quickMeshQueue.clear();
+    }
+
+    /**
+     * Writes a block into the chunk's extended data if it's in it (inside or in the border) and different there.
+     * @param {ChunkEntry} entry a loaded chunk
+     * @returns {boolean} whether the data changed
+     */
+    #apply(entry, ix, iy, iz, value) {
+        // the block's cell in this chunk's extended data (32^3 plus a 1 block border from the neighbours)
+        const ex = ix - (entry.position.x << CHUNK_SIZE_BIT_LEN) + 1;
+        const ey = iy - (entry.position.y << CHUNK_SIZE_BIT_LEN) + 1;
+        const eh = iz - (entry.position.z << CHUNK_SIZE_BIT_LEN) + 1;
+        if (ex < 0 || ex > CHUNK_SIZE + 1 || ey < 0 || ey > CHUNK_SIZE + 1 || eh < 0 || eh > CHUNK_SIZE + 1)
+            return false;
+        const data = /** @type {ChunkDataExt} */ (entry.chunk.data);
+        if (data.getExtVoxel(ex, ey, eh) === value)
+            return false;
+        data.setExtVoxel(ex, ey, eh, value);
+        const inside = ex >= 1 && ex <= CHUNK_SIZE && ey >= 1 && ey <= CHUNK_SIZE && eh >= 1 && eh <= CHUNK_SIZE;
+        if (inside && value !== BLOCK_IDS.EMPTY)
+            entry.chunk.includeBlock(ex - 1, ey - 1, eh - 1);
+        this.#quickMeshQueue.add(entry);
+        return true;
     }
 
     /**

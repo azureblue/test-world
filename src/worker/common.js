@@ -248,6 +248,11 @@ export class ChunkRequest extends WorkerMessage {
 }
 
 
+/**
+ * A chunk's data and mesh from the world worker: the response to a {@link ChunkRequest}, or an update after the
+ * chunk changed (edits, flowing water). Either way a consistent snapshot of the chunk; a newer version replaces an
+ * older one.
+ */
 export class ChunkResponse extends WorkerMessage {
 
     static get type() {
@@ -258,21 +263,26 @@ export class ChunkResponse extends WorkerMessage {
      * @param {Vec3} chunkPos - The position of the generated chunk.
      * @param {ChunkData} chunkData - Chunk data to transfer.
      * @param {ChunkMesh} chunkMesh - Mesh data to transfer.
-     * @param {number} requestId - The id of the {@link ChunkRequest} this responds to.
+     * @param {number} requestId - The id of the {@link ChunkRequest} this responds to, 0 for an update.
+     * @param {number} version - Increases with every chunk message the worker sends.
+     * @param {number} editAck - The seq of the last {@link BlockEdit} the worker applied before this snapshot.
      */
-    constructor(chunkPos, chunkData, chunkMesh, requestId) {
+    constructor(chunkPos, chunkData, chunkMesh, requestId, version, editAck) {
         super();
         this.chunkPos = chunkPos;
         this.chunkData = chunkData;
         this.chunkMesh = chunkMesh;
         this.requestId = requestId;
+        this.version = version;
+        this.editAck = editAck;
     }
 
     static toMessage(chunkResponse) {
         const tMeshData = MESH_DATA_TRANSFER.transfer(chunkResponse.chunkMesh);
         const tChunkData = CHUNK_DATA_TRANSFER.transfer(chunkResponse.chunkData);
         return new MessageTransportData(ChunkResponse.type, {
-            chunkPos: chunkResponse.chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data, requestId: chunkResponse.requestId
+            chunkPos: chunkResponse.chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data,
+            requestId: chunkResponse.requestId, version: chunkResponse.version, editAck: chunkResponse.editAck
         }, [...tChunkData.transferList, ...tMeshData.transferList]);
     }
 
@@ -288,12 +298,12 @@ export class ChunkResponse extends WorkerMessage {
         return new ChunkResponse(toVec3(data.chunkPos),
             CHUNK_DATA_TRANSFER.createFrom(data.chunkData),
             MESH_DATA_TRANSFER.createFrom(data.chunkMesh),
-            data.requestId);
+            data.requestId, data.version, data.editAck);
     }
 }
 
 /**
- * The chunk the camera is in and the load range. The chunk loader processes pending requests nearest to this chunk
+ * The chunk the camera is in and the load range. The world worker processes pending requests nearest to this chunk
  * first and drops pending requests out of the range, by the same rule the requester uses to drop chunks that are
  * not loaded yet, so no cancel message is needed for them.
  */
@@ -505,7 +515,7 @@ export class MeshChunkResponse extends WorkerMessage {
 }
 
 /**
- * A block change, sent to the chunk loader so it applies it to its cached data and to every later generation
+ * A block change, sent to the world worker so it applies it to its cached data and to every later generation
  * of the chunk (the edit survives reloads, and neighbours get it in their border data).
  */
 export class BlockEdit extends WorkerMessage {
@@ -517,15 +527,17 @@ export class BlockEdit extends WorkerMessage {
     /**
      * @param {Vec3} blockPos - Block position in chunk space (z is the height).
      * @param {number} value - The new block.
+     * @param {number} seq - Increases with every edit the client sends, see {@link ChunkResponse#editAck}.
      */
-    constructor(blockPos, value) {
+    constructor(blockPos, value, seq) {
         super();
         this.blockPos = blockPos;
         this.value = value;
+        this.seq = seq;
     }
 
     static toMessage(blockEdit) {
-        return MessageTransportData.create(BlockEdit.type, { blockPos: blockEdit.blockPos, value: blockEdit.value });
+        return MessageTransportData.create(BlockEdit.type, { blockPos: blockEdit.blockPos, value: blockEdit.value, seq: blockEdit.seq });
     }
 
     /**
@@ -534,7 +546,7 @@ export class BlockEdit extends WorkerMessage {
      */
     static from(message) {
         checkType(this, message);
-        return new BlockEdit(toVec3(message.data.blockPos), message.data.value);
+        return new BlockEdit(toVec3(message.data.blockPos), message.data.value, message.data.seq);
     }
 }
 

@@ -32,9 +32,17 @@ export class Block {
     }
 }
 
+// A block value: bit 31 solid cube, bit 30 liquid, bit 29 x-quads (plants), bits 24..26 the height in 1/8 of a block
+// (0 meaning full: water levels, later slabs; see mesh/cpp/blocks.hpp), bits 0..23 the block id. A plant in water
+// (waterlogged) is the plant with the liquid bit and the water level: it's water for everything that checks isLiquid.
 const SOLID_CUBE_BIT = 31;
 const LIQUID_BIT = 30;
 const X_QUADS = 29;
+const HEIGHT_SHIFT = 24;
+const ID_MASK = 0xFFFFFF;
+export const BLOCK_HEIGHT_FULL = 8;
+/** the level of water open to the air above, in 1/8 of a block (the generator's sea surface) */
+export const WATER_SURFACE_LEVEL = 7;
 export const BLOCK_IDS = {
     EMPTY: 0,
     DIRT: 1 | (1 << SOLID_CUBE_BIT),
@@ -107,11 +115,59 @@ export function isLiquid(block) {
     return (block >>> LIQUID_BIT & 1) !== 0;
 }
 
+export function isXQuads(block) {
+    return (block >>> X_QUADS & 1) !== 0;
+}
+
+/**
+ * Whether water can flow into the cell: empty, or a plant not in water yet.
+ * @param {number} block
+ */
+export function canFlood(block) {
+    return block === BLOCK_IDS.EMPTY || (isXQuads(block) && !isLiquid(block));
+}
+
+/**
+ * The cell with water at the level in it: water for an empty cell, the plant in water for a plant.
+ * @param {number} block a cell that {@link canFlood}, or water (its level changes)
+ * @param {number} level in 1/8 of a block, 1..8
+ * @returns {number} unsigned, as chunk data returns blocks
+ */
+export function flooded(block, level) {
+    return withHeight(isXQuads(block) ? block | (1 << LIQUID_BIT) : BLOCK_IDS.WATER, level);
+}
+
+/**
+ * What's left of a cell when its block is removed: the water of a plant in water, otherwise nothing.
+ * @param {number} block
+ */
+export function removed(block) {
+    return isXQuads(block) && isLiquid(block) ? withHeight(BLOCK_IDS.WATER, blockHeight(block)) : BLOCK_IDS.EMPTY;
+}
+
 export function isLiquidInt(block) {
     return block >>> LIQUID_BIT & 1;
 }
 
 export function getBlockById(id) {
-    return BLOCKS[id & 0x7FFFFFF];
+    return BLOCKS[id & ID_MASK];
+}
+
+/**
+ * @param {number} block
+ * @returns {number} the height in 1/8 of a block, 1..8
+ */
+export function blockHeight(block) {
+    const height = (block >>> HEIGHT_SHIFT) & 0b111;
+    return height === 0 ? BLOCK_HEIGHT_FULL : height;
+}
+
+/**
+ * @param {number} block
+ * @param {number} height in 1/8 of a block, 1..8
+ * @returns {number} the block with that height (unsigned, as chunk data returns blocks)
+ */
+export function withHeight(block, height) {
+    return ((block & ~(0b111 << HEIGHT_SHIFT)) | ((height & 0b111) << HEIGHT_SHIFT)) >>> 0;
 }
 

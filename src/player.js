@@ -1,4 +1,4 @@
-import { isLiquid, isSolid } from "./blocks.js";
+import { BLOCK_HEIGHT_FULL, blockHeight, isLiquid, isSolid } from "./blocks.js";
 import { Settings } from "./settings.js";
 
 /** @typedef {import("./world/world.js").World} World */
@@ -100,6 +100,29 @@ export class Player {
         return ix < this.x + hw && ix + 1 > this.x - hw &&
             iy < this.y + this.#settings.height && iy + 1 > this.y &&
             iz < this.z + hw && iz + 1 > this.z - hw;
+    }
+
+    /**
+     * Whether a block placed into the body (see {@link intersectsBlock}) at height iy can lift the player onto it
+     * ({@link stepOnto}): walking and in water or not standing (swimming, jumping, falling), the block is in the
+     * lowest layer the body is in, and the body fits on top.
+     */
+    canStepOnto(iy) {
+        if (this.mode !== "walk" || (this.onGround && !this.inWater) || iy !== Math.floor(this.y))
+            return false;
+        const y = this.y;
+        this.y = iy + 1 + this.#settings.skin;
+        const fits = !this.#overlapsBlocks();
+        this.y = y;
+        return fits;
+    }
+
+    /**
+     * Lifts the player onto a block placed at height iy (see {@link canStepOnto}).
+     */
+    stepOnto(iy) {
+        this.y = iy + 1 + this.#settings.skin;
+        this.vy = Math.max(this.vy, 0);
     }
 
     /**
@@ -263,8 +286,8 @@ export class Player {
 
     /**
      * The height of the water surface over the player at height y: the top of the water column in the cell at y or,
-     * if y is just above the water, in the cell below. A column covered by a solid block is full to its top. Null if
-     * there's no water there.
+     * if y is just above the water, in the cell below; the top cell is filled up to its level (as the mesher draws
+     * it). Null if there's no water there.
      */
     #waterSurface(y) {
         const world = this.#world;
@@ -277,7 +300,7 @@ export class Player {
         }
         for (let i = 0; i < 16 && isLiquid(world.blockWorldAt(ix, iy + 1, iz)); i++)
             iy++;
-        return isSolid(world.blockWorldAt(ix, iy + 1, iz)) ? iy + 1 : iy + Settings.water.surfaceLevel;
+        return iy + blockHeight(world.blockWorldAt(ix, iy, iz)) / BLOCK_HEIGHT_FULL;
     }
 
     /**

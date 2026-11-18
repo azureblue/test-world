@@ -1,47 +1,45 @@
 import { Vec3 } from "../geom.js";
 import { Logger } from "../logging.js";
-import { Settings } from "../settings.js";
 import { Resources } from "../utils.js";
 import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse, MessageTransportData } from "../worker/common.js";
 import { WorkerClient } from "../worker/worker.js";
 import { ChunkEntry } from "./chunkEntry.js";
 
-const logger = new Logger("ChunkLoaderClient");
+const logger = new Logger("WorldClient");
 
 /**
- * The main thread's side of the chunk loader worker (worker/chunkLoader.js): chunk requests and their ids, cancels,
- * edits and the load center go out, chunk responses come in. Messages posted before the worker is connected are sent
- * in order once it is.
+ * The main thread's side of the world worker (worker/worldWorker.js), which owns the world: chunk requests and their
+ * ids, cancels, edits and the load center go out, chunk responses and updates come in. Messages posted before the
+ * worker is connected are sent in order once it is.
  */
-export class ChunkLoaderClient {
+export class WorldClient {
     #workerClient;
     /** @type {MessagePort} */
     #port = null;
     /** @type {Array<MessageTransportData>} */
     #initialMessageQueue = [];
     #nextRequestId = 1;
+    #nextEditSeq = 1;
 
     /**
      * @param {(response: ChunkResponse) => void} onChunk
      */
     constructor(onChunk) {
+        // the page's URL parameters, so the worker's Settings get the same overrides
+        const pageParams = new URL(self.location.href).searchParams;
+        pageParams.set("workerId", "world0");
         this.#workerClient = new WorkerClient(
-            new Worker(Resources.relativeToRoot(`./worker/chunkLoader.js?workerId=world0&gen=${Settings.world.generator}&fastMesher=${Settings.world.fastMesher}`), { type: "module" }),
+            new Worker(Resources.relativeToRoot(`./worker/worldWorker.js?${pageParams}`), { type: "module" }),
             logger
         );
-        this.#workerClient.connect("chunkLoad").then((messagePort) => {
-            logger.info(() => "connected to chunk loader");
+        this.#workerClient.connect("world").then((messagePort) => {
+            logger.info(() => "connected to world worker");
             this.#port = messagePort;
             this.#port.onmessage = (message) => onChunk(ChunkResponse.from(message.data));
             for (const message of this.#initialMessageQueue)
                 message.post(this.#port);
             this.#initialMessageQueue = [];
-        }).catch((err) => logger.error(() => `connecting to the chunk loader failed: ${err}`));
-    }
-
-    /** a new request id, responses to the entry's earlier requests are dropped once it has it */
-    nextRequestId() {
-        return this.#nextRequestId++;
+        }).catch((err) => logger.error(() => `connecting to the world worker failed: ${err}`));
     }
 
     /**
@@ -49,15 +47,7 @@ export class ChunkLoaderClient {
      * @param {ChunkEntry} entry
      */
     request(entry) {
-        entry.requestId = this.nextRequestId();
-        this.requestAgain(entry);
-    }
-
-    /**
-     * Requests the chunk under its current request id (given earlier with {@link nextRequestId}).
-     * @param {ChunkEntry} entry
-     */
-    requestAgain(entry) {
+        entry.requestId = this.#nextRequestId++;
         this.#post(ChunkRequest.toMessage(new ChunkRequest(entry.position, entry.requestId)));
     }
 
@@ -70,16 +60,20 @@ export class ChunkLoaderClient {
     }
 
     /**
-     * The loader keeps the edit and applies it to every later load (before requests posted after it).
+     * Sends an edit. The worker applies it before the requests posted after it.
      * @param {Vec3} blockPos chunk space block position
      * @param {number} value
+     * @returns {number} the edit's seq, see {@link ChunkResponse#editAck}
      */
     edit(blockPos, value) {
-        this.#post(BlockEdit.toMessage(new BlockEdit(blockPos, value)));
+        const seq = this.#nextEditSeq++;
+        this.#post(BlockEdit.toMessage(new BlockEdit(blockPos, value, seq)));
+        return seq;
     }
 
     /**
-     * Pending requests nearest to the center are loaded first, the ones farther than the range dropped.
+     * Pending requests nearest to the center are loaded first, the ones farther than the range dropped; the range is
+     * also where the worker simulates.
      * @param {Vec3} chunkPos
      * @param {number} rangeSq
      */

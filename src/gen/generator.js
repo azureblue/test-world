@@ -1,5 +1,5 @@
 import { blend, BLEND_FUNCTION } from "../blend.js";
-import { BLOCK_IDS, isSolid } from "../blocks.js";
+import { BLOCK_HEIGHT_FULL, BLOCK_IDS, flooded, isSolid, WATER_SURFACE_LEVEL } from "../blocks.js";
 import { CHUNK_SIZE, ChunkBlockData, ChunkData, ChunkGenerator } from "../chunk/chunk.js";
 import { Vec2, Vec3 } from "../geom.js";
 import { hash01, hash32 } from "../noise/hash.js";
@@ -460,6 +460,8 @@ function height01(x, y, noise01, {
     return clamp01(h);
 }
 
+const PLANT_SEED = 0x5eed91a7;
+
 export class NoiseChunkGenerator extends ChunkGenerator {
     #offests
     #noise = new SimplexNoiseGenerator({
@@ -546,15 +548,15 @@ export class NoiseChunkGenerator extends ChunkGenerator {
                 }
 
                 r++;
-                if (r < chunkEndH && r === height) {
-                    if (Math.random() < 0.05)
+                // a plant on 5% of the columns, by position: every generation of the chunk gets the same plants
+                if (r < chunkEndH && r === height && hash01(PLANT_SEED, x + startX, y + startY) < 0.05)
                     blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT_0);
-                }
 
                 for (let w = r; w < Math.min(waterLevel, chunkEndH); w++) {
-                    // water fills everything that isn't a solid cube, plants under water included
-                    if (!isSolid(blockData.getHXY(w - chunkStartH, x, y)))
-                        blockData.setHXY(w - chunkStartH, x, y, BLOCK_IDS.WATER);
+                    // water fills everything that isn't a solid cube, plants stay in it; full, except the surface cell
+                    const block = blockData.getHXY(w - chunkStartH, x, y);
+                    if (!isSolid(block))
+                        blockData.setHXY(w - chunkStartH, x, y, flooded(block, w === waterLevel - 1 ? WATER_SURFACE_LEVEL : BLOCK_HEIGHT_FULL));
                 }
             }
         return blockData;
