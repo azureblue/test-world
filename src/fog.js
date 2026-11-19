@@ -1,3 +1,5 @@
+import { rgb } from "./settings.js";
+
 /**
  * The values the shaders get for one camera state: the fog part of the Camera block (shaders/README.md), the clear
  * colour and the water program's water_face_mul.
@@ -45,12 +47,13 @@ export class Fog {
      */
     constructor(sky, water, autoDistance) {
         const fogDistance = sky.fogDistance > 0 ? sky.fogDistance : autoDistance;
-        this.aboveWater = new FogState(fogDistance, sky.horizonColor, sky.fogStart, 0, 1, [1, 1, 1, 1]);
+        this.aboveWater = new FogState(fogDistance, rgb(sky.horizonColor), sky.fogStart, 0, 1, [1, 1, 1, 1]);
 
-        // Seen from above, the water surface (texture alpha a, not premultiplied, blended with ONE, ONE_MINUS_SRC_ALPHA)
-        // gives tex.rgb + (1 - a) * scene, i.e. the scene mixed by a towards tex.rgb / a: that is the water colour.
-        const alpha = water.textureAlpha / 255;
-        const waterColor = water.textureColor.map(v => v / alpha);
+        // Seen from above, the water surface (alpha a = water.opacity, set in the water shader, the colour not
+        // premultiplied, blended with ONE, ONE_MINUS_SRC_ALPHA) gives tex.rgb + (1 - a) * scene, i.e. the scene mixed by
+        // a towards tex.rgb / a: that is the water colour.
+        const alpha = water.opacity;
+        const waterColor = rgb(water.textureColor).map(v => v / alpha);
         const under = water.underwater;
         const color = waterColor.map(v => v * under.colorScale);
         const faceMul = [under.faceColorScale, under.faceColorScale, under.faceColorScale, under.faceAlphaScale];

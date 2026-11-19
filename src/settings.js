@@ -3,9 +3,10 @@
  * they're used (for example the fog uniforms in fog.js).
  *
  * Any value can be overridden with a URL parameter named by its path, applied when this module is first imported:
- *   ?world.generator=trees&camera.far=123&debug.overdraw=true&sky.horizonColor=0.5,0.7,1
- * The text is read as the type of the default value: a number, true/false, a string (quotes optional) or an array
- * (comma separated, or JSON). Unknown paths and values that don't fit are reported and ignored.
+ *   ?world.generator=trees&camera.far=123&debug.overdraw=true&sky.horizonColor=#add9fa
+ * The text is read as the type of the default value: a number, true/false, a string (quotes optional), an array
+ * (comma separated, or JSON) or a colour (#rrggbb, #rrggbbaa, or numbers). Unknown paths and values that don't fit are
+ * reported and ignored. A # in a value works as it is (the app uses no URL fragment, see urlParams).
  */
 export const Settings = {
     world: {
@@ -149,8 +150,8 @@ export const Settings = {
     sky: {
         // the sky's colour straight up and at the horizon (and below it); terrain fades into the horizon colour (the
         // fog's), so the far world reads as haze, with the sky going on above it
-        zenithColor: [0.30, 0.56, 0.95],
-        horizonColor: [0.68, 0.85, 0.98],
+        zenithColor: "#4d8ff2",
+        horizonColor: "#add9fa",
         // where the sky is the zenith colour: the view direction's height, 0 at the horizon, 1 straight up
         gradientHeight: 0.5,
         // the sun, in degrees: height above the horizon, direction around it (0 towards +x, 90 towards +z), radius
@@ -159,7 +160,7 @@ export const Settings = {
         sunSize: 2.5,
         // the sun is blocky: this many square pixels across its radius (more: rounder)
         sunPixels: 4,
-        sunColor: [1, 0.96, 0.84],
+        sunColor: "#fff5d6",
         // the glow around the sun: strength (added to the sky) and how far it reaches, in degrees (where it's 10%)
         sunGlow: 0.35,
         sunGlowSize: 20,
@@ -173,15 +174,20 @@ export const Settings = {
     },
 
     water: {
-        // alpha of the water texture, 0..255 (applied to the texture when it's loaded, see textures.js)
-        textureAlpha: 220,
+        // how much the water hides what's behind it, 0..1, looking straight down (the water shader's alpha, see fresnel)
+        opacity: 0.76,
         // average colour of the water texture
-        textureColor: [0, 0.29, 0.69],
+        textureColor: "#004ab0",
         // pre-pass of the water faces:
         // "depth" - depth-only program, then the colour pass; only the nearest water face is blended into a pixel
         // "full" - the same with the water program in the pre-pass (for comparison)
         // "off" - no pre-pass; overlapping water faces blend depending on the draw order
         prepass: "off",
+        // the water gets more opaque the flatter it's seen: the light goes through more of it (1 / cos as much), so
+        // alpha = 1 - (1 - opacity)^(1 + fresnelStrength * (1 / cos - 1)); off: not in the shader at all
+        fresnel: true,
+        // 0..1; 1: clear looking down, solid looking across; 0: the same opacity from every angle
+        fresnelStrength: 1,
         // flowing water (world/waterFlow.js, run by the world worker), no levels yet: water woken by a block change
         // next to it flows down into an empty cell, or sideways into empty cells if it can't flow down
         flow: {
@@ -219,6 +225,44 @@ export const Settings = {
     }
 };
 
+/** a colour in hex: rrggbb or rrggbbaa (alpha), "#" optional */
+const HEX_COLOR = /^#?([0-9a-f]{6}(?:[0-9a-f]{2})?)$/i;
+
+/**
+ * A colour setting's value as red, green, blue, alpha, 0..1: a "#rrggbb" or "#rrggbbaa" string (the defaults, for an
+ * editor's colour picker) or [r, g, b] / [r, g, b, a]; alpha 1 if it has none.
+ * @param {string | number[]} color
+ * @returns {number[]}
+ */
+export function rgba(color) {
+    if (Array.isArray(color))
+        return color.length === 4 ? color : [...color, 1];
+    const hex = HEX_COLOR.exec(color)[1];
+    const channels = [0, 2, 4, 6].slice(0, hex.length / 2).map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+    return channels.length === 4 ? channels : [...channels, 1];
+}
+
+/**
+ * A colour setting's value as red, green, blue, 0..1 (alpha, if it has one, left out), see {@link rgba}.
+ * @param {string | number[]} color
+ * @returns {number[]}
+ */
+export function rgb(color) {
+    return rgba(color).slice(0, 3);
+}
+
+/** whether a setting is a colour: its default is a "#rrggbb" or "#rrggbbaa" string */
+function isColorSetting(current) {
+    return typeof current === "string" && current.startsWith("#") && HEX_COLOR.test(current);
+}
+
+/** a colour value: "#rrggbb", "#rrggbbaa", or 3 or 4 numbers */
+function isColor(value) {
+    return (typeof value === "string" && value.startsWith("#") && HEX_COLOR.test(value)) ||
+        (Array.isArray(value) && (value.length === 3 || value.length === 4) &&
+            value.every(v => typeof v === "number" && !Number.isNaN(v)));
+}
+
 /**
  * Reads a URL parameter value as the type of the current (default) value.
  * @param {string} text
@@ -226,6 +270,19 @@ export const Settings = {
  * @returns {any} the value, or undefined if the text doesn't fit the type
  */
 function parseAs(text, current) {
+    if (isColorSetting(current)) {
+        // rrggbb[aa] or #rrggbb[aa] (# is %23 in a URL), or r,g,b[,a] / [r,g,b[,a]]
+        const hex = HEX_COLOR.exec(text.trim());
+        if (hex !== null)
+            return "#" + hex[1].toLowerCase();
+        let value;
+        try {
+            value = JSON.parse(text.startsWith("[") ? text : `[${text}]`);
+        } catch {
+            return undefined;
+        }
+        return isColor(value) ? value : undefined;
+    }
     if (typeof current === "boolean")
         return text === "true" ? true : text === "false" ? false : undefined;
     if (typeof current === "number") {
@@ -287,6 +344,8 @@ function findSetting(path) {
  * same length and types.
  */
 function fits(value, current) {
+    if (isColorSetting(current))
+        return isColor(value);
     if (!Array.isArray(current))
         return typeof value === typeof current && !(typeof value === "number" && Number.isNaN(value));
     if (!Array.isArray(value))
@@ -298,7 +357,7 @@ function fits(value, current) {
 
 /**
  * Applies the parameters whose names are setting paths (contain a dot); other parameters are left alone.
- * @param {URLSearchParams} params
+ * @param {Iterable<[string, string]>} params
  */
 function applyUrlParams(params) {
     for (const [path, text] of params) {
@@ -350,4 +409,25 @@ export function settingsParams() {
     return params;
 }
 
-applyUrlParams(new URL(self.location.href).searchParams);
+/**
+ * The parameters of a URL, also after a "#": a colour like sky.zenithColor=#4d8ff2 would otherwise end the query
+ * there (the browser takes the rest as the fragment), so the query and the fragment are read as one.
+ * @param {string} href
+ * @returns {Array<[string, string]>}
+ */
+function urlParams(href) {
+    const start = href.indexOf("?");
+    if (start < 0)
+        return [];
+    const params = [];
+    for (const pair of href.slice(start + 1).split("&")) {
+        if (pair === "")
+            continue;
+        const eq = pair.indexOf("=");
+        const decode = (text) => decodeURIComponent(text.replace(/\+/g, " "));
+        params.push(eq < 0 ? [decode(pair), ""] : [decode(pair.slice(0, eq)), decode(pair.slice(eq + 1))]);
+    }
+    return params;
+}
+
+applyUrlParams(urlParams(self.location.href));

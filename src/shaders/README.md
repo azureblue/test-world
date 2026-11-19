@@ -56,3 +56,15 @@ of the cosine of the angle to the sun). Everything is set once from `Settings.sk
 degrees, size, `sunPixels` across the radius). The glow fades out towards the horizon, where the sky has to stay the
 fog colour so far terrain fading into the fog doesn't stand out. Being part of the sky, the sun is hidden by terrain
 in front of it; nothing is lit by it. `highp`: the pixels are fractions of a degree, beyond `mediump`.
+
+## Water opacity and shader variants
+
+The water's opacity is the shader's (`WATER_OPACITY`, `Settings.water.opacity`), not baked into the texture. With
+`FRESNEL` (`Settings.water.fresnel`) the surface gets more opaque the flatter it's seen, the light going through
+1 / cos as much water: `1 - (1 - WATER_OPACITY)^(1 + FRESNEL_STRENGTH * (1 / cos - 1))` (`Settings.water.fresnelStrength`
+0..1; at 1: clear looking down, solid looking across). Only on the
+water's surface (top faces: `v_surface` from the face direction, which the mesher encodes in bits 61..63 of water
+quads) seen from above.
+
+Both are `#define`s (`withDefines` in `gl.js` puts them after the `#version` line; `WorldRenderer` builds the water
+program's variant from the settings once): an effect that's off isn't in the program at all, constants fold.

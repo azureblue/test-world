@@ -1,4 +1,3 @@
-import { Settings } from "./settings.js";
 import { is2Pow } from "./utils.js";
 
 class ImageFilters {
@@ -23,16 +22,8 @@ class ImageFilters {
     }
 }
 
-const textureFilters = {
-    6: [
-        {
-            "name": "SetAlpha",
-            "params": {
-                alpha: Settings.water.textureAlpha
-            }
-        }
-    ]
-};
+// texture id -> filters applied when the texture is loaded (none at the moment; the water's alpha is the shader's)
+const textureFilters = {};
 
 export class TextureArray {
 

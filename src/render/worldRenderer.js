@@ -2,9 +2,9 @@ import { Camera, FrustumCuller } from "../camera.js";
 import { CHUNK_SIZE } from "../chunk/chunk.js";
 import { Fog } from "../fog.js";
 import { mat4, Projection } from "../geom.js";
-import { Program } from "../gl.js";
+import { Program, withDefines } from "../gl.js";
 import { UIntMeshDrawer, UIntMeshHandler } from "../mesh/uIntMesh.js";
-import { Settings } from "../settings.js";
+import { rgb, Settings } from "../settings.js";
 import { TextureArray } from "../textures.js";
 import { GenericBuffer, Resources, writeVoxelWireframe } from "../utils.js";
 import { World } from "../world/world.js";
@@ -42,6 +42,33 @@ class OverdrawStats {
         this.avg = covered === 0 ? 0 : sum / covered;
         this.max = max;
     }
+}
+
+/** @returns {number[]} towards the sun (Settings.sky), unit length, world coordinates */
+function sunDirection() {
+    const rad = Math.PI / 180;
+    const elevation = Settings.sky.sunElevation * rad, azimuth = Settings.sky.sunAzimuth * rad;
+    return [Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.sin(azimuth)];
+}
+
+/**
+ * The exponent k for which cos(angle)^k is 10% at the given angle: a highlight that size around a direction.
+ * @param {number} degrees
+ */
+function tenPercentExponent(degrees) {
+    return Math.log(0.1) / Math.log(Math.cos(degrees * Math.PI / 180));
+}
+
+/**
+ * The water program's variant: its opacity and the optional effect (Settings.water) as #defines, compiled in only when
+ * on, constants folded.
+ */
+function waterDefines() {
+    return {
+        WATER_OPACITY: Settings.water.opacity,
+        FRESNEL: Settings.water.fresnel,
+        FRESNEL_STRENGTH: Settings.water.fresnelStrength
+    };
 }
 
 /**
@@ -91,12 +118,13 @@ export class WorldRenderer {
      * @returns {Promise<WorldRenderer>}
      */
     static async create(gl, textures, camera) {
-        const program = async (vert, frag) =>
-            new Program(gl, await Resources.loadText(`shaders/${vert}`), await Resources.loadText(`shaders/${frag}`));
+        const program = async (vert, frag, defines = {}) => new Program(gl,
+            withDefines(await Resources.loadText(`shaders/${vert}`), defines),
+            withDefines(await Resources.loadText(`shaders/${frag}`), defines));
         const programs = {
             cubeSolid: await program("cube_solid.vert", Settings.debug.overdraw ? "overdraw.frag" : "cube_solid.frag"),
             xQuads: await program("x_quads.vert", "x_quads.frag"),
-            water: await program("water.vert", "water.frag"),
+            water: await program("water.vert", "water.frag", waterDefines()),
             waterDepth: await program("water_depth.vert", "water_depth.frag"),
             blockHighlight: await program("blockhighlight.vert", "blockhighlight.frag"),
             sky: await program("sky.vert", "sky.frag")
@@ -165,14 +193,13 @@ export class WorldRenderer {
         // the sky: the colours don't change, the view vectors are set per frame (scaled to the screen's edges)
         const sky = programs.sky;
         sky.use();
-        gl.uniform3fv(sky.getUniformLocation("sky_zenith"), Settings.sky.zenithColor);
-        gl.uniform3fv(sky.getUniformLocation("sky_horizon"), Settings.sky.horizonColor);
+        gl.uniform3fv(sky.getUniformLocation("sky_zenith"), rgb(Settings.sky.zenithColor));
+        gl.uniform3fv(sky.getUniformLocation("sky_horizon"), rgb(Settings.sky.horizonColor));
         gl.uniform1f(sky.getUniformLocation("sky_height"), Settings.sky.gradientHeight);
         const s = Settings.sky, rad = Math.PI / 180;
-        const elevation = s.sunElevation * rad, azimuth = s.sunAzimuth * rad;
-        const sunDir = [Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.sin(azimuth)];
+        const sunDir = sunDirection();
         gl.uniform3fv(sky.getUniformLocation("sun_dir"), sunDir);
-        gl.uniform3fv(sky.getUniformLocation("sun_color"), s.sunColor);
+        gl.uniform3fv(sky.getUniformLocation("sun_color"), rgb(s.sunColor));
         // the sun's pixels: two axes across it (one horizontal, unless the sun is straight up), scaled to the pixel size
         const cell = Math.tan(s.sunSize * rad) / s.sunPixels;
         let u = [-sunDir[2], 0, sunDir[0]];
@@ -186,8 +213,7 @@ export class WorldRenderer {
         gl.uniform3fv(sky.getUniformLocation("sun_u"), u.map(c => c / cell));
         gl.uniform3fv(sky.getUniformLocation("sun_v"), v.map(c => c / cell));
         gl.uniform1f(sky.getUniformLocation("sun_radius"), s.sunPixels);
-        // the exponent that makes the glow 10% at sunGlowSize degrees from the sun's centre
-        gl.uniform2f(sky.getUniformLocation("sun_glow"), s.sunGlow, Math.log(0.1) / Math.log(Math.cos(s.sunGlowSize * rad)));
+        gl.uniform2f(sky.getUniformLocation("sun_glow"), s.sunGlow, tenPercentExponent(s.sunGlowSize));
         this.#sky = {
             forward: sky.getUniformLocation("sky_forward"),
             right: sky.getUniformLocation("sky_right"),

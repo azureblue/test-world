@@ -161,7 +161,8 @@ class water_encoder {
         int y = vx_y + quad_encoding::VERTEX_OFFSETS[DIR][Y];
         // the top face at the level, side faces from their bottom (0 for the bottom face)
         int z = vx_z * 8 + (quad_encoding::VERTEX_OFFSETS[DIR][Z] != 0 ? level : bottom);
-        return encode_pos_bits(x, y, z) | encode_tex_bits(tex_id);
+        // the direction: the shader tells the surface (Up) from the other faces by it (Fresnel)
+        return encode_pos_bits(x, y, z) | encode_tex_bits(tex_id) | encode_dir_bits(DIR);
     }
 
     inline_always static uint64 encode_pos_bits(uint x, uint y, uint z) {
