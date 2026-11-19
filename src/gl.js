@@ -45,22 +45,26 @@ export class Program {
 
 /**
  * Adds #define lines to a shader source, after its #version line: a variant of a shader, compiled as its own program,
- * so features that are off cost nothing and constants fold. true defines the name alone (for #ifdef), false or null
- * leaves it out; numbers become float literals, arrays of 2..4 numbers vecN.
+ * so features that are off cost nothing and constants fold. true defines the name alone (for #ifdef), undefined leaves
+ * it out; numbers become float literals, arrays of 2..4 numbers vecN; anything else (false too) is an error.
  * @param {string} source
- * @param {{[name: string]: boolean | number | number[] | null}} defines
+ * @param {{[name: string]: true | number | number[] | undefined}} defines
  * @returns {string}
  */
 export function withDefines(source, defines) {
     const float = (n) => Number.isInteger(n) ? n.toFixed(1) : String(n);
     const lines = [];
     for (const [name, value] of Object.entries(defines)) {
+        if (value === undefined)
+            continue;
         if (value === true)
             lines.push(`#define ${name}`);
         else if (typeof value === "number")
             lines.push(`#define ${name} ${float(value)}`);
         else if (Array.isArray(value))
             lines.push(`#define ${name} vec${value.length}(${value.map(float).join(", ")})`);
+        else
+            throw new Error(`withDefines: ${name} is ${JSON.stringify(value)}: true, a number, an array or undefined`);
     }
     const end = source.indexOf("\n");
     return source.slice(0, end + 1) + lines.join("\n") + (lines.length > 0 ? "\n" : "") + source.slice(end + 1);

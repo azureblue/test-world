@@ -60,13 +60,24 @@ function tenPercentExponent(degrees) {
 }
 
 /**
- * The water program's variant: its opacity and the optional effect (Settings.water) as #defines, compiled in only when
- * on, constants folded.
+ * The water program's variant: the optional effect (Settings.water) as a #define, compiled in only when on.
  */
 function waterDefines() {
+    return { FRESNEL: Settings.water.fresnel ? true : undefined };
+}
+
+/**
+ * What the water program gets for one camera state (above or under water).
+ * @param {number} colorScale the texture colour's scale
+ * @param {number} alpha the water's alpha
+ * @param {number} fresnelStrength
+ */
+function waterState(colorScale, alpha, fresnelStrength) {
     return {
-        WATER_OPACITY: Settings.water.opacity,
-        FRESNEL: Settings.water.fresnel
+        // water_color: multiplies vec4(texture.rgb, 1)
+        color: new Float32Array([colorScale, colorScale, colorScale, alpha]),
+        // fresnel: the strength and log2(1 - alpha), see water.frag
+        fresnel: new Float32Array([fresnelStrength, Math.log2(Math.max(1 - alpha, 1e-6))])
     };
 }
 
@@ -80,8 +91,8 @@ function waterDefines() {
 
 /**
  * Draws the world from the camera: the opaque blocks, the selected block's outline, plants, then water (blended,
- * with an optional depth pre-pass). Owns the shader programs, the block textures and the Camera uniform block
- * (shaders/README.md) shared by them.
+ * with an optional depth pre-pass). Owns the shader programs, the block textures and the Camera and Fog uniform
+ * blocks (shaders/README.md) shared by them.
  */
 export class WorldRenderer {
     /** @type {WebGL2RenderingContext} */
@@ -92,12 +103,22 @@ export class WorldRenderer {
     #texArray;
     #cameraBuffer;
     #cameraOffsets;
+    #fogBuffer;
+    /** the fog state (Fog.get) the Fog buffer holds: it's written only when that changes */
+    #fogInBuffer = null;
     #highlightBuffer;
     #highlightVertices = new Float32Array(72);
     // the automatic fog distance: as far as the loaded chunks reach from the camera in every direction. Chunks are
     // kept by their chunk distance from the camera's chunk (at most renderDistance), so in some directions the last
     // one is missing and the world ends half a chunk sooner; and the camera can be half a chunk off its chunk's centre
     #fog = new Fog(Settings.sky, Settings.water, Math.max(1, Settings.world.renderDistance - 1.5) * CHUNK_SIZE);
+    // the water faces above water: the opacity; from inside water (the surface from below, air pockets) darker and
+    // fainter, and no Fresnel (it would only get dark at a slant)
+    #water = {
+        above: waterState(1, Settings.water.opacity, Settings.water.fresnelStrength),
+        under: waterState(Settings.water.underwater.faceColorScale,
+            Settings.water.underwater.faceAlphaScale * Settings.water.opacity, 0)
+    };
     #frustumCuller;
     #nearPlaneReach;
     #mProjection = mat4();
@@ -165,19 +186,28 @@ export class WorldRenderer {
         gl.useProgram(cubeSolid.program);
         this.#texArray = TextureArray.create(gl, textures, 16);
 
-        // the Camera block (shaders/README.md), one buffer bound to binding 0 for all programs
-        const cameraBlockIndex = gl.getUniformBlockIndex(cubeSolid.program, "Camera");
-        const cameraBlockSize = gl.getActiveUniformBlockParameter(cubeSolid.program, cameraBlockIndex, gl.UNIFORM_BLOCK_DATA_SIZE);
-        this.#cameraBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.UNIFORM_BUFFER, this.#cameraBuffer);
-        gl.bufferData(gl.UNIFORM_BUFFER, cameraBlockSize, gl.DYNAMIC_DRAW);
-        gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-        gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, this.#cameraBuffer);
-        const cameraBlockIndices = gl.getUniformIndices(cubeSolid.program, ["cam_projection_view", "cam_pos", "fog_inv_dist_sq"]);
-        const [projectionView, cameraPos, fog] = gl.getActiveUniforms(cubeSolid.program, cameraBlockIndices, gl.UNIFORM_OFFSET);
-        this.#cameraOffsets = { projectionView, cameraPos, fog };
-        gl.uniformBlockBinding(cubeSolid.program, gl.getUniformBlockIndex(cubeSolid.program, "Camera"), 0);
-        gl.uniformBlockBinding(blockHighlight.program, gl.getUniformBlockIndex(blockHighlight.program, "Camera"), 0);
+        // the Camera and Fog blocks (shaders/README.md): one buffer each, Camera bound to binding 0, Fog to 1, for all
+        // programs that declare them (Camera the vertex shaders, Fog the fragment shaders)
+        const blockBuffer = (program, name, binding) => {
+            const size = gl.getActiveUniformBlockParameter(program.program, gl.getUniformBlockIndex(program.program, name), gl.UNIFORM_BLOCK_DATA_SIZE);
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.UNIFORM_BUFFER, buffer);
+            gl.bufferData(gl.UNIFORM_BUFFER, size, gl.DYNAMIC_DRAW);
+            gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+            gl.bindBufferBase(gl.UNIFORM_BUFFER, binding, buffer);
+            for (const p of Object.values(programs)) {
+                const index = gl.getUniformBlockIndex(p.program, name);
+                if (index !== gl.INVALID_INDEX)
+                    gl.uniformBlockBinding(p.program, index, binding);
+            }
+            return buffer;
+        };
+        this.#cameraBuffer = blockBuffer(cubeSolid, "Camera", 0);
+        const cameraBlockIndices = gl.getUniformIndices(cubeSolid.program, ["cam_projection_view", "cam_pos"]);
+        const [projectionView, cameraPos] = gl.getActiveUniforms(cubeSolid.program, cameraBlockIndices, gl.UNIFORM_OFFSET);
+        this.#cameraOffsets = { projectionView, cameraPos };
+        // x_quads.frag: cube_solid's fragment shader is overdraw.frag in the overdraw view, without fog
+        this.#fogBuffer = blockBuffer(xQuads, "Fog", 1);
 
         const cameraSettings = Settings.camera;
         const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
@@ -221,9 +251,9 @@ export class WorldRenderer {
             scaleY: Math.tan(fieldOfView / 2)
         };
 
-        this.#locations.waterFaceMul = water.getUniformLocation("water_face_mul");
+        this.#locations.waterColor = water.getUniformLocation("water_color");
         // null without FRESNEL: setting it does nothing
-        this.#locations.fresnelStrength = water.getUniformLocation("fresnel_strength");
+        this.#locations.fresnel = water.getUniformLocation("fresnel");
         this.#locations.waterTranslation = water.getUniformLocation("m_translation");
         this.#locations.waterDepthTranslation = waterDepth.getUniformLocation("m_translation");
         this.#meshHandler = new UIntMeshHandler(gl, aIn, aInXQuads, aInWater);
@@ -296,7 +326,11 @@ export class WorldRenderer {
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.#cameraBuffer);
         gl.bufferSubData(gl.UNIFORM_BUFFER, this.#cameraOffsets.projectionView, this.#mProjectionView._values, 0);
         gl.bufferSubData(gl.UNIFORM_BUFFER, this.#cameraOffsets.cameraPos, camPos._values, 0);
-        gl.bufferSubData(gl.UNIFORM_BUFFER, this.#cameraOffsets.fog, fogState.uniformData, 0);
+        if (this.#fogInBuffer !== fogState) {
+            gl.bindBuffer(gl.UNIFORM_BUFFER, this.#fogBuffer);
+            gl.bufferSubData(gl.UNIFORM_BUFFER, 0, fogState.uniformData, 0);
+            this.#fogInBuffer = fogState;
+        }
         gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
         this.#frustumCuller.updatePlanes();
@@ -346,7 +380,7 @@ export class WorldRenderer {
         // water: with the pre-pass only the nearest water face is blended into a pixel, whatever the draw order:
         // depth first, then colour with depth writes off, so a farther face can't blend under a nearer one.
         // From outside we see the outer sides of the water; from inside the fog does the tinting and only the
-        // inner sides are drawn (darker and fainter, water_face_mul), so the surface is visible from below.
+        // inner sides are drawn (darker and fainter, water_color), so the surface is visible from below.
         gl.enable(gl.CULL_FACE);
         gl.cullFace(inWater ? gl.FRONT : gl.BACK);
         const prepass = Settings.water.prepass;
@@ -362,9 +396,9 @@ export class WorldRenderer {
             gl.depthFunc(gl.LEQUAL);
         }
         water.use();
-        gl.uniform4fv(this.#locations.waterFaceMul, fogState.waterFaceMul);
-        // under water the surface is seen from below, where it would only get dark at a slant
-        gl.uniform1f(this.#locations.fresnelStrength, inWater ? 0 : Settings.water.fresnelStrength);
+        const waterState = inWater ? this.#water.under : this.#water.above;
+        gl.uniform4fv(this.#locations.waterColor, waterState.color);
+        gl.uniform2fv(this.#locations.fresnel, waterState.fresnel);
         gl.enable(gl.BLEND);
         for (const chunk of visibleChunks)
             meshDrawer.drawNonSolids(chunk.mesh);
