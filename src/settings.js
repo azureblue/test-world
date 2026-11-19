@@ -184,7 +184,8 @@ export const Settings = {
         // "off" - no pre-pass; overlapping water faces blend depending on the draw order
         prepass: "off",
         // the water gets more opaque the flatter it's seen: the light goes through more of it (1 / cos as much), so
-        // alpha = 1 - (1 - opacity)^(1 + fresnelStrength * (1 / cos - 1)); off: not in the shader at all
+        // alpha = 1 - (1 - opacity)^(1 + fresnelStrength * (1 / cos - 1)), the angle to the vertical on every face (the
+        // sides follow the top, so steps and rims of flowing water match the surface); not under water; off: not in the shader at all
         fresnel: true,
         // 0..1; 1: clear looking down, solid looking across; 0: the same opacity from every angle
         fresnelStrength: 1,

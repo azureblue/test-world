@@ -66,8 +66,7 @@ function tenPercentExponent(degrees) {
 function waterDefines() {
     return {
         WATER_OPACITY: Settings.water.opacity,
-        FRESNEL: Settings.water.fresnel,
-        FRESNEL_STRENGTH: Settings.water.fresnelStrength
+        FRESNEL: Settings.water.fresnel
     };
 }
 
@@ -223,6 +222,8 @@ export class WorldRenderer {
         };
 
         this.#locations.waterFaceMul = water.getUniformLocation("water_face_mul");
+        // null without FRESNEL: setting it does nothing
+        this.#locations.fresnelStrength = water.getUniformLocation("fresnel_strength");
         this.#locations.waterTranslation = water.getUniformLocation("m_translation");
         this.#locations.waterDepthTranslation = waterDepth.getUniformLocation("m_translation");
         this.#meshHandler = new UIntMeshHandler(gl, aIn, aInXQuads, aInWater);
@@ -362,6 +363,8 @@ export class WorldRenderer {
         }
         water.use();
         gl.uniform4fv(this.#locations.waterFaceMul, fogState.waterFaceMul);
+        // under water the surface is seen from below, where it would only get dark at a slant
+        gl.uniform1f(this.#locations.fresnelStrength, inWater ? 0 : Settings.water.fresnelStrength);
         gl.enable(gl.BLEND);
         for (const chunk of visibleChunks)
             meshDrawer.drawNonSolids(chunk.mesh);

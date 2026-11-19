@@ -27,10 +27,6 @@ const float FRACT_UNIT = 1.0f / 8.0f;
 out highp vec3 v_tex_coord;
 // vertex to camera; linear across a triangle, so the fragment shader gets the exact distance for the fog
 smooth out highp vec3 v_to_cam;
-#ifdef FRESNEL
-// 1 on the water's surface (top faces), 0 on the others: only the surface gets more opaque at a slant
-flat out float v_surface;
-#endif
 
 void main() {
     uint a_in_bits = a_in.x;
@@ -50,7 +46,4 @@ void main() {
 
     v_to_cam = cam_pos - pos;
     v_tex_coord = vec3(m_x, m_y, float(tex));
-#ifdef FRESNEL
-    v_surface = dir == 0u ? 1.0 : 0.0;
-#endif
 }

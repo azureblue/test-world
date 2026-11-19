@@ -35,6 +35,11 @@ const UNLOADED = BLOCK_IDS.ROCK >>> 0;
  * - A cell between two or more sources, on solid ground or on a source, becomes a source itself: a hole dug in a
  *   lake fills up for good. A hole dug next to a lake gets a curtain of falling water along the lake and flowing
  *   water on its floor, as in Minecraft.
+ * - Pressure (not in Minecraft): a covered cell (a block or a source above it) next to a full source (one under the
+ *   surface) becomes a full source itself, so a tunnel or a cave dug under a lake fills up all the way, not just 6
+ *   blocks deep with air above the flowing water. It goes on cell by cell, the new sources being full and covered
+ *   too; it can't rise above the surface (surface sources are 7/8, not full) nor fill anything open to the sky (a
+ *   hole beside a lake keeps its curtain). Like any source, the water stays when the tunnel is sealed off later.
  * Plants don't stop water: it flows into their cells and they stay in it ({@link flooded}).
  *
  * Generated water stays still until a block changes next to it: a change wakes the cells whose water can depend on
@@ -177,6 +182,8 @@ export class WaterFlow {
     #flowingState(ix, iy, iz, cell, above, below) {
         let sources = 0;
         let level = 0;
+        // next to a full source: under water pressure
+        let pressure = false;
         for (const [dx, dy] of SIDES) {
             const side = this.#read(ix + dx, iy + dy, iz, ix, iy, iz);
             if (!isLiquid(side))
@@ -184,6 +191,7 @@ export class WaterFlow {
             if (isSource(side)) {
                 sources++;
                 level = Math.max(level, SPREAD_LEVEL);
+                pressure ||= blockHeight(side) === BLOCK_HEIGHT_FULL;
                 continue;
             }
             // flowing water spreads sideways only resting on solid ground (not over a lake it fell into)
@@ -191,6 +199,10 @@ export class WaterFlow {
                 continue;
             level = Math.max(level, isFalling(side) ? SPREAD_LEVEL : blockHeight(side) - 1);
         }
+        // covered: a block or a source above; a block above that isn't loaded only reads as solid (the cell waits for it),
+        // and a source is for good, so it doesn't count
+        if (pressure && (isSource(above) || isSolid(above) && this.#blocks.isLoaded(ix, iy, iz + 1)))
+            return flooded(cell, BLOCK_HEIGHT_FULL);
         if (sources >= 2 && (isSolid(below) || isSource(below)))
             return flooded(cell, isLiquid(above) ? BLOCK_HEIGHT_FULL : WATER_SURFACE_LEVEL);
         if (isLiquid(above))

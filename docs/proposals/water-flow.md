@@ -35,6 +35,10 @@ worker `src/worker/worldWorker.js`, `Settings.water.flow`). Further ideas under 
   the lake and flowing water on its floor, as in Minecraft. (A rule making water seek its level, filling such holes
   up to the surface, was tried and dropped: it only worked next to deep water, not at beaches, which made it hard to
   predict.)
+- **Pressure** (not in Minecraft): a covered cell (a block or a source above it) next to a full source (one under
+  the surface) becomes a full source, so a tunnel or cave dug under a lake fills up all the way instead of staying
+  dry beyond 6 blocks. It spreads cell by cell; it can't rise above the surface (surface sources are 7/8, not full)
+  nor fill anything open to the sky, so the curtain above stays. The water stays when the tunnel is sealed later.
 - **Waking:** a change wakes the cell, the cells above, below and beside it, and beside the cell above (whether water
   there spreads depends on what it rests on). Woken cells are updated `interval` seconds later (rounded to ticks); at
   most `maxUpdatesPerTick` per tick, the rest in order in the next tick.

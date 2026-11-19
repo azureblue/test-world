@@ -60,11 +60,12 @@ in front of it; nothing is lit by it. `highp`: the pixels are fractions of a deg
 ## Water opacity and shader variants
 
 The water's opacity is the shader's (`WATER_OPACITY`, `Settings.water.opacity`), not baked into the texture. With
-`FRESNEL` (`Settings.water.fresnel`) the surface gets more opaque the flatter it's seen, the light going through
-1 / cos as much water: `1 - (1 - WATER_OPACITY)^(1 + FRESNEL_STRENGTH * (1 / cos - 1))` (`Settings.water.fresnelStrength`
-0..1; at 1: clear looking down, solid looking across). Only on the
-water's surface (top faces: `v_surface` from the face direction, which the mesher encodes in bits 61..63 of water
-quads) seen from above.
+`FRESNEL` (`Settings.water.fresnel`) the water gets more opaque the flatter it's seen, the light going through
+1 / cos as much water: `1 - (1 - WATER_OPACITY)^(1 + fresnel_strength * (1 / cos - 1))` (the uniform is
+`Settings.water.fresnelStrength` 0..1 above water, 0 under water; at 1: clear looking down, solid looking across). The
+angle is to the vertical on every face: the side faces follow the top, as if all water were a horizontal sheet, so the
+steps and rims of flowing water match the surface around them. A waterfall seen from the side gets nearly opaque; using
+each face's real normal there is in `docs/proposals/water-fresnel.md`.
 
 Both are `#define`s (`withDefines` in `gl.js` puts them after the `#version` line; `WorldRenderer` builds the water
 program's variant from the settings once): an effect that's off isn't in the program at all, constants fold.
