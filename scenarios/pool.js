@@ -5,10 +5,10 @@ import { SceneGenerator } from "../src/gen/sceneGenerator.js";
 export const settings = { "world.renderDistance": 3 };
 
 /** the scene, built in the world worker */
-export async function world() {
+export async function world(seed) {
     const surface = flooded(BLOCK_IDS.EMPTY, WATER_SURFACE_LEVEL);
     const plant = BLOCK_IDS.GRASS_SHORT_0;
-    return (await SceneGenerator.over("flat"))
+    return (await SceneGenerator.over("flat", seed))
         .fill(-6, -3, -6, 6, 0, 6, "EMPTY")
         .fill(-6, -3, -6, 6, -2, 6, "WATER")
         .fill(-6, -1, -6, 6, -1, 6, surface)

@@ -24,6 +24,13 @@ export class ChunkBlockData extends Array3D {
 }
 
 export class ChunkGenerator {
+    /** the world's seed: every generation from the same seed is the same */
+    seed;
+
+    /** @param {number} seed an integer */
+    constructor(seed) {
+        this.seed = seed;
+    }
 
     /**
      * @param {Vec3} chunkPos
@@ -33,9 +40,11 @@ export class ChunkGenerator {
     }
 
     /**
+     * @param {number} seed an integer, the world's seed
+     * @param {object} [params] the generator's own options
      * @returns {Promise<ChunkGenerator>}
      */
-    static async create(params = {}) {    
+    static async create(seed, params = {}) {
 
     }
 }

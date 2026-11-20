@@ -9,7 +9,7 @@ import { Array2D, ImagePixels } from "../utils.js";
 import { LinearCurve, point } from "./curve.js";
 import { testgen } from "./generators.js";
 import { CurveNode, GenericNode, GenNode } from "./node.js";
-import { TreeGenerator } from "./treeGen.js";
+import { SPECIES, TreeBuilder } from "./trees/treeBuilder.js";
 
 
 
@@ -480,17 +480,15 @@ export class NoiseChunkGenerator extends ChunkGenerator {
         octaves: 2
     });
 
-    constructor() {
-        super();
-        // this.goodNoise0.seedSet(1234562);
-        this.#offests = seedOffset(this.#noise.seed);
-        this.#offests.ox = 0;
-        this.#offests.oy = 0;
+    /** @param {number} seed the noise is the same for every seed, read at an offset from it */
+    constructor(seed) {
+        super(seed);
+        this.#offests = seedOffset(seed);
         this.localHeightMap = new Array2D(CHUNK_SIZE + 8, CHUNK_SIZE + 8, Int32Array);
     }
 
-    static async create(params = {}) {
-        return new NoiseChunkGenerator();
+    static async create(seed, params = {}) {
+        return new NoiseChunkGenerator(seed);
     }
 
     /**
@@ -549,7 +547,7 @@ export class NoiseChunkGenerator extends ChunkGenerator {
 
                 r++;
                 // a plant on 5% of the columns, by position: every generation of the chunk gets the same plants
-                if (r < chunkEndH && r === height && hash01(PLANT_SEED, x + startX, y + startY) < 0.05)
+                if (r < chunkEndH && r === height && hash01(PLANT_SEED ^ this.seed, x + startX, y + startY) < 0.05)
                     blockData.setHXY(r - chunkStartH, x, y, BLOCK_IDS.GRASS_SHORT_0);
 
                 for (let w = r; w < Math.min(waterLevel, chunkEndH); w++) {
@@ -811,7 +809,7 @@ export const GeneratorPatterns = {
 }
 
 export class TestGenerator extends ChunkGenerator {
-    #treeGen = new TreeGenerator();
+    #treeBuilder = new TreeBuilder();
 
     /**
      * @param {Vec3} chunkPos
@@ -831,14 +829,14 @@ export class TestGenerator extends ChunkGenerator {
         } else if (chunkPos.equals(0, -2, 0)) {
             GeneratorPatterns.verticalStripesY(chunkData);
         } else if (chunkPos.equals(0, 0, 1)) {
-            this.#treeGen.generate(chunkData, 0, 5, 5, 0);
+            this.#treeBuilder.generate(chunkData, 0, 5, 5, 0, SPECIES.OAK);
         }
 
         return chunkData;
     }
 
-    static async create(params = {}) {
-        return new TestGenerator();
+    static async create(seed, params = {}) {
+        return new TestGenerator(seed);
     }
 }
 
@@ -858,7 +856,3 @@ export class TestGenerator2 {
     }
 }
 
-
-export function createGenerator() {
-    return new TestGenerator();
-}

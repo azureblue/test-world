@@ -10,9 +10,10 @@ import { WorkerConnection, WorkerServer } from "./worker.js";
 const params = new URL(self.location.href).searchParams;
 const workerId = params.get("workerId");
 const generatorName = params.get("gen") ?? "default";
+const seed = Number(params.get("seed"));
 
 const logger = new Logger("chunk generator worker " + workerId);
-const generator = await ChunkGeneratorFactory.createForName(generatorName);
+const generator = await ChunkGeneratorFactory.createForName(generatorName, seed);
 
 const workerServer = new WorkerServer(self, workerId, {
 

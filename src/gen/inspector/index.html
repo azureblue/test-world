@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generator inspector</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 8px;
+            font: 13px system-ui, sans-serif;
+            background: #1e1f22;
+            color: #ddd;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .controls input {
+            width: 80px;
+        }
+
+        .layers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        figure {
+            margin: 0;
+        }
+
+        figcaption {
+            max-width: 256px;
+            padding: 2px 0;
+        }
+
+        figcaption small {
+            color: #999;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            border: 1px solid #444;
+            cursor: crosshair;
+            display: block;
+        }
+
+        #probe {
+            white-space: pre;
+            font-family: ui-monospace, monospace;
+            min-height: 1.2em;
+            margin-bottom: 8px;
+            color: #aaa;
+        }
+
+        .legend div {
+            margin-bottom: 4px;
+        }
+
+        .legend span {
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        .legend i {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+
+        .curves {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 8px 0;
+        }
+
+        .curves canvas {
+            cursor: default;
+        }
+
+        #terrain {
+            width: 800px;
+            height: 600px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="controls">
+        <label>generator <input id="gen" value="climate"></label>
+        <label>seed <input id="seed" type="number" value="1"></label>
+        <label>x <input id="x" type="number" value="0"></label>
+        <label>y <input id="y" type="number" value="0"></label>
+        <label>blocks per pixel <input id="scale" type="number" value="4" min="0.25" step="any"></label>
+        <label>pixels <input id="size" type="number" value="256" min="32" step="32"></label>
+        <button id="render">render</button>
+        <button id="render3d">3D terrain</button>
+        <span>click a map to move there; hover to read every layer</span>
+    </div>
+    <div id="probe"></div>
+    <div class="legend" id="legend"></div>
+    <h3>Curves <small>(the input's values in the view as a histogram; the mouse's on the maps as a line)</small></h3>
+    <div class="curves" id="curves"></div>
+    <h3>Layers</h3>
+    <div class="layers" id="layers"></div>
+    <canvas id="terrain" hidden></canvas>
+    <script type="module">
+        import { start } from "./inspector.js";
+        start();
+    </script>
+</body>
+
+</html>

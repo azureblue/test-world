@@ -9,10 +9,10 @@ import { ChunkGeneratorFactory } from "./registry.js";
  * is the same.
  *
  * A scene is made in a scenario module's `world()` (see scenarios/), which the world worker loads when
- * Settings.world.generator is the module's path:
+ * Settings.world.generator is the module's path, with the world's seed (Settings.world.seed):
  *
- *     export async function world() {
- *         return new SceneGenerator()                 // empty; or (await SceneGenerator.over("flat"))
+ *     export async function world(seed) {
+ *         return new SceneGenerator()                 // empty; or (await SceneGenerator.over("flat", seed))
  *             .fill(-4, -1, -4, 4, -1, 4, "ROCK")
  *             .fill(-4, 0, -4, 4, 0, 4, "WATER");
  *     }
@@ -26,16 +26,17 @@ export class SceneGenerator extends ChunkGenerator {
 
     /** @param {ChunkGenerator | null} base the world under the scene; none: empty (air everywhere) */
     constructor(base = null) {
-        super();
+        super(base?.seed ?? 0);
         this.#base = base;
     }
 
     /**
      * @param {string} baseName a generator of the registry ("flat", "default", ...)
+     * @param {number} seed the world's seed (the one world(seed) gets)
      * @returns {Promise<SceneGenerator>}
      */
-    static async over(baseName) {
-        return new SceneGenerator(await ChunkGeneratorFactory.createForName(baseName));
+    static async over(baseName, seed) {
+        return new SceneGenerator(await ChunkGeneratorFactory.createForName(baseName, seed));
     }
 
     /**

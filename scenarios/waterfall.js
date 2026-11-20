@@ -4,8 +4,8 @@ import { SceneGenerator } from "../src/gen/sceneGenerator.js";
 
 export const settings = { "world.renderDistance": 3 };
 
-export async function world() {
-    return (await SceneGenerator.over("flat"))
+export async function world(seed) {
+    return (await SceneGenerator.over("flat", seed))
         .fill(0, 1, 0, 1, 6, 1, "ROCK");
 }
 

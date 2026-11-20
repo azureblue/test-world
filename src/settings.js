@@ -12,6 +12,8 @@ export const Settings = {
     world: {
         // chunk generator, see gen/registry.js
         generator: "default",
+        // the world's seed (an integer): every generator and scenario takes it
+        seed: 1,
         // the world worker meshes with the fast, unoptimized mesher
         fastMesher: false,
         // in chunks; chunks are loaded and drawn within this distance

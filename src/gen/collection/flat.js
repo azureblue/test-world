@@ -5,7 +5,7 @@ import { Vec3 } from "../../geom.js";
 export class FlatGenerator extends ChunkGenerator {
 
     /**
-     * Grass at height 0, dirt down to -5, rock below.
+     * Grass at height 0, dirt down to -5, rock below (the same for every seed).
      * @param {Vec3} chunkPos
      */
     generateChunk(chunkPos) {
@@ -28,7 +28,7 @@ export class FlatGenerator extends ChunkGenerator {
         return chunkData;
     }
 
-    static async create(params = {}) {
-        return new FlatGenerator();
+    static async create(seed, params = {}) {
+        return new FlatGenerator(seed);
     }
 }

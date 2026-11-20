@@ -5,7 +5,7 @@ Each file describes the problem, the proposed design and a suggested order of wo
 
 | Proposal | Status |
 |---|---|
-| [Tree placement and world features](tree-placement.md) | proposed, tree generator done |
+| [Tree placement and world features](tree-placement.md) | proposed, tree builder and climate placement done |
 | [Rendering performance](rendering-performance.md) | partly done |
 | [Worker pipeline: world worker as coordinator](worker-pipeline.md) | partly done: protocol, scheduler, world worker owning edits and simulation |
 | [Water flow](water-flow.md) | done: levels, source and flowing water; slopes and cost later |

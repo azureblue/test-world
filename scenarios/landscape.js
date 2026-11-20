@@ -3,8 +3,8 @@ import { SceneGenerator } from "../src/gen/sceneGenerator.js";
 
 export const settings = { "world.renderDistance": 5 };
 
-export async function world() {
-    return SceneGenerator.over("default");
+export async function world(seed) {
+    return SceneGenerator.over("default", seed);
 }
 
 /** @param {import("./testGame.js").TestGame} game */

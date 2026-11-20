@@ -20,7 +20,7 @@ import { WorkerConnection, WorkerServer } from "./worker.js";
 const workerId = new URL(self.location.href).searchParams.get("workerId");
 
 const logger = new Logger("world worker " + workerId);
-const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator);
+const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator, Settings.world.seed);
 
 const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory());
 const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher() : UIntExtWasmMesher.createMesher());

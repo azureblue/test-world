@@ -718,3 +718,34 @@ export class FixedSizeMap {
 export function setBit(value, bit, v01) {
     return value ^= (-v01 ^ value) & (1 << bit);
 }
+/**
+ * Values kept by key, made when missing; beyond the size the least recently used is dropped.
+ */
+export class LruCache {
+    #map = new Map();
+    #size;
+
+    /** @param {number} size */
+    constructor(size) {
+        this.#size = size;
+    }
+
+    /**
+     * @param {any} key
+     * @param {() => any} make makes the value when it isn't kept (null and undefined are kept too)
+     */
+    get(key, make) {
+        if (this.#map.has(key)) {
+            const value = this.#map.get(key);
+            // most recently used last
+            this.#map.delete(key);
+            this.#map.set(key, value);
+            return value;
+        }
+        const value = make();
+        this.#map.set(key, value);
+        if (this.#map.size > this.#size)
+            this.#map.delete(this.#map.keys().next().value);
+        return value;
+    }
+}

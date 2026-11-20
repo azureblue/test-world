@@ -1,3 +1,5 @@
+import { hash01 } from "../noise/hash.js";
+
 /**
  * @typedef Point
  * @type {object}
@@ -103,6 +105,44 @@ export class CurveRenderer {
             ctx.arc(x, y, 4, 0, Math.PI * 2);
             ctx.fill();
         }
+    }
+}
+
+/**
+ * Terraces: flat steps, rising to the next one over the step's last part, the narrower and steeper the higher the
+ * sharpness (0: an S over the whole step, almost the identity; 1: vertical walls). With a jitter the steps differ in
+ * height: the edges move up to ±jitter/2 of a step from the regular ones (by a hash of the seed and the step's index),
+ * so the steps are (1 ± jitter) times the step.
+ */
+export class TerraceCurve extends Curve {
+    /**
+     * @param {number} step the average step
+     * @param {number} [sharpness=0.8] 0..1
+     * @param {{jitter?: number, seed?: number}} [options] jitter 0..1 (below 1, the edges keep their order)
+     */
+    constructor(step, sharpness = 0.8, { jitter = 0, seed = 0 } = {}) {
+        super();
+        this.step = step;
+        this.rise = Math.max(1 - sharpness, 1e-6);
+        this.jitter = Math.min(jitter, 0.99);
+        this.seed = seed;
+    }
+
+    /** the k-th edge: where the step k begins */
+    edge(k) {
+        return (k + (this.jitter === 0 ? 0 : (hash01(this.seed, k, 0) - 0.5) * this.jitter)) * this.step;
+    }
+
+    apply(x) {
+        let k = Math.floor(x / this.step);
+        // the jittered edge of k may be above x, the next one below it
+        if (this.edge(k) > x)
+            k--;
+        else if (this.edge(k + 1) <= x)
+            k++;
+        const a = this.edge(k), b = this.edge(k + 1);
+        const t = Math.max(0, ((x - a) / (b - a) - 1 + this.rise) / this.rise);
+        return a + t * t * (3 - 2 * t) * (b - a);
     }
 }
 
