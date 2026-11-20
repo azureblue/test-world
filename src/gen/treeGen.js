@@ -14,9 +14,17 @@ export const TREE_TYPES = Object.freeze({
 
 const TREE_TYPE_LIST = Object.freeze(Object.values(TREE_TYPES));
 
-const TRUNK = BLOCK_IDS.TREE_TRUNK;
-const LEAVES = BLOCK_IDS.TREE_LEAVES;
 const EMPTY = BLOCK_IDS.EMPTY;
+
+/** the blocks a tree is made of (TreeGenerator.generate's materials) */
+export const TREE_MATERIALS = Object.freeze({
+    OAK: Object.freeze({ trunk: BLOCK_IDS.TREE_TRUNK, leaves: BLOCK_IDS.TREE_LEAVES }),
+    SPRUCE: Object.freeze({ trunk: BLOCK_IDS.SPRUCE_TRUNK, leaves: BLOCK_IDS.SPRUCE_LEAVES })
+});
+
+// the materials of the tree being generated (set by TreeGenerator.generate for its duration)
+let TRUNK = TREE_MATERIALS.OAK.trunk;
+let LEAVES = TREE_MATERIALS.OAK.leaves;
 
 function inChunk(h, x, y) {
     return h >= 0 && h < CHUNK_SIZE && x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE;
@@ -111,8 +119,11 @@ export class TreeGenerator {
      * @param {number} baseY chunk local, may be outside the chunk
      * @param {number} seed
      * @param {string} [type] one of {@link TREE_TYPES}, random from the seed if not given
+     * @param {{trunk: number, leaves: number}} [materials] one of {@link TREE_MATERIALS}
      */
-    generate(chunk, baseH, baseX, baseY, seed, type = null) {
+    generate(chunk, baseH, baseX, baseY, seed, type = null, materials = TREE_MATERIALS.OAK) {
+        TRUNK = materials.trunk;
+        LEAVES = materials.leaves;
         const prng = new Mulberry32(mix32(seed >>> 0));
         type ??= TREE_TYPE_LIST[prng.nextRandInt(0, TREE_TYPE_LIST.length - 1)];
         switch (type) {

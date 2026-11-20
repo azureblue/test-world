@@ -219,12 +219,12 @@ export class Noise extends Generator {
         this.#postprocessors = postprocessors;
     }
 
-    seedGet() {
-        return this.#gen.seedGet();
+    get seed() {
+        return this.#gen.seed;
     }
 
-    seedSet(seed) {
-        this.#gen.seedSet(seed);
+    set seed(seed) {
+        this.#gen.seed = seed;
     }
     
     gen(x, y) {

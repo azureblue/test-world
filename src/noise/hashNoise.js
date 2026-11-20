@@ -9,7 +9,7 @@ export class Hash01Noise extends SeededGenerator {
     }
 
     gen(x, y) {
-        return unnormalize(hash01(this.seedGet(), Math.floor(x), Math.floor(y)));
+        return unnormalize(hash01(this.seed, Math.floor(x), Math.floor(y)));
     }
 }
 

@@ -87,9 +87,10 @@ export class GenNode extends Node {
     #noiseGen;
     /**
      * @param {Generator} noiseGen 
+     * @param {string} [name]
      */
-    constructor(noiseGen) {
-        super();
+    constructor(noiseGen, name) {
+        super([], name);
         this.#noiseGen = noiseGen;
     }
 
@@ -120,9 +121,10 @@ export class CurveNode extends Node {
     /**
      * @param {Node} srcNode 
      * @param {Curve} curve 
+     * @param {string} [name]
      */
-    constructor(srcNode, curve) {
-        super([srcNode]);
+    constructor(srcNode, curve, name) {
+        super([srcNode], name);
         this.#curve = curve;
     }
 
@@ -131,13 +133,13 @@ export class CurveNode extends Node {
      * @param {number} y 
      * @param {Float32Array} srcNodeValues 
      */
-    _gen(x, y, srcNodeValues) {
+    $gen(x, y, srcNodeValues) {
         return this.#curve.apply(srcNodeValues[0]);
     }
 
     /**@returns {Curve} */
     get curve() {
-        return this.curve;
+        return this.#curve;
     }
 }
 
@@ -185,14 +187,15 @@ export class GenericNode extends Node {
      * @param {Array<Node>} srcNodes 
      * @param {T} dataObject 
      * @param {(values: Float64Array, dataObject: T, x: number, y, number) => number} fun 
+     * @param {string} [name]
      */
-    constructor(srcNodes, dataObject, fun) {
-        super(srcNodes);
+    constructor(srcNodes, dataObject, fun, name) {
+        super(srcNodes, name);
         this.#data = dataObject;
         this.#fun = fun;
     }
 
-    _gen(x, y, values) {
+    $gen(x, y, values) {
         return this.#fun(values, this.#data, x, y);
     }
 }

@@ -23,6 +23,14 @@ export class Curve {
     apply(x) {
 
     }
+
+    /**
+     * The points the curve is defined by, sorted by x (for plotting); none for curves that aren't defined by points.
+     * @returns {Point[]}
+     */
+    controlPoints() {
+        return [];
+    }
 }
 
 export class FunctionCurve extends Curve {
@@ -129,6 +137,10 @@ export class LinearCurve extends Curve {
         if (this.#n < 1)
             throw "n < 1";
         this.points = points.sort((a, b) => a.x - b.x);
+    }
+
+    controlPoints() {
+        return this.points;
     }
 
     setControlPoint(pointId, pos) {
@@ -246,6 +258,10 @@ export class SmoothCurve extends Curve {
         this._lastI = 0;
     }
 
+    controlPoints() {
+        return Array.from(this.x, (x, i) => point(x, this.y[i]));
+    }
+
     /**
      * Evaluate y at xq. Clamps outside domain.
      */
@@ -281,7 +297,7 @@ export class SmoothCurve extends Curve {
         const out = new Float64Array(count);
         const x0 = this.x[0], x1 = this.x[this.n - 1];
         const step = (x1 - x0) / (count - 1);
-        for (let k = 0; k < count; k++) out[k] = this.eval(x0 + k * step);
+        for (let k = 0; k < count; k++) out[k] = this.apply(x0 + k * step);
         return out;
     }
   
