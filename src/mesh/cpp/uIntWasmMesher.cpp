@@ -93,7 +93,7 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     uint y = dir_yy_add + dir_yx_mul * layer_x + dir_yy_mul * layer_y;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    if (texture_id == WATER_TEXTURE) {
+    if (texture_id == block_table.water_texture) {
         water_encoder::encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, shadows & 0b1111, shadows >> 4, texture_id);
     } else {
         solid_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows);
@@ -107,7 +107,7 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    if (texture_id == WATER_TEXTURE) {
+    if (texture_id == block_table.water_texture) {
         water_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, shadows & 0b1111, shadows >> 4, texture_id);
     } else {
         solid_sort::encode_face<Direction::Up>(buffers, x, y, h, width, height, texture_id, shadows);
@@ -121,7 +121,7 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint h = layer_h;
     uint64 texture_id = data_texture_shadows >> 8;
     uint shadows = data_texture_shadows & 0b11111111;
-    if (texture_id == WATER_TEXTURE) {
+    if (texture_id == block_table.water_texture) {
         water_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, shadows & 0b1111, shadows >> 4, texture_id);
     } else {
         solid_sort::encode_face<Direction::Down>(buffers, x, y, h, width, height, texture_id, shadows);
@@ -258,6 +258,18 @@ void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers,
 }
 
 extern "C"
+    __attribute__((export_name("block_table"))) block_table_t*
+    get_block_table() {
+    return &block_table;
+}
+
+extern "C"
+    __attribute__((export_name("max_block_id"))) uint
+    get_max_block_id() {
+    return MAX_BLOCK_ID;
+}
+
+extern "C"
     __attribute__((export_name("create_mesh"))) uint
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
     face_buffers buffers(out_data_ptr);
@@ -288,7 +300,7 @@ extern "C"
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
-                const uint* block_textures = BLOCKS_TEXTURES[block_id];
+                const uint* block_textures = block_table.faces[block_id];
 
                 if (is_x_quads(block_data)) {                    
                     x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[1]);
@@ -301,25 +313,25 @@ extern "C"
                 uint above = data.get_hxy(h + 1, x, y);
 
                 if (is_water(block_data)) {
-                    const uint* water_textures = BLOCKS_TEXTURES[BLOCK_WATER];
+                    const uint water_texture = block_table.water_texture;
                     // no AO on water, the low byte of the face data holds the water level and the side face bottom
                     uint level = block_height(block_data);
                     if (!water_top_hidden(level, above))
-                        layers.set_hxy(0, real_x, real_y, (water_textures[0] << 8) | water_face_data(level, 0));
+                        layers.set_hxy(0, real_x, real_y, (water_texture << 8) | water_face_data(level, 0));
                     if (!water_bottom_hidden(data.get_hxy(h - 1, x, y)))
-                        layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, (water_textures[5] << 8) | water_face_data(level, 0));
+                        layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, (water_texture << 8) | water_face_data(level, 0));
                     uint bottom = water_side_bottom(level, data.get_hxy(h, x, y - 1));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, (water_textures[1] << 8) | water_face_data(level, bottom));
+                        layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, (water_texture << 8) | water_face_data(level, bottom));
                     bottom = water_side_bottom(level, data.get_hxy(h, x - 1, y));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Left, CHUNK_SIZE - 1 - real_y, real_x, (water_textures[2] << 8) | water_face_data(level, bottom));
+                        layers.set_hxy(current_layer_offset + Direction::Left, CHUNK_SIZE - 1 - real_y, real_x, (water_texture << 8) | water_face_data(level, bottom));
                     bottom = water_side_bottom(level, data.get_hxy(h, x, y + 1));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Back, CHUNK_SIZE - 1 - real_x, CHUNK_SIZE - 1 - real_y, (water_textures[3] << 8) | water_face_data(level, bottom));
+                        layers.set_hxy(current_layer_offset + Direction::Back, CHUNK_SIZE - 1 - real_x, CHUNK_SIZE - 1 - real_y, (water_texture << 8) | water_face_data(level, bottom));
                     bottom = water_side_bottom(level, data.get_hxy(h, x + 1, y));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, (water_textures[4] << 8) | water_face_data(level, bottom));
+                        layers.set_hxy(current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, (water_texture << 8) | water_face_data(level, bottom));
                     continue;
                 }
 

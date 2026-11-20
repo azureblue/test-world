@@ -4,7 +4,7 @@ const ICON_SIZE = 48;
 
 /**
  * The bar of blocks at the bottom of the screen: one is selected (mouse wheel, number keys) and is the one placed.
- * Icons are drawn from the block texture atlas: a small isometric cube from the top and side textures, a flat tile for
+ * Icons are drawn from the block textures: a small isometric cube from the top and side textures, a flat tile for
  * plants.
  */
 export class ItemBar {
@@ -20,10 +20,10 @@ export class ItemBar {
     /**
      * @param {HTMLElement} container
      * @param {string[]} blockNames keys of BLOCK_IDS, one per slot
-     * @param {ImageBitmap} atlas the block texture atlas (images/textures.png)
-     * @param {number} tileSize texture size in the atlas, in pixels
+     * @param {import("./blockTextures.js").Pixels[]} textures the block textures by layer (loadBlockTextures)
+     * @param {number} tileSize texture size, in pixels
      */
-    constructor(container, blockNames, atlas, tileSize) {
+    constructor(container, blockNames, textures, tileSize) {
         const known = blockNames.filter(name => name in BLOCK_IDS && name !== "EMPTY");
         this.#blocks = known.map(name => BLOCK_IDS[name] >>> 0);
 
@@ -35,7 +35,7 @@ export class ItemBar {
             const slot = document.createElement("div");
             slot.className = "item-bar-slot";
             slot.title = blockLabel(name);
-            slot.appendChild(drawIcon(this.#blocks[i], atlas, tileSize));
+            slot.appendChild(drawIcon(this.#blocks[i], textures, tileSize));
             const key = document.createElement("span");
             key.className = "item-bar-key";
             key.textContent = i < 9 ? String(i + 1) : "";
@@ -86,23 +86,26 @@ function blockLabel(name) {
 
 /**
  * @param {number} block
- * @param {ImageBitmap} atlas
+ * @param {import("./blockTextures.js").Pixels[]} layers
  * @param {number} tileSize
  * @returns {HTMLCanvasElement}
  */
-function drawIcon(block, atlas, tileSize) {
+function drawIcon(block, layers, tileSize) {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = ICON_SIZE;
     const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = false;
     const textures = getBlockById(block).textureIds;
-    const columns = Math.floor(atlas.width / tileSize);
-    // tile n of the atlas is at column n % columns, row n / columns from the top (as TextureArray reads it)
-    const tile = (texId) => [(texId % columns) * tileSize, Math.floor(texId / columns) * tileSize];
+    // a texture as something drawImage takes
+    const image = (texId) => {
+        const layer = layers[texId];
+        const canvas = new OffscreenCanvas(tileSize, tileSize);
+        canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(layer.data), tileSize, tileSize), 0, 0);
+        return canvas;
+    };
     const face = (texId, a, b, c, d, e, f, shade) => {
-        const [sx, sy] = tile(texId);
         ctx.setTransform(a / tileSize, b / tileSize, c / tileSize, d / tileSize, e, f);
-        ctx.drawImage(atlas, sx, sy, tileSize, tileSize, 0, 0, tileSize, tileSize);
+        ctx.drawImage(image(texId), 0, 0);
         if (shade > 0) {
             ctx.fillStyle = `rgba(0, 0, 0, ${shade})`;
             ctx.fillRect(0, 0, tileSize, tileSize);

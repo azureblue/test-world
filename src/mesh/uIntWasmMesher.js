@@ -1,3 +1,4 @@
+import { MAX_BLOCK_ID, meshTextureTable } from "../blocks.js";
 import { CHUNK_EXT_DATA_SIZE, ChunkDataExt } from "../chunk/extChunk.js";
 import { copyData, Resources } from "../utils.js";
 import { WASM } from "../wasm.js";
@@ -28,6 +29,21 @@ const STATIC_BYTES = 128 * 1024;
 
 const TOTAL_BYTES = BUFFERS_BYTES + STACK_BYTES + STATIC_BYTES;
 const INITIAL_PAGES = WASM.bytesToPages(TOTAL_BYTES);
+
+/**
+ * Writes the blocks' face textures (src/blocks.json) into a mesher's memory, where its block_table() points
+ * (block_table_t in mesh/cpp/blocks.hpp: the water texture, then MAX_BLOCK_ID * 6 face textures).
+ * @param {WebAssembly.Exports} exports
+ * @param {WebAssembly.Memory} mem
+ */
+function writeTextureTable(exports, mem) {
+    if (exports.max_block_id() !== MAX_BLOCK_ID)
+        throw new Error(`mesher: MAX_BLOCK_ID ${exports.max_block_id()}, blocks.js has ${MAX_BLOCK_ID}`);
+    const { waterTexture, faces } = meshTextureTable();
+    const table = new Uint32Array(mem.buffer, exports.block_table(), 1 + faces.length);
+    table[0] = waterTexture;
+    table.set(faces, 1);
+}
 
 export class UIntExtWasmMesher extends UIntMesher {
 
@@ -93,6 +109,7 @@ export class UIntExtWasmMesher extends UIntMesher {
             }
         );
 
+        writeTextureTable(uIntWasmMesherResult.instance.exports, mem);
         const heapBase = WASM.alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
         const wasmCreateMesh = uIntWasmMesherResult.instance.exports.create_mesh;
         return new UIntExtWasmMesher(wasmCreateMesh, heapBase, mem);
@@ -113,6 +130,7 @@ export class UIntExtWasmMesher extends UIntMesher {
             }
         );
 
+        writeTextureTable(uIntWasmMesherResult.instance.exports, mem);
         const heap_base = WASM.alignUp(uIntWasmMesherResult.instance.exports.__heap_base.value, 16);
         const wasmCreateMesh = uIntWasmMesherResult.instance.exports.create_mesh;
         return new UIntExtWasmMesher(wasmCreateMesh, heap_base, mem);

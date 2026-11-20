@@ -144,7 +144,7 @@ export const Settings = {
         reach: 5,
         // the blocks in the bar at the bottom (keys of BLOCK_IDS); the selected one (mouse wheel, 1..9) is placed with the
         // right mouse button
-        itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0"]
+        itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0", "SPRUCE_TRUNK", "SPRUCE_LEAVES"]
     },
 
     sky: {

@@ -1,30 +1,5 @@
 import { is2Pow } from "./utils.js";
 
-class ImageFilters {
-
-    static SetAlpha = class {
-
-        constructor(params) {
-            this.params = params;
-        }
-
-        /**
-         * @param {ImageData} imageData 
-         * @param {number} alpha 
-        */
-        process(imageData) {
-            const data = imageData.data;
-            const alpha = this.params.alpha;
-            for (let i = 3; i < data.length; i += 4) {
-                data[i] = alpha;
-            }
-        }
-    }
-}
-
-// texture id -> filters applied when the texture is loaded (none at the moment; the water's alpha is the shader's)
-const textureFilters = {};
-
 export class TextureArray {
 
     #size;
@@ -36,32 +11,26 @@ export class TextureArray {
     }
 
     /**
-     * @param {WebGL2RenderingContext} gl 
-     * @param {HTMLImageElement} image 
-     * @param {number} size 
+     * @param {WebGL2RenderingContext} gl
+     * @param {import("./blockTextures.js").Pixels[]} layers the textures by layer (rows from the top), size x size each
+     * @param {number} size
      */
-    static create(gl, image, size) {
-        const width = image.width;
-        const height = image.height;
-        let imageCanvas = new OffscreenCanvas(width, height);
-        let imageCtx = imageCanvas.getContext("2d", { willReadFrequently: true });
+    static create(gl, layers, size) {
         if (!is2Pow(size))
             throw "invalid size";
-        const columns = Math.floor(width / size);
-        const rows = Math.floor(height / size);
-        imageCtx.scale(1, -1);
-        imageCtx.drawImage(image, 0, 0, width, -height);
+        const maxLayers = gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS);
+        if (layers.length > maxLayers)
+            throw new Error(`${layers.length} block textures, the GPU takes ${maxLayers} layers in a texture array`);
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
-        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 5, gl.RGBA8, size, size, 64);
-        for (let texId = 0; texId < columns * rows; texId++) {
-            const row = rows - Math.floor(texId / columns) - 1;
-            const col = texId % columns;
-            const imageData = imageCtx.getImageData(col * size, row * size, size, size);
-            TextureArray.applyFilters(imageData, texId);
-
-            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, texId, size, size, 1, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
-        }
+        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, Math.log2(size) + 1, gl.RGBA8, size, size, layers.length);
+        // rows from the bottom: the texture coordinates' v goes up
+        const flipped = new Uint8Array(size * size * 4);
+        layers.forEach((layer, id) => {
+            for (let y = 0; y < size; y++)
+                flipped.set(layer.data.subarray(y * size * 4, (y + 1) * size * 4), (size - 1 - y) * size * 4);
+            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, id, size, size, 1, gl.RGBA, gl.UNSIGNED_BYTE, flipped);
+        });
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -69,16 +38,6 @@ export class TextureArray {
         gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
 
         return new TextureArray(texture, size);
-    }
-
-
-    static applyFilters(imageData, id) {
-        const filters = textureFilters[id];
-        if (filters !== undefined) {
-            for (let filter of filters) {
-                new ImageFilters[filter.name](filter.params).process(imageData);
-            }
-        }
     }
 
     /**

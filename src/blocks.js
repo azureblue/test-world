@@ -1,18 +1,37 @@
+import definitions from "./blocks.json" with { type: "json" };
+
+/**
+ * A block type, from src/blocks.json (docs/proposals/block-definitions.md).
+ */
 export class Block {
     #id
     #name
+    #model
     #textureIds
-    #isSolid
 
-    constructor(id, name, textureIds, isSolid) {
+    /**
+     * @param {number} id
+     * @param {string} name
+     * @param {string} model "none", "cube" (a solid cube), "liquid" or "x_quads" (plants)
+     * @param {number[]} textureIds texture layers by face: up, front, left, back, right, down (the mesher's Direction)
+     */
+    constructor(id, name, model, textureIds) {
         this.#id = id;
         this.#name = name;
+        this.#model = model;
         this.#textureIds = textureIds;
-        this.#isSolid = isSolid;
     }
 
     get id() {
         return this.#id;
+    }
+
+    get name() {
+        return this.#name;
+    }
+
+    get model() {
+        return this.#model;
     }
 
     get textureIds() {
@@ -20,15 +39,7 @@ export class Block {
     }
 
     get isSolid() {
-        return this.#isSolid;
-    }
-
-    get name() {
-        return this.#name;
-    }
-
-    get renderable() {
-
+        return this.#model === "cube";
     }
 }
 
@@ -47,65 +58,75 @@ const WATER_BITS = (1 << LIQUID_BIT) | (1 << FLOWING_BIT) | (0b111 << HEIGHT_SHI
 export const BLOCK_HEIGHT_FULL = 8;
 /** the level of water open to the air above, in 1/8 of a block (the generator's sea surface) */
 export const WATER_SURFACE_LEVEL = 7;
-export const BLOCK_IDS = {
-    EMPTY: 0,
-    DIRT: 1 | (1 << SOLID_CUBE_BIT),
-    DIRT_GRASS: 2 | (1 << SOLID_CUBE_BIT),
-    GRASS: 3 | (1 << SOLID_CUBE_BIT),
-    GRAVEL: 4 | (1 << SOLID_CUBE_BIT),
-    ROCK: 5 | (1 << SOLID_CUBE_BIT),
-    WATER: 6 | (1 << LIQUID_BIT),
-    SAND: 7 | (1 << SOLID_CUBE_BIT),
-    GRASS_SHORT_0: 8 | (1 << X_QUADS),
-    GRASS_SHORT_1: 9 | (1 << X_QUADS),
-    TREE_TRUNK: 16 | (1 << SOLID_CUBE_BIT),
-    TREE_LEAVES: 17 | (1 << SOLID_CUBE_BIT),
-    CHUNK_EDGE: 255
+/** block ids are below this: the size of the meshers' face table (MAX_BLOCK_ID in mesh/cpp/blocks.hpp) */
+export const MAX_BLOCK_ID = 1024;
+
+/** the kind bits of a block value by model */
+const MODEL_BITS = {
+    none: 0,
+    cube: 1 << SOLID_CUBE_BIT,
+    liquid: 1 << LIQUID_BIT,
+    x_quads: 1 << X_QUADS
 };
 
-export const MODEL = {
-    CUBE: 0,
-    CROSS_2: 1
+/** faces in the mesher's order (Direction in mesh/cpp/common.hpp) */
+const FACES = ["up", "front", "left", "back", "right", "down"];
+
+/**
+ * The blocks of src/blocks.json; a block's textures are one name for all faces or {top, sides, bottom}.
+ * @returns {Block[]} indexed by id
+ */
+function loadBlocks() {
+    /** @type {Map<string, number>} texture name -> layer: its index in the list (blockTextures.js composes them so) */
+    const layers = new Map(definitions.textures.map((t, i) => [t.name, i]));
+    if (layers.size !== definitions.textures.length)
+        throw new Error("blocks.json: texture names repeat");
+    const layer = (name, block) => {
+        if (!layers.has(name))
+            throw new Error(`blocks.json: block ${block}: no texture "${name}"`);
+        return layers.get(name);
+    };
+    const blocks = [];
+    for (const def of definitions.blocks) {
+        if (!(def.model in MODEL_BITS))
+            throw new Error(`blocks.json: block ${def.name}: no model "${def.model}"`);
+        if (!Number.isInteger(def.id) || def.id < 0 || def.id >= MAX_BLOCK_ID || blocks[def.id] !== undefined)
+            throw new Error(`blocks.json: block ${def.name}: id ${def.id} invalid or taken`);
+        const t = def.textures;
+        if ((t === undefined) !== (def.model === "none"))
+            throw new Error(`blocks.json: block ${def.name}: textures ${t === undefined ? "missing" : "for nothing to draw"}`);
+        // nothing drawn: layer 0, never used
+        const byFace = t === undefined ? null : typeof t === "string" ? FACES.map(() => t)
+            : FACES.map(face => face === "up" ? t.top : face === "down" ? t.bottom : t.sides);
+        const textureIds = byFace === null ? FACES.map(() => 0) : byFace.map(name => layer(name, def.name));
+        blocks[def.id] = new Block(def.id, def.name, def.model, textureIds);
+    }
+    // the water vertices have 4 bits for the texture (mesh/cpp/quad_encode.hpp): liquid textures early in the list
+    for (const block of blocks)
+        if (block?.model === "liquid" && block.textureIds.some(id => id >= 16))
+            throw new Error(`blocks.json: block ${block.name}: liquid textures must be among the first 16`);
+    return blocks;
 }
 
-const BLOCK_EMPTY = BLOCK_IDS.EMPTY;
-const BLOCK_CHUNK_EDGE = BLOCK_IDS.CHUNK_EDGE;
-const BLOCK_WATER = BLOCK_IDS.WATER;
-
-const BLOCKS = [
-    new Block(0, "empty", [0, 0, 0, 0, 0, 0], false),
-    new Block(1, "block_dirt", [1, 1, 1, 1, 1, 1], true),
-    new Block(2, "block_dirtgrass", [3, 2, 2, 2, 2, 1], true),
-    new Block(3, "block_grass", [3, 3, 3, 3, 3, 3], true),
-    new Block(4, "block_gravel", [4, 4, 4, 4, 4, 4], true),
-    new Block(5, "block_rock", [5, 5, 5, 5, 5, 5], true),
-    new Block(6, "block_water", [6, 6, 6, 6, 6, 6], false),
-    new Block(7, "block_sand", [7, 7, 7, 7, 7, 7], true),
-    new Block(8, "block_grass_short_0", [0, 8, 8, 8, 8, 0], false),
-    new Block(9, "block_grass_short_1", [0, 9, 9, 9, 9, 0], false),
-    new Block(10, "empty_10", [0, 0, 0, 0, 0, 0], false),
-    new Block(11, "empty_11", [0, 0, 0, 0, 0, 0], false),
-    new Block(12, "empty_12", [0, 0, 0, 0, 0, 0], false),
-    new Block(13, "empty_13", [0, 0, 0, 0, 0, 0], false),
-    new Block(14, "empty_14", [0, 0, 0, 0, 0, 0], false),
-    new Block(15, "empty_15", [0, 0, 0, 0, 0, 0], false),
-    new Block(16, "tree_trunk", [17, 16, 16, 16, 16, 17], true),
-    new Block(17, "tree_leaves", [18, 18, 18, 18, 18, 18], true)
-]
+const BLOCKS = loadBlocks();
 Object.freeze(BLOCKS);
 
-const BLOCK_SOLID = [
-    false, //0
-    true,  //1
-    true,  //2
-    true,  //3
-    true,  //4
-    true,  //5
-    false, //6
-    true,  //7
-    false, //8
-];
-Object.freeze(BLOCK_SOLID);
+/** block values by name (the id with the model's kind bits), e.g. BLOCK_IDS.DIRT_GRASS */
+export const BLOCK_IDS = Object.freeze(Object.fromEntries(
+    BLOCKS.filter(b => b !== undefined).map(b => [b.name, b.id | MODEL_BITS[b.model]])));
+
+/**
+ * What the meshers need (UIntExtWasmMesher writes it into their memory): the texture layer of every face of every
+ * block id, and the water's (the water faces of water and of plants in water).
+ * @returns {{waterTexture: number, faces: Uint32Array}} faces: MAX_BLOCK_ID * 6, by id then face
+ */
+export function meshTextureTable() {
+    const faces = new Uint32Array(MAX_BLOCK_ID * 6);
+    for (const block of BLOCKS)
+        if (block !== undefined)
+            faces.set(block.textureIds, block.id * 6);
+    return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], faces };
+}
 
 export function isSolid(block) {
     return (block >>> SOLID_CUBE_BIT & 1) !== 0;

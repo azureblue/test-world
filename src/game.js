@@ -1,3 +1,4 @@
+import { loadBlockTextures, TEXTURE_SIZE } from "./blockTextures.js";
 import { Camera } from "./camera.js";
 import { FVec3 } from "./geom.js";
 import { KeyboardInput, MouseInput } from "./input.js";
@@ -9,7 +10,6 @@ import { WorldRenderer } from "./render/worldRenderer.js";
 import { Settings } from "./settings.js";
 import { StatsOverlay } from "./statsOverlay.js";
 import { Ticker } from "./ticker.js";
-import { Resources } from "./utils.js";
 import { World } from "./world/world.js";
 
 /**
@@ -59,7 +59,7 @@ export class Game {
     async #init(container) {
         container.style.margin = "0";
         container.style.overflow = "hidden";
-        const textures = await Resources.loadImage("./images/textures.png");
+        const textures = await loadBlockTextures();
 
         const canvas = document.createElement("canvas");
         container.appendChild(canvas);
@@ -79,7 +79,7 @@ export class Game {
         this.world = new World(this.renderer.meshHandler);
         this.player = new Player(this.world, cameraSettings.startPosition);
         this.ticker = new Ticker(Settings.simulation.tickRate, Settings.simulation.maxTicksPerFrame);
-        this.itemBar = new ItemBar(container, Settings.interaction.itemBar, textures, 16);
+        this.itemBar = new ItemBar(container, Settings.interaction.itemBar, textures, TEXTURE_SIZE);
         this.interaction = new BlockInteraction(this.world, this.player, this.itemBar);
         this.#stats = new StatsOverlay(document.getElementById("stats"));
         this.#initInput(canvas);

@@ -1,3 +1,4 @@
+import { loadBlockTextures, TEXTURE_SIZE } from "./blockTextures.js";
 import { Camera, FrustumCuller } from "./camera.js";
 import { Chunk, ChunkData, ChunkDataLoader, ChunkManager, UIntChunkMesher, UIntMesh } from "./chunk.js";
 import { RandomDataChunkGenerator } from "./generator.js";
@@ -11,7 +12,7 @@ const VIEW_DISTANCE_SQ = (11 * 15) ** 2;
 // const VIEW_DISTANCE_SQ = 409600.0;
 
 export async function start() {
-    const textures = await Resources.loadImage("./images/textures.png");
+    const textures = await loadBlockTextures();
     const statsDiv = document.getElementById("stats");
 
     const canvas = document.createElement("canvas");
@@ -63,7 +64,7 @@ export async function start() {
     gl.enableVertexAttribArray(attrCoordLinesColors);
 
     UIntMesh.setGL(gl, aIn);
-    const texArray = TextureArray.create(gl, textures, 16);
+    const texArray = TextureArray.create(gl, textures, TEXTURE_SIZE);
 
     const gen = new RandomDataChunkGenerator();
     const chunkLoader = new ChunkDataLoader((cx, cy) => gen.generateChunk(new Vec2(cx, cy)));

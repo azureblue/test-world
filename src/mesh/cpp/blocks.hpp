@@ -1,29 +1,19 @@
 #pragma once
 #include "int.h"
-inline constexpr uint BLOCKS_TEXTURES[20][6] = {
-    {0, 0, 0, 0, 0, 0}, // 0
-    {1, 1, 1, 1, 1, 1}, // 1
-    {3, 2, 2, 2, 2, 1}, // 2
-    {3, 3, 3, 3, 3, 3}, // 3
-    {4, 4, 4, 4, 4, 4}, // 4
-    {5, 5, 5, 5, 5, 5}, // 5
-    {6, 6, 6, 6, 6, 6}, // 6
-    {7, 7, 7, 7, 7, 7}, // 7
-    {0, 8, 8, 8, 8, 0}, // 8
-    {0, 9, 9, 9, 9, 0}, // 9
-    {0}, // 10
-    {0}, // 11
-    {0}, // 12
-    {0}, // 13
-    {0}, // 14
-    {0}, // 15
-    {17, 16, 16, 16, 16, 17}, // 16
-    {18, 18, 18, 18, 18, 18} // 17
-};
+// block ids are below this (MAX_BLOCK_ID in src/blocks.js)
+constexpr uint MAX_BLOCK_ID = 1024;
 
-constexpr uint BLOCK_WATER = 6;
+// the texture layers of the blocks' faces, from src/blocks.json: written by the JS side once after instantiation
+// (UIntExtWasmMesher, meshTextureTable in src/blocks.js), at the address the exported block_table() returns
+struct block_table_t {
+    // the water faces' texture (water, plants in water)
+    uint water_texture;
+    // by block id, then face (Direction: up, front, left, back, right, down)
+    uint faces[MAX_BLOCK_ID][6];
+};
+inline block_table_t block_table;
+
 constexpr uint BLOCK_EMPTY = 0;
-constexpr uint WATER_TEXTURE = 6;
 
 static inline bool is_solid(uint block) {
     return (block & 0x8000'0000u) != 0;

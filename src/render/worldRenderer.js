@@ -1,3 +1,4 @@
+import { TEXTURE_SIZE } from "../blockTextures.js";
 import { Camera, FrustumCuller } from "../camera.js";
 import { CHUNK_SIZE } from "../chunk/chunk.js";
 import { Fog } from "../fog.js";
@@ -133,7 +134,7 @@ export class WorldRenderer {
 
     /**
      * @param {WebGL2RenderingContext} gl
-     * @param {ImageBitmap} textures the block texture atlas
+     * @param {import("../blockTextures.js").Pixels[]} textures the block textures by layer (loadBlockTextures)
      * @param {Camera} camera
      * @returns {Promise<WorldRenderer>}
      */
@@ -184,7 +185,7 @@ export class WorldRenderer {
         this.#locations = { aInHighlight };
 
         gl.useProgram(cubeSolid.program);
-        this.#texArray = TextureArray.create(gl, textures, 16);
+        this.#texArray = TextureArray.create(gl, textures, TEXTURE_SIZE);
 
         // the Camera and Fog blocks (shaders/README.md): one buffer each, Camera bound to binding 0, Fog to 1, for all
         // programs that declare them (Camera the vertex shaders, Fog the fragment shaders)
