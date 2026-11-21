@@ -23,7 +23,8 @@ const logger = new Logger("world worker " + workerId);
 const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator, Settings.world.seed);
 
 const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory());
-const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher() : UIntExtWasmMesher.createMesher());
+const meshOptions = { cutout: Settings.render.cutoutLeaves };
+const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
 
 /**
  * A connected client: where its chunks go and the last of its edits applied.

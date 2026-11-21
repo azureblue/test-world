@@ -99,6 +99,10 @@ it's loaded, in JS: no code generators, and the wasm doesn't change when blocks 
 - **`model`** replaces loose flags: `none`, `cube` (solid), `liquid`, `x_quads` (plants). The kind bits of the block
   value (31 solid, 30 liquid, 29 x-quads) follow from it, so they aren't written by hand.
 - **Face textures:** one name for all faces, or `top` / `sides` / `bottom` (and per side if ever needed).
+- **`cutout`** (cubes only, done): textures with holes (alpha 0), in the same form, used instead when
+  `Settings.render.cutoutLeaves` is on: the meshers draw the block's faces into their own range, alpha tested by the
+  `CUTOUT` variant of the cube program, and the block doesn't hide its neighbours' faces (the faces between two
+  leaves are drawn both ways). It stays solid for everything else (collisions, AO). See `shaders/README.md`.
 - Not carried over from the branch: the water `alpha` op (the water shader sets the opacity now) and `alphaTest`.
 
 ### Loading in JS

@@ -13,14 +13,16 @@ export class UIntMeshData extends MeshData {
     * @param {number} solidEnd
     * @param {number} liquidEnd
     * @param {number} xQuadEnd
+    * @param {number} cutoutEnd the cutout cube faces (the solid faces' format) are from xQuadEnd to here
     */
-    constructor(mTranslation, data, solidEnd, liquidEnd, xQuadEnd) {
+    constructor(mTranslation, data, solidEnd, liquidEnd, xQuadEnd, cutoutEnd) {
         super();
         this.mTranslation = mTranslation;        
         this.data = data;
         this.solidEnd = solidEnd;
         this.liquidEnd = liquidEnd;
         this.xQuadEnd = xQuadEnd;
+        this.cutoutEnd = cutoutEnd;
     }
 
     isEmpty() {
@@ -40,6 +42,7 @@ export class UIntMeshDataTransfer extends MeshDataTransfer {
             solidEnd: uintMeshData.solidEnd,
             liquidEnd: uintMeshData.liquidEnd,
             xQuadEnd: uintMeshData.xQuadEnd,
+            cutoutEnd: uintMeshData.cutoutEnd,
             mTranslation: uintMeshData.mTranslation,
             data: uintMeshData.data.buffer
         };
@@ -47,7 +50,7 @@ export class UIntMeshDataTransfer extends MeshDataTransfer {
     }
 
     createFrom(data) {
-        return new UIntMeshData(vec3(data.mTranslation.x, data.mTranslation.y, data.mTranslation.z), new Uint32Array(data.data), data.solidEnd, data.liquidEnd, data.xQuadEnd);
+        return new UIntMeshData(vec3(data.mTranslation.x, data.mTranslation.y, data.mTranslation.z), new Uint32Array(data.data), data.solidEnd, data.liquidEnd, data.xQuadEnd, data.cutoutEnd);
     }
 }
 
@@ -84,6 +87,7 @@ export class UIntMeshHandler extends MeshHandler {
         const solidLen = meshData.solidEnd >> 1;
         const liquidLen = (meshData.liquidEnd - meshData.solidEnd) >> 1;
         const xQuadLen = (meshData.xQuadEnd - meshData.liquidEnd);
+        const cutoutLen = (meshData.cutoutEnd - meshData.xQuadEnd) >> 1;
         const gl = this.#gl;
         const va = gl.createVertexArray();
         const vb = gl.createBuffer();
@@ -111,12 +115,27 @@ export class UIntMeshHandler extends MeshHandler {
         gl.bindVertexArray(vaXQuads);
         gl.enableVertexAttribArray(this.#aInXQuads);
         gl.bindBuffer(gl.ARRAY_BUFFER, vbXQuads);
-        gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW, meshData.liquidEnd);
+        gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW, meshData.liquidEnd, meshData.xQuadEnd - meshData.liquidEnd);
         gl.vertexAttribIPointer(this.#aInXQuads, 1, gl.UNSIGNED_INT, false, 0, 0);
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
-        
-        return new UIntMesh(va, vb, vaWater, vbWater, vaXQuads, vbXQuads, meshData.mTranslation, solidLen, liquidLen, xQuadLen);
+
+        // cutout cube faces: the solid faces' format, the cube program's attribute (the cutout program is its variant)
+        let vaCutout = null, vbCutout = null;
+        if (cutoutLen > 0) {
+            vaCutout = gl.createVertexArray();
+            vbCutout = gl.createBuffer();
+            gl.bindVertexArray(vaCutout);
+            gl.enableVertexAttribArray(this.#aIn);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbCutout);
+            gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW, meshData.xQuadEnd, meshData.cutoutEnd - meshData.xQuadEnd);
+            gl.vertexAttribIPointer(this.#aIn, 2, gl.UNSIGNED_INT, false, 0, 0);
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        }
+
+        return new UIntMesh(va, vb, vaWater, vbWater, vaXQuads, vbXQuads, vaCutout, vbCutout, meshData.mTranslation,
+            solidLen, liquidLen, xQuadLen, cutoutLen);
     }
 
     /**
@@ -130,6 +149,8 @@ export class UIntMeshHandler extends MeshHandler {
         gl.deleteVertexArray(mesh.vaWater);
         gl.deleteBuffer(mesh.vbXQuads);
         gl.deleteVertexArray(mesh.vaXQuads);
+        gl.deleteBuffer(mesh.vbCutout);
+        gl.deleteVertexArray(mesh.vaCutout);
     }
 
     static unbind(gl) {
@@ -150,6 +171,10 @@ export class UIntMesh extends ChunkMesh {
     vbWater;
     /** @type {WebGLBuffer} */
     vbXQuads;
+    /** @type {WebGLVertexArrayObject | null} null: no cutout faces */
+    vaCutout;
+    /** @type {WebGLBuffer | null} */
+    vbCutout;
     mTranslation;
 
     /**
@@ -159,12 +184,15 @@ export class UIntMesh extends ChunkMesh {
      * @param {WebGLBuffer} vbWater
      * @param {WebGLVertexArrayObject} vaXQuads
      * @param {WebGLBuffer} vbXQuads
+     * @param {WebGLVertexArrayObject | null} vaCutout
+     * @param {WebGLBuffer | null} vbCutout
      * @param {FVec3} translation 
      * @param {number} solidLen
      * @param {number} liquidLen
      * @param {number} xQuadLen
+     * @param {number} cutoutLen
      */
-    constructor(va, vb, vaWater, vbWater, vaXQuads, vbXQuads, translation, solidLen, liquidLen, xQuadLen) {
+    constructor(va, vb, vaWater, vbWater, vaXQuads, vbXQuads, vaCutout, vbCutout, translation, solidLen, liquidLen, xQuadLen, cutoutLen) {
         super();
         this.va = va;
         this.vb = vb;
@@ -172,10 +200,13 @@ export class UIntMesh extends ChunkMesh {
         this.vbWater = vbWater;
         this.vaXQuads = vaXQuads;
         this.vbXQuads = vbXQuads;
+        this.vaCutout = vaCutout;
+        this.vbCutout = vbCutout;
         this.mTranslation = translation;
         this.solidLen = solidLen;
         this.liquidLen = liquidLen;
         this.xQuadLen = xQuadLen;
+        this.cutoutLen = cutoutLen;
     }
 
     get modelTranslation() {
@@ -189,7 +220,7 @@ export class UIntMesher extends ChunkMesher {
 
     /**
       * @param {ChunkDataExt} chunkData
-      * @return {{data: Uint32Array, solidEnd: number, liquidEnd: number, xQuadEnd: number}}
+      * @return {{data: Uint32Array, solidEnd: number, liquidEnd: number, xQuadEnd: number, cutoutEnd: number}}
       */
     mesh(chunkData) {
         throw new Error("Not implemented");
@@ -206,7 +237,7 @@ export class UIntMesher extends ChunkMesher {
         const meshData = this.mesh(chunkData);
         this.#lastMeshTime = perfDiff(meshStart);
         return new UIntMeshData(vec3(position.x * CHUNK_SIZE, position.z * CHUNK_SIZE, -position.y * CHUNK_SIZE),
-            meshData.data, meshData.solidEnd, meshData.liquidEnd, meshData.xQuadEnd);
+            meshData.data, meshData.solidEnd, meshData.liquidEnd, meshData.xQuadEnd, meshData.cutoutEnd);
     }
 
     lastMeshTime() {
@@ -221,6 +252,8 @@ export class DrawStats {
     waterTris = 0;
     xQuadDraws = 0;
     xQuadTris = 0;
+    cutoutDraws = 0;
+    cutoutTris = 0;
 
     reset() {
         this.solidDraws = 0;
@@ -229,6 +262,8 @@ export class DrawStats {
         this.waterTris = 0;
         this.xQuadDraws = 0;
         this.xQuadTris = 0;
+        this.cutoutDraws = 0;
+        this.cutoutTris = 0;
     }
 }
 
@@ -237,18 +272,21 @@ export class UIntMeshDrawer {
     #uTranslation;
     #uXQuadsTranslation;
     #uWaterTranslation;
+    #uCutoutTranslation;
     stats = new DrawStats();
     /**
      * @param {WebGL2RenderingContext} gl
      * @param {WebGLUniformLocation} uTranslation
      * @param {WebGLUniformLocation} uXQuadsTranslation
      * @param {WebGLUniformLocation} uWaterTranslation
+     * @param {WebGLUniformLocation} uCutoutTranslation
      */
-    constructor(gl, uTranslation, uXQuadsTranslation, uWaterTranslation) {
+    constructor(gl, uTranslation, uXQuadsTranslation, uWaterTranslation, uCutoutTranslation) {
         this.#gl = gl;
         this.#uTranslation = uTranslation;
         this.#uXQuadsTranslation = uXQuadsTranslation;
         this.#uWaterTranslation = uWaterTranslation;
+        this.#uCutoutTranslation = uCutoutTranslation;
     }
     
     /**
@@ -281,6 +319,22 @@ export class UIntMeshDrawer {
         gl.drawArrays(gl.TRIANGLES, 0, mesh.liquidLen);
         this.stats.waterDraws++;
         this.stats.waterTris += mesh.liquidLen / 3;
+    }
+
+    /**
+     * The cutout cube faces (leaves with holes), with the cutout program.
+     * @param {UIntMesh} mesh
+     */
+    drawCutout(mesh) {
+        if (mesh.cutoutLen === 0)
+            return;
+        const gl = this.#gl;
+        gl.bindVertexArray(mesh.vaCutout);
+        const modelTranslation = mesh.modelTranslation;
+        gl.uniform3f(this.#uCutoutTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+        gl.drawArrays(gl.TRIANGLES, 0, mesh.cutoutLen);
+        this.stats.cutoutDraws++;
+        this.stats.cutoutTris += mesh.cutoutLen / 3;
     }
 
     /**

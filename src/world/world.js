@@ -206,6 +206,11 @@ export class World {
     }
 }
 
+/**
+ * A position in chunk space (x, y, h: the blocks' data coordinates) or in the world (x, y up, z; the camera's), and
+ * the block, chunk and block in chunk holding it. World z runs against chunk space y: the block at world z (floored)
+ * is at y = -z - 1, see World.blockWorldAt.
+ */
 export class Position {
     #x; #y; #z;
 
@@ -228,27 +233,27 @@ export class Position {
     }
 
     get cx() {
-        return this.#x >> CHUNK_SIZE_BIT_LEN;
+        return this.ix >> CHUNK_SIZE_BIT_LEN;
     }
 
     get cz() {
-        return this.#z >> CHUNK_SIZE_BIT_LEN;
+        return this.iz >> CHUNK_SIZE_BIT_LEN;
     }
 
     get cy() {
-        return this.#y >> CHUNK_SIZE_BIT_LEN;
+        return this.iy >> CHUNK_SIZE_BIT_LEN;
     }
 
     get bx() {
-        return this.#x & CHUNK_SIZE_MASK;
+        return this.ix & CHUNK_SIZE_MASK;
     }
 
     get bz() {
-        return this.#z & CHUNK_SIZE_MASK;
+        return this.iz & CHUNK_SIZE_MASK;
     }
 
     get by() {
-        return this.#y & CHUNK_SIZE_MASK;
+        return this.iy & CHUNK_SIZE_MASK;
     }
 
     get x() {
@@ -267,8 +272,9 @@ export class Position {
         return Math.floor(this.#x);
     }
 
+    // the block of world z (floored), not floor(y): y = -z - 1 isn't the block's y unless z is whole
     get iy() {
-        return Math.floor(this.#y);
+        return -this.iwz - 1;
     }
 
     get iz() {

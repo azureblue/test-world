@@ -24,6 +24,12 @@ export const Settings = {
         chunkUpdateInterval: 0.1
     },
 
+    render: {
+        // leaves with holes (their "cutout" textures in blocks.json): drawn in their own alpha tested pass, the
+        // faces behind and between them too; off: opaque leaves (fewer faces, no alpha test)
+        cutoutLeaves: true
+    },
+
     camera: {
         // world position of the eye, y up (the player's feet are eyeHeight below)
         startPosition: [2, 2, 2],
@@ -224,7 +230,9 @@ export const Settings = {
         overdrawSampleInterval: 30,
         // the stats line is updated every this many frames
         statsInterval: 5,
-        showStats: true
+        showStats: true,
+        // a second stats line: draw calls and triangles per pass (chunk meshes) and their sums
+        showDrawStats: true
     }
 };
 

@@ -9,7 +9,10 @@ body {
     left: 0;
     font-family: monospace;
     font-weight: bold;
-    background-color: rgba(0, 0, 0, 0.151);
+    /* white on a dark tint, with an outline-like shadow: readable over the bright sky and over dark terrain */
+    color: white;
+    text-shadow: 1px 1px 0 black;
+    background-color: rgba(0, 0, 0, 0.35);
     /* text updates every few frames: keep relayout/repaint scoped to this box and its own compositor layer */
     right: 0;
     white-space: nowrap;

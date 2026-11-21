@@ -1,5 +1,6 @@
 import { Logger } from "../logging.js";
 import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
+import { Settings } from "../settings.js";
 import { perfDiff } from "../utils.js";
 import { MeshChunkRequest, MeshChunkResponse } from "./common.js";
 import { WorkerConnection, WorkerServer } from "./worker.js";
@@ -12,7 +13,8 @@ const workerId = params.get("workerId");
 const fastMesher = params.get("fastMesher") === "true";
 
 const logger = new Logger("chunk mesher worker " + workerId);
-const mesher = await (fastMesher ? UIntExtWasmMesher.createFastMesher() : UIntExtWasmMesher.createMesher());
+const meshOptions = { cutout: Settings.render.cutoutLeaves };
+const mesher = await (fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
 
 const workerServer = new WorkerServer(self, workerId, {
 

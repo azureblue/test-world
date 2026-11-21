@@ -82,3 +82,14 @@ each face's real normal there is in `docs/proposals/water-fresnel.md`.
 
 `FRESNEL` is a `#define` (`withDefines` in `gl.js` puts it after the `#version` line; `WorldRenderer` builds the water
 program's variant from the settings once): when it's off, the effect isn't in the program at all.
+
+## Cutout blocks
+
+Leaves with holes (`"cutout"` textures in `blocks.json`, with `Settings.render.cutoutLeaves`): the meshers put their
+faces in their own range of the mesh (after the x-quads, in the solid faces' format), and don't let them hide the faces
+next to them, so what's behind a hole is there (the faces between two leaves both ways, the trunk inside). They're
+drawn right after the opaque blocks with the `CUTOUT` variant of the cube program (`cube_solid.vert` /
+`cube_solid.frag`), which discards texels with alpha below 0.5: only this pass discards, so the opaque blocks keep
+early depth testing, and drawn after them it's mostly hidden before its fragment shader runs. The sky comes after it
+and fills the holes with nothing behind them. The mipmaps average the alpha, so far away the holes close (less
+shimmer); the colour under the holes is the texture's average (`TextureArray`), so far leaves don't darken.

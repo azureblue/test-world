@@ -17,7 +17,9 @@
         { "name": "spruce_trunk", "src": "t:tree_trunk", "ops": [{ "name": "multiply", "color": "#8a7462" }] },
         { "name": "spruce_trunk_top", "src": "t:tree_trunk_top", "ops": [{ "name": "multiply", "color": "#9a8572" }] },
         { "name": "snow", "src": "snow" },
-        { "name": "spruce_leaves", "src": "t:tree_leaves", "ops": [{ "name": "hsl", "hue": 25, "saturation": 0.7, "lightness": 0.75 }] }
+        { "name": "spruce_leaves", "src": "t:tree_leaves", "ops": [{ "name": "hsl", "hue": 25, "saturation": 0.7, "lightness": 0.75 }] },
+        { "name": "tree_leaves_cutout", "src": "tree_leaves_t" },
+        { "name": "spruce_leaves_cutout", "src": "t:tree_leaves_cutout", "ops": [{ "name": "hsl", "hue": 25, "saturation": 0.7, "lightness": 0.75 }] }
     ],
     "blocks": [
         { "id": 0, "name": "EMPTY", "model": "none" },
@@ -31,9 +33,9 @@
         { "id": 8, "name": "GRASS_SHORT_0", "model": "x_quads", "textures": "grass_short_0" },
         { "id": 9, "name": "GRASS_SHORT_1", "model": "x_quads", "textures": "grass_short_1" },
         { "id": 16, "name": "TREE_TRUNK", "model": "cube", "textures": { "top": "tree_trunk_top", "sides": "tree_trunk", "bottom": "tree_trunk_top" } },
-        { "id": 17, "name": "TREE_LEAVES", "model": "cube", "textures": "tree_leaves" },
+        { "id": 17, "name": "TREE_LEAVES", "model": "cube", "textures": "tree_leaves", "cutout": "tree_leaves_cutout" },
         { "id": 18, "name": "SPRUCE_TRUNK", "model": "cube", "textures": { "top": "spruce_trunk_top", "sides": "spruce_trunk", "bottom": "spruce_trunk_top" } },
-        { "id": 19, "name": "SPRUCE_LEAVES", "model": "cube", "textures": "spruce_leaves" },
+        { "id": 19, "name": "SPRUCE_LEAVES", "model": "cube", "textures": "spruce_leaves", "cutout": "spruce_leaves_cutout" },
         { "id": 20, "name": "SNOW", "model": "cube", "textures": "snow" },
         { "id": 255, "name": "CHUNK_EDGE", "model": "none" }
     ]

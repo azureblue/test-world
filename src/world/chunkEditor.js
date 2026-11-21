@@ -5,6 +5,7 @@ import { vec3 } from "../geom.js";
 import { Logger } from "../logging.js";
 import { MeshHandler } from "../mesh/mesh.js";
 import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
+import { Settings } from "../settings.js";
 import { perfDiff } from "../utils.js";
 import { ChunkResponse } from "../worker/common.js";
 import { ChunkEntry } from "./chunkEntry.js";
@@ -14,7 +15,7 @@ import { WorldClient } from "./worldClient.js";
 const logger = new Logger("ChunkEditor");
 
 // unoptimized but fast mesher for predicted edits; the optimized mesh comes from the world worker
-const editMesher = await UIntExtWasmMesher.createFastMesher();
+const editMesher = await UIntExtWasmMesher.createFastMesher({ cutout: Settings.render.cutoutLeaves });
 
 /**
  * The client's own block edits. The world worker owns the world, so an edit is sent there, and predicted here until

@@ -2,6 +2,8 @@
 #include "int.h"
 // block ids are below this (MAX_BLOCK_ID in src/blocks.js)
 constexpr uint MAX_BLOCK_ID = 1024;
+// texture layers are below this (MAX_TEXTURES in src/blocks.js): 8 bits in the solid vertices
+constexpr uint MAX_TEXTURES = 256;
 
 // the texture layers of the blocks' faces, from src/blocks.json: written by the JS side once after instantiation
 // (UIntExtWasmMesher, meshTextureTable in src/blocks.js), at the address the exported block_table() returns
@@ -10,6 +12,10 @@ struct block_table_t {
     uint water_texture;
     // by block id, then face (Direction: up, front, left, back, right, down)
     uint faces[MAX_BLOCK_ID][6];
+    // 1: a cutout block (leaves with holes): solid, but it doesn't hide the faces next to it
+    uint8 cutout_blocks[MAX_BLOCK_ID];
+    // 1: a cutout texture: its faces go to the cutout output, drawn alpha tested
+    uint8 cutout_textures[MAX_TEXTURES];
 };
 inline block_table_t block_table;
 
@@ -33,6 +39,11 @@ static inline uint is_solid_01(uint block) {
 
 static inline uint decode_block_id(uint id) {
     return id & 0xff'ffff;
+}
+
+// whether a block hides the face of its neighbour: solid and not cutout (its holes show what's behind)
+static inline bool hides_face(uint block) {
+    return is_solid(block) && !block_table.cutout_blocks[decode_block_id(block)];
 }
 
 static inline uint block_height(uint block) {

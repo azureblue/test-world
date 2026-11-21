@@ -8,18 +8,22 @@ export class Block {
     #name
     #model
     #textureIds
+    #cutoutTextureIds
 
     /**
      * @param {number} id
      * @param {string} name
      * @param {string} model "none", "cube" (a solid cube), "liquid" or "x_quads" (plants)
      * @param {number[]} textureIds texture layers by face: up, front, left, back, right, down (the mesher's Direction)
+     * @param {number[] | null} cutoutTextureIds a cube's textures with holes (alpha 0), by face, used instead with
+     *   Settings.render.cutoutLeaves: its faces are alpha tested, and it doesn't hide the faces next to it
      */
-    constructor(id, name, model, textureIds) {
+    constructor(id, name, model, textureIds, cutoutTextureIds = null) {
         this.#id = id;
         this.#name = name;
         this.#model = model;
         this.#textureIds = textureIds;
+        this.#cutoutTextureIds = cutoutTextureIds;
     }
 
     get id() {
@@ -36,6 +40,10 @@ export class Block {
 
     get textureIds() {
         return this.#textureIds;
+    }
+
+    get cutoutTextureIds() {
+        return this.#cutoutTextureIds;
     }
 
     get isSolid() {
@@ -73,7 +81,8 @@ const MODEL_BITS = {
 const FACES = ["up", "front", "left", "back", "right", "down"];
 
 /**
- * The blocks of src/blocks.json; a block's textures are one name for all faces or {top, sides, bottom}.
+ * The blocks of src/blocks.json; a block's textures (and a cube's optional cutout textures) are one name for all faces
+ * or {top, sides, bottom}.
  * @returns {Block[]} indexed by id
  */
 function loadBlocks() {
@@ -95,11 +104,14 @@ function loadBlocks() {
         const t = def.textures;
         if ((t === undefined) !== (def.model === "none"))
             throw new Error(`blocks.json: block ${def.name}: textures ${t === undefined ? "missing" : "for nothing to draw"}`);
+        if (def.cutout !== undefined && def.model !== "cube")
+            throw new Error(`blocks.json: block ${def.name}: cutout textures on a ${def.model}, only cubes have them`);
+        const byFace = (t) => (typeof t === "string" ? FACES.map(() => t)
+            : FACES.map(face => face === "up" ? t.top : face === "down" ? t.bottom : t.sides)).map(name => layer(name, def.name));
         // nothing drawn: layer 0, never used
-        const byFace = t === undefined ? null : typeof t === "string" ? FACES.map(() => t)
-            : FACES.map(face => face === "up" ? t.top : face === "down" ? t.bottom : t.sides);
-        const textureIds = byFace === null ? FACES.map(() => 0) : byFace.map(name => layer(name, def.name));
-        blocks[def.id] = new Block(def.id, def.name, def.model, textureIds);
+        const textureIds = t === undefined ? FACES.map(() => 0) : byFace(t);
+        const cutoutTextureIds = def.cutout === undefined ? null : byFace(def.cutout);
+        blocks[def.id] = new Block(def.id, def.name, def.model, textureIds, cutoutTextureIds);
     }
     // the water vertices have 4 bits for the texture (mesh/cpp/quad_encode.hpp): liquid textures early in the list
     for (const block of blocks)
@@ -115,17 +127,38 @@ Object.freeze(BLOCKS);
 export const BLOCK_IDS = Object.freeze(Object.fromEntries(
     BLOCKS.filter(b => b !== undefined).map(b => [b.name, b.id | MODEL_BITS[b.model]])));
 
+/** texture layers are below this: 8 bits in the solid vertices (mesh/cpp/quad_encode.hpp), the meshers' table */
+export const MAX_TEXTURES = 256;
+if (definitions.textures.length > MAX_TEXTURES)
+    throw new Error(`blocks.json: ${definitions.textures.length} textures, at most ${MAX_TEXTURES}`);
+
 /**
- * What the meshers need (UIntExtWasmMesher writes it into their memory): the texture layer of every face of every
- * block id, and the water's (the water faces of water and of plants in water).
- * @returns {{waterTexture: number, faces: Uint32Array}} faces: MAX_BLOCK_ID * 6, by id then face
+ * What the meshers need (UIntExtWasmMesher writes it into their memory, block_table_t in mesh/cpp/blocks.hpp): the
+ * texture layer of every face of every block id, the water's (the water faces of water and of plants in water), and
+ * with cutout the cutout blocks (their cutout textures instead, faces next to them not hidden) and textures (faces
+ * drawn alpha tested, apart from the opaque ones).
+ * @param {boolean} cutout whether blocks with cutout textures use them (Settings.render.cutoutLeaves)
+ * @returns {{waterTexture: number, faces: Uint32Array, cutoutBlocks: Uint8Array, cutoutTextures: Uint8Array}}
+ *   faces: MAX_BLOCK_ID * 6, by id then face; cutoutBlocks: 1 by id; cutoutTextures: 1 by layer
  */
-export function meshTextureTable() {
+export function meshTextureTable(cutout) {
     const faces = new Uint32Array(MAX_BLOCK_ID * 6);
+    const cutoutBlocks = new Uint8Array(MAX_BLOCK_ID), cutoutTextures = new Uint8Array(MAX_TEXTURES);
+    for (const block of BLOCKS) {
+        if (block === undefined)
+            continue;
+        const ids = cutout && block.cutoutTextureIds !== null ? block.cutoutTextureIds : block.textureIds;
+        faces.set(ids, block.id * 6);
+        if (ids !== block.textureIds) {
+            cutoutBlocks[block.id] = 1;
+            for (const id of ids)
+                cutoutTextures[id] = 1;
+        }
+    }
     for (const block of BLOCKS)
-        if (block !== undefined)
-            faces.set(block.textureIds, block.id * 6);
-    return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], faces };
+        if (block !== undefined && !cutoutBlocks[block.id] && block.textureIds.some(id => cutoutTextures[id]))
+            throw new Error(`blocks.json: block ${block.name} uses a cutout texture without being cutout`);
+    return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], faces, cutoutBlocks, cutoutTextures };
 }
 
 export function isSolid(block) {

@@ -60,29 +60,30 @@ extern "C"
                         water_encoder::encode_face_q<Direction::Right>(water_buffer, x - 1, y - 1, h - 1, level, bottom, water_texture);
                     continue;
                 }
-                auto& face_buffer = buffers.mesh_solid_cur;
+                // cutout blocks (leaves with holes) to their own output, drawn alpha tested
+                auto& face_buffer = block_table.cutout_blocks[block_id] ? buffers.mesh_cutout_cur : buffers.mesh_solid_cur;
 
-                if (!is_solid(above)) {
+                if (!hides_face(above)) {
                     quad_encoder::encode_face_q<Direction::Up>(face_buffer, data, x, y, h, block_textures[Direction::Up]);
                 }
 
-                if (!is_solid(data.get_hxy(h - 1, x, y))) {
+                if (!hides_face(data.get_hxy(h - 1, x, y))) {
                     quad_encoder::encode_face_q<Direction::Down>(face_buffer, data, x, y, h, block_textures[Direction::Down]);
                 }
 
-                if (!is_solid(data.get_hxy(h, x, y - 1))) {
+                if (!hides_face(data.get_hxy(h, x, y - 1))) {
                     quad_encoder::encode_face_q<Direction::Front>(face_buffer, data, x, y, h, block_textures[Direction::Front]);
                 }
 
-                if (!is_solid(data.get_hxy(h, x - 1, y))) {
+                if (!hides_face(data.get_hxy(h, x - 1, y))) {
                     quad_encoder::encode_face_q<Direction::Left>(face_buffer, data, x, y, h, block_textures[Direction::Left]);
                 }
 
-                if (!is_solid(data.get_hxy(h, x, y + 1))) {
+                if (!hides_face(data.get_hxy(h, x, y + 1))) {
                     quad_encoder::encode_face_q<Direction::Back>(face_buffer, data, x, y, h, block_textures[Direction::Back]);
                 }
 
-                if (!is_solid(data.get_hxy(h, x + 1, y))) {
+                if (!hides_face(data.get_hxy(h, x + 1, y))) {
                     quad_encoder::encode_face_q<Direction::Right>(face_buffer, data, x, y, h, block_textures[Direction::Right]);
                 }
             }

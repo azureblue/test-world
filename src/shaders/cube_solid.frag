@@ -20,6 +20,11 @@ const float norm_to_light_map[8] = float[8](1.0f, 0.8f, 0.6f, 0.6f, 0.7f, 0.5f, 
 void main() {
 
     vec4 tex = texture(u_array_sampler, v_tex_coord);
+#ifdef CUTOUT
+    // the cutout pass (leaves with holes): only this variant discards, the opaque blocks keep early depth testing
+    if (tex.a < 0.5)
+        discard;
+#endif
     vec4 tex_lighted = vec4(tex.xyz * norm_to_light_map[o_norm], tex.a);
     vec4 tex_shadowed = mix(tex_lighted, vec4(0.0, 0.0, 0.0, 1.0), smoothstep(0.0, 1.0, v_shadow));
     // highp: distances squared go far beyond the mediump range

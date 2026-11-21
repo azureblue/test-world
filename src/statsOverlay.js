@@ -10,18 +10,38 @@ function formatK(n) {
 }
 
 /**
- * The line of debug numbers at the top of the screen (Settings.debug.showStats), updated every statsInterval frames.
+ * Draw calls and triangles per pass of the chunk meshes (solid, cutout leaves, water with its pre-pass, plants) and
+ * their sums; the sky and the block outline aren't counted.
+ * @param {import("./mesh/uIntMesh.js").DrawStats} d
+ */
+function drawStatsLine(d) {
+    const passes = [
+        ["solid", d.solidDraws, d.solidTris], ["cutout", d.cutoutDraws, d.cutoutTris],
+        ["water", d.waterDraws, d.waterTris], ["plants", d.xQuadDraws, d.xQuadTris]
+    ];
+    const draws = passes.reduce((sum, p) => sum + p[1], 0), tris = passes.reduce((sum, p) => sum + p[2], 0);
+    return `draws ${passes.map(([name, n]) => `${name}:${n}`).join(" ")} all:${draws} ` +
+        `| triangles ${passes.map(([name, , t]) => `${name}:${formatK(t)}`).join(" ")} all:${formatK(tris)}`;
+}
+
+/**
+ * The debug numbers at the top of the screen (Settings.debug.showStats), updated every statsInterval frames: a line
+ * of the camera, player and world, and a line of the draws (Settings.debug.showDrawStats).
  */
 export class StatsOverlay {
     #element;
-    // updating a text node's data in place avoids replacing the DOM child on every stats update
+    // updating text nodes' data in place avoids replacing the DOM children on every stats update
     #text = document.createTextNode("");
+    #drawText = document.createTextNode("");
     #pos = new Position();
 
     /** @param {HTMLElement} element */
     constructor(element) {
         this.#element = element;
-        element.replaceChildren(this.#text);
+        if (Settings.debug.showDrawStats)
+            element.replaceChildren(this.#text, document.createElement("br"), this.#drawText);
+        else
+            element.replaceChildren(this.#text);
         if (!Settings.debug.showStats)
             element.style.display = "none";
     }
@@ -44,7 +64,6 @@ export class StatsOverlay {
         const camPos = camera.position, camDir = camera.direction;
         pos.setWorld(camPos.x, camPos.y, camPos.z);
         const block = world.blockAt(pos.ix, pos.iy, pos.iz);
-        const draws = renderer.drawStats;
         const overdraw = renderer.overdrawStats;
         this.#text.data =
             `world pos ${pos.wx.toFixed(1)}x ${pos.wz.toFixed(1)}z ${pos.wy.toFixed(1)}y ` +
@@ -54,13 +73,13 @@ export class StatsOverlay {
             `${player.mode}${player.mode === "fly" && player.noclip ? " noclip" : ""}` +
             `${player.mode === "walk" ? (player.inWater ? " swimming" : player.onGround ? " ground" : " air") : ""} ` +
             `chunks ${frameStats.chunksDrawn}/${frameStats.chunksInRange}/${world.chunksInView} ` +
-            `draws s:${draws.solidDraws} w:${draws.waterDraws} x:${draws.xQuadDraws} ` +
-            `tris s:${formatK(draws.solidTris)} w:${formatK(draws.waterTris)} x:${formatK(draws.xQuadTris)} ` +
             (overdraw ? `overdraw avg:${overdraw.avg.toFixed(2)} max:${overdraw.max} ` : "") +
             `pos x:${pos.ix} y:${pos.iy} z:${pos.iz} ` +
             `chunk x:${pos.cx} y:${pos.cy} z:${pos.cz} ` +
             `local x:${pos.bx} y:${pos.by} z:${pos.bz} ` +
             `${getBlockById(block).name} ` +
             `${target === null ? "" : "looking at " + getBlockById(target.block).name + " at " + target.x + " " + target.y + " " + target.z}`;
+        if (Settings.debug.showDrawStats)
+            this.#drawText.data = drawStatsLine(renderer.drawStats);
     }
 }

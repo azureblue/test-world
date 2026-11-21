@@ -91,8 +91,9 @@ function waterState(colorScale, alpha, fresnelStrength) {
  */
 
 /**
- * Draws the world from the camera: the opaque blocks, the selected block's outline, plants, then water (blended,
- * with an optional depth pre-pass). Owns the shader programs, the block textures and the Camera and Fog uniform
+ * Draws the world from the camera: the opaque blocks, the cutout blocks (leaves with holes, alpha tested, their own
+ * program so only they discard), the sky, the selected block's outline, plants, then water (blended, with an optional
+ * depth pre-pass). Owns the shader programs, the block textures and the Camera and Fog uniform
  * blocks (shaders/README.md) shared by them.
  */
 export class WorldRenderer {
@@ -142,8 +143,11 @@ export class WorldRenderer {
         const program = async (vert, frag, defines = {}) => new Program(gl,
             withDefines(await Resources.loadText(`shaders/${vert}`), defines),
             withDefines(await Resources.loadText(`shaders/${frag}`), defines));
+        const cubeFrag = Settings.debug.overdraw ? "overdraw.frag" : "cube_solid.frag";
         const programs = {
-            cubeSolid: await program("cube_solid.vert", Settings.debug.overdraw ? "overdraw.frag" : "cube_solid.frag"),
+            cubeSolid: await program("cube_solid.vert", cubeFrag),
+            // the cube program with the alpha test (cube_solid.frag, CUTOUT), for the cutout faces
+            cubeCutout: await program("cube_solid.vert", cubeFrag, { CUTOUT: true }),
             xQuads: await program("x_quads.vert", "x_quads.frag"),
             water: await program("water.vert", "water.frag", waterDefines()),
             waterDepth: await program("water_depth.vert", "water_depth.frag"),
@@ -259,7 +263,8 @@ export class WorldRenderer {
         this.#locations.waterDepthTranslation = waterDepth.getUniformLocation("m_translation");
         this.#meshHandler = new UIntMeshHandler(gl, aIn, aInXQuads, aInWater);
         this.#meshDrawer = new UIntMeshDrawer(gl, cubeSolid.getUniformLocation("m_translation"),
-            xQuads.getUniformLocation("m_translation"), this.#locations.waterTranslation);
+            xQuads.getUniformLocation("m_translation"), this.#locations.waterTranslation,
+            programs.cubeCutout.getUniformLocation("m_translation"));
         this.#overdrawStats = this.#overdraw ? new OverdrawStats() : null;
     }
 
@@ -306,7 +311,7 @@ export class WorldRenderer {
      */
     render(world, highlight, sampleOverdraw) {
         const gl = this.#gl;
-        const { cubeSolid, xQuads, water, waterDepth, blockHighlight } = this.#programs;
+        const { cubeSolid, cubeCutout, xQuads, water, waterDepth, blockHighlight } = this.#programs;
         const camera = this.#camera;
         const overdraw = this.#overdraw;
         const meshDrawer = this.#meshDrawer;
@@ -352,6 +357,10 @@ export class WorldRenderer {
             meshDrawer.draw(chunk.mesh);
             visibleChunks.put(chunk);
         });
+        // after all opaque blocks, so they hide most of it before its fragment shader (with its discard) runs
+        cubeCutout.use();
+        for (const chunk of visibleChunks)
+            meshDrawer.drawCutout(chunk.mesh);
         gl.bindVertexArray(null);
         if (overdraw) {
             gl.disable(gl.BLEND);

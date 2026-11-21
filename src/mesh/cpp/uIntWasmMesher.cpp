@@ -25,7 +25,7 @@ static inline uint layer_face_texture(uint face) {
 // along the normal is always closer to any camera that can see them. Groups go in Direction order (Up first).
 // Faces are written to a scratch area together with a bucket key, then counting-sorted into the output.
 namespace solid_sort {
-constexpr uint BUCKETS = 6 * CHUNK_SIZE;
+constexpr uint BUCKETS = SORT_BUCKETS;
 
 static uint8 keys[data_size::MAX_FACES];
 static uint count;
@@ -91,6 +91,24 @@ static void finish(face_buffers& buffers) {
 }
 }  // namespace solid_sort
 
+// Cutout faces (leaves with holes) are sorted the same way, so the depth test rejects more of their fragments before
+// the alpha tested shader runs: written in place with a bucket key each, ordered by complete_buffers as it packs them.
+// Up to twice as many as solid faces (the faces between cutout blocks are drawn too).
+namespace cutout_sort {
+static uint8 keys[data_size::MAX_FACES * 2];
+static uint count;
+
+static inline void begin() {
+    count = 0;
+}
+
+template <Direction DIR>
+inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows) {
+    keys[count++] = static_cast<uint8>(solid_sort::key<DIR>(x, y, h));
+    quad_encoder::encode_face<DIR>(buffers.mesh_cutout_cur, x, y, h, width, height, texture_id, shadows);
+}
+}  // namespace cutout_sort
+
 template <Direction DIR>
 static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint data_texture_shadows) {
     constexpr uint dir_encode_base_idx = (DIR << 3);
@@ -106,6 +124,8 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == block_table.water_texture) {
         water_encoder::encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, shadows & 0b1111, shadows >> 4, texture_id);
+    } else if (block_table.cutout_textures[texture_id]) {
+        cutout_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows);
     } else {
         solid_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows);
     }
@@ -120,6 +140,8 @@ inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == block_table.water_texture) {
         water_encoder::encode_face<Direction::Up>(buffers.mesh_water_cur, x, y, h, width, height, shadows & 0b1111, shadows >> 4, texture_id);
+    } else if (block_table.cutout_textures[texture_id]) {
+        cutout_sort::encode_face<Direction::Up>(buffers, x, y, h, width, height, texture_id, shadows);
     } else {
         solid_sort::encode_face<Direction::Up>(buffers, x, y, h, width, height, texture_id, shadows);
     }
@@ -134,6 +156,8 @@ inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer
     uint shadows = data_texture_shadows & 0b11111111;
     if (texture_id == block_table.water_texture) {
         water_encoder::encode_face<Direction::Down>(buffers.mesh_water_cur, x, y, h, width, height, shadows & 0b1111, shadows >> 4, texture_id);
+    } else if (block_table.cutout_textures[texture_id]) {
+        cutout_sort::encode_face<Direction::Down>(buffers, x, y, h, width, height, texture_id, shadows);
     } else {
         solid_sort::encode_face<Direction::Down>(buffers, x, y, h, width, height, texture_id, shadows);
     }
@@ -285,6 +309,7 @@ extern "C"
     create_mesh(uint* __restrict in_chunk_data_ptr, uint64* __restrict out_data_ptr) {
     face_buffers buffers(out_data_ptr);
     solid_sort::begin(buffers);
+    cutout_sort::begin();
 
     array_3d<CHUNK_SIZE_E> data(in_chunk_data_ptr);
     uint layers_data[CHUNK_SIZE * CHUNK_SIZE * 12];
@@ -346,22 +371,22 @@ extern "C"
                     continue;
                 }
 
-                if (!is_solid(above)) {
+                if (!hides_face(above)) {
                     uint shadows = ao_shadows::encode<Direction::Up>(data, h, x, y);
                     layers.set_hxy(0, real_x, real_y, layer_face(block_textures[0], shadows));
                 }
 
-                if (!is_solid(data.get_hxy(h - 1, x, y))) {
+                if (!hides_face(data.get_hxy(h - 1, x, y))) {
                     uint shadows = ao_shadows::encode<Direction::Down>(data, h, x, y);
                     layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, layer_face(block_textures[5], shadows));
                 }
 
-                if (!is_solid(data.get_hxy(h, x, y - 1))) {
+                if (!hides_face(data.get_hxy(h, x, y - 1))) {
                     uint shadows = ao_shadows::encode<Direction::Front>(data, h, x, y);
                     layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, layer_face(block_textures[1], shadows));
                 }
 
-                if (!is_solid(data.get_hxy(h, x - 1, y))) {
+                if (!hides_face(data.get_hxy(h, x - 1, y))) {
                     uint shadows = ao_shadows::encode<Direction::Left>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Left,
@@ -370,7 +395,7 @@ extern "C"
                         layer_face(block_textures[2], shadows));
                 }
 
-                if (!is_solid(data.get_hxy(h, x, y + 1))) {
+                if (!hides_face(data.get_hxy(h, x, y + 1))) {
                     uint shadows = ao_shadows::encode<Direction::Back>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Back,
@@ -379,7 +404,7 @@ extern "C"
                         layer_face(block_textures[3], shadows));
                 }
 
-                if (!is_solid(data.get_hxy(h, x + 1, y))) {
+                if (!hides_face(data.get_hxy(h, x + 1, y))) {
                     uint shadows = ao_shadows::encode<Direction::Right>(data, h, x, y);
                     layers.set_hxy(
                         current_layer_offset + Direction::Right,
@@ -404,5 +429,5 @@ extern "C"
     merge_side_faces_finish<Direction::Right>(buffers, layers, current_layer_offset);
 
     solid_sort::finish(buffers);
-    return complete_buffers(buffers);
+    return complete_buffers(buffers, cutout_sort::keys);
 }

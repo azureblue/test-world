@@ -1,5 +1,29 @@
 import { is2Pow } from "./utils.js";
 
+/**
+ * Gives the fully transparent pixels of RGBA pixels the average colour of the others (alpha stays 0): the mipmaps
+ * average every pixel, so otherwise the colour under the holes (often black) would darken leaves and plants far away.
+ * @param {Uint8Array} data
+ */
+function fillTransparent(data) {
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4)
+        if (data[i + 3] !== 0) {
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+            n++;
+        }
+    if (n === 0 || n === data.length / 4)
+        return;
+    for (let i = 0; i < data.length; i += 4)
+        if (data[i + 3] === 0) {
+            data[i] = r / n;
+            data[i + 1] = g / n;
+            data[i + 2] = b / n;
+        }
+}
+
 export class TextureArray {
 
     #size;
@@ -29,6 +53,7 @@ export class TextureArray {
         layers.forEach((layer, id) => {
             for (let y = 0; y < size; y++)
                 flipped.set(layer.data.subarray(y * size * 4, (y + 1) * size * 4), (size - 1 - y) * size * 4);
+            fillTransparent(flipped);
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, id, size, size, 1, gl.RGBA, gl.UNSIGNED_BYTE, flipped);
         });
         gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
