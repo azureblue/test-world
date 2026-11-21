@@ -34,8 +34,7 @@ export class Game {
     interaction;
     /** fragments of broken blocks */
     particles = new Particles();
-    /** frames and simulation ticks stop while paused */
-    paused = false;
+    #paused = false;
 
     #keyboard;
     #mouse;
@@ -99,6 +98,7 @@ export class Game {
             // 1..9 select a slot of the bar
             ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i + 1), (pressed) => pressed && this.itemBar.select(i)]))
         });
+        this.#keyboard.pauseKey = controls.pause;
         this.#mouse.onWheel((direction) => this.paused || this.itemBar.scroll(direction));
         this.#mouse.onMouseDown((button) => {
             if (this.paused)
@@ -108,6 +108,17 @@ export class Game {
             else if (button === 2)
                 this.interaction.placeBlock();
         });
+    }
+
+    /** frames and simulation ticks stop while paused, the mouse and the keys (but the pause key) are ignored */
+    get paused() {
+        return this.#paused;
+    }
+
+    set paused(value) {
+        this.#paused = value;
+        this.#mouse.pause = value;
+        this.#keyboard.pause = value;
     }
 
     /** what the last frame drew */

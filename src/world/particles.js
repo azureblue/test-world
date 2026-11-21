@@ -17,6 +17,8 @@ const AGE = 12, LIFE = 13, SIZE = 14;
 export const PARTICLE_INSTANCE = Object.freeze({ position: X, texture: U, light: LIGHT });
 /** floats per particle (16: whole 64-byte blocks) */
 export const PARTICLE_FLOATS = 16;
+/** blocks per second: sliding on the ground slower than this stops */
+const STOP_SPEED = 0.05;
 
 /**
  * Fragments of broken blocks: small squares showing a patch of the block's texture, thrown out of it, falling with
@@ -68,7 +70,7 @@ export class Particles {
             d[o + VY] = oy * speed * 2;
             d[o + VZ] = s.upSpeed * (0.5 + Math.random());
             d[o + AGE] = 0;
-            d[o + LIFE] = s.lifetime * (0.6 + Math.random() * 0.8);
+            d[o + LIFE] = s.minLifetime + Math.random() * (s.maxLifetime - s.minLifetime);
             d[o + SIZE] = d[o + DRAWN_SIZE] = size;
             // a patch of a face's texture as big as the particle (the texture covers a block), the sides more often
             const face = Math.random() < 0.7 ? 1 + Math.floor(Math.random() * 4) : Math.random() < 0.5 ? 0 : 5;
@@ -120,9 +122,13 @@ export class Particles {
                     d[o + X + a] = next;
             }
             if (onGround) {
+                // stopped once slow (friction alone never gets to 0): a resting particle checks only the block below,
+                // falling again if it's removed
                 const slow = Math.max(0, 1 - s.groundFriction * dt);
-                d[o + VX] *= slow;
-                d[o + VY] *= slow;
+                const vx = d[o + VX] * slow, vy = d[o + VY] * slow;
+                const stop = vx * vx + vy * vy < STOP_SPEED * STOP_SPEED;
+                d[o + VX] = stop ? 0 : vx;
+                d[o + VY] = stop ? 0 : vy;
             }
             // shrinking over the last quarter second
             d[o + DRAWN_SIZE] = d[o + SIZE] * Math.min(1, left * 4);

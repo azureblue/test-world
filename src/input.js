@@ -48,8 +48,10 @@ export class MouseInput {
         return this.#pause;
     }
 
+    /** while paused the mouse movement is ignored (and what was gathered dropped) */
     set pause(value) {
         this.#pause = value;
+        this.getDeltaAndReset();
     }
 
     getDeltaAndReset() {
@@ -85,6 +87,9 @@ export class KeyboardInput {
      * @type {{ [key: string]: { pressed: boolean, handler: (pressed: boolean) => void } }}
      */
     #keys = {};
+    #pause = false;
+    /** the key that still works while paused (the one that unpauses) */
+    pauseKey = null;
 
     /**
      * Creates an instance of KeyboardInput.
@@ -113,6 +118,8 @@ export class KeyboardInput {
 
         targetElement.addEventListener("keydown", (ev) => {
             const key = keyOf(ev);
+            if (this.#pause && key !== this.pauseKey)
+                return;
             if (key in this.#keys) {
                 if (this.#keys[key].handler && !ev.repeat) {
                     this.#keys[key].handler(true);
@@ -124,6 +131,8 @@ export class KeyboardInput {
 
         targetElement.addEventListener("keyup", (ev) => {
             const key = keyOf(ev);
+            if (this.#pause && key !== this.pauseKey)
+                return;
             if (key in this.#keys) {
                 this.#keys[key].pressed = false;
                 if (this.#keys[key].handler) {
@@ -132,6 +141,18 @@ export class KeyboardInput {
                 ev.preventDefault();
             }
         }, true);
+    }
+
+    get pause() {
+        return this.#pause;
+    }
+
+    /** while paused the keys are ignored, except {@link pauseKey}; pausing releases the held ones */
+    set pause(value) {
+        this.#pause = value;
+        if (value)
+            for (const key of Object.values(this.#keys))
+                key.pressed = false;
     }
 
     isKeyPressed(key) {

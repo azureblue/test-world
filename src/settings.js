@@ -165,8 +165,9 @@ export const Settings = {
         // in blocks (the patch of the texture they show is as big)
         minSize: 0.06,
         maxSize: 0.16,
-        // seconds, varied by -40%..+40%
-        lifetime: 1.4,
+        // seconds, each one's between
+        minLifetime: 0.85,
+        maxLifetime: 1.95,
         // blocks per second: out from the block's centre, and up
         speed: 1.5,
         upSpeed: 3,
