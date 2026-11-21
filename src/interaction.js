@@ -26,7 +26,7 @@ export class BlockInteraction {
         this.#itemBar = itemBar;
     }
 
-    /** the block looked at (world coordinates, the face hit), or null */
+    /** the block looked at (and the face hit), or null */
     get target() {
         return this.#target;
     }
@@ -43,7 +43,7 @@ export class BlockInteraction {
     breakBlock() {
         const t = this.#target;
         if (t !== null)
-            this.#world.setBlockWorld(t.x, t.y, t.z, removed(t.block));
+            this.#world.setBlock(t.x, t.y, t.z, removed(t.block));
     }
 
     /** Places the item bar's block on the face looked at. */
@@ -55,18 +55,18 @@ export class BlockInteraction {
         const px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
         // a block placed into the player only if it can lift the player onto it (swimming, jumping)
         const intoPlayer = player.intersectsBlock(px, py, pz) && !(player.mode === "fly" && player.noclip);
-        if (intoPlayer && !player.canStepOnto(py))
+        if (intoPlayer && !player.canStepOnto(pz))
             return;
         const placed = this.#itemBar.block;
-        const cell = world.blockWorldAt(px, py, pz);
+        const cell = world.blockAt(px, py, pz);
         let block = placed;
         if (isLiquid(placed)) {
             // placed water gets the level water has there: full under other water, the surface level otherwise
-            block = withHeight(placed, isLiquid(world.blockWorldAt(px, py + 1, pz)) ? BLOCK_HEIGHT_FULL : WATER_SURFACE_LEVEL);
+            block = withHeight(placed, isLiquid(world.blockAt(px, py, pz + 1)) ? BLOCK_HEIGHT_FULL : WATER_SURFACE_LEVEL);
         } else if (isXQuads(placed) && isLiquid(cell)) {
             // a plant placed into water stays in it
             block = flooded(placed, blockHeight(cell), isFlowing(cell));
         }
-        world.setBlockWorld(px, py, pz, block);
+        world.setBlock(px, py, pz, block);
     }
 }

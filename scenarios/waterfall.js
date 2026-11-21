@@ -6,15 +6,15 @@ export const settings = { "world.renderDistance": 3 };
 
 export async function world(seed) {
     return (await SceneGenerator.over("flat", seed))
-        .fill(0, 1, 0, 1, 6, 1, "ROCK");
+        .fill(0, 0, 1, 1, 1, 6, "ROCK");
 }
 
 /** @param {import("./testGame.js").TestGame} game */
 export async function run(game) {
     game.fly();
-    game.setPosition(-9, 7, 10);
-    game.lookAt(0, 3, 0);
+    game.setPosition(-9, -10, 7);
+    game.lookAt(0, 0, 3);
     await game.ready();
     // placed now, not in the scene: a change wakes the water flow
-    game.set(0, 7, 0, flooded(BLOCK_IDS.EMPTY, WATER_SURFACE_LEVEL));
+    game.set(0, 0, 7, flooded(BLOCK_IDS.EMPTY, WATER_SURFACE_LEVEL));
 }

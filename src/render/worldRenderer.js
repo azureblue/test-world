@@ -45,11 +45,14 @@ class OverdrawStats {
     }
 }
 
-/** @returns {number[]} towards the sun (Settings.sky), unit length, world coordinates */
+/**
+ * @returns {number[]} towards the sun (Settings.sky), unit length; the azimuth like the camera's yaw (0 along +x,
+ *   growing clockwise seen from above)
+ */
 function sunDirection() {
     const rad = Math.PI / 180;
     const elevation = Settings.sky.sunElevation * rad, azimuth = Settings.sky.sunAzimuth * rad;
-    return [Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.sin(azimuth)];
+    return [Math.cos(elevation) * Math.cos(azimuth), -Math.cos(elevation) * Math.sin(azimuth), Math.sin(elevation)];
 }
 
 /**
@@ -236,7 +239,7 @@ export class WorldRenderer {
         gl.uniform3fv(sky.getUniformLocation("sun_color"), rgb(s.sunColor));
         // the sun's pixels: two axes across it (one horizontal, unless the sun is straight up), scaled to the pixel size
         const cell = Math.tan(s.sunSize * rad) / s.sunPixels;
-        let u = [-sunDir[2], 0, sunDir[0]];
+        let u = [-sunDir[1], sunDir[0], 0];
         let length = Math.hypot(...u);
         if (length < 1e-6) {
             u = [1, 0, 0];
@@ -305,7 +308,7 @@ export class WorldRenderer {
     /**
      * Draws a frame. The camera's position and direction are the frame's (camera.update() done).
      * @param {World} world
-     * @param {{x: number, y: number, z: number} | null} highlight the block to outline (world coordinates)
+     * @param {{x: number, y: number, z: number} | null} highlight the block to outline
      * @param {boolean} sampleOverdraw with Settings.debug.overdraw: read back this frame's overdraw
      * @returns {FrameStats}
      */
@@ -320,7 +323,7 @@ export class WorldRenderer {
         camera.calculateViewMatrix(this.#mView);
         this.#mProjection.mulOut(this.#mView, this.#mProjectionView);
         const camPos = camera.position;
-        const inWater = world.isInWater(camPos.x, camPos.y - this.#nearPlaneReach, camPos.z);
+        const inWater = world.isInWater(camPos.x, camPos.y, camPos.z - this.#nearPlaneReach);
         const fogState = this.#fog.get(inWater);
         if (!overdraw) {
             const clearColor = fogState.clearColor;

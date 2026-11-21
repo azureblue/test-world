@@ -5,16 +5,15 @@ import { ChunkGeneratorFactory } from "./registry.js";
 
 /**
  * A generator for test scenes: blocks set box by box, over an empty world or over another generator. Positions are
- * world coordinates (y up), as the game shows them. Deterministic like any generator, so every generation of a chunk
- * is the same.
+ * the game's: x, y on the ground, z up. Deterministic like any generator, so every generation of a chunk is the same.
  *
  * A scene is made in a scenario module's `world()` (see scenarios/), which the world worker loads when
  * Settings.world.generator is the module's path, with the world's seed (Settings.world.seed):
  *
  *     export async function world(seed) {
  *         return new SceneGenerator()                 // empty; or (await SceneGenerator.over("flat", seed))
- *             .fill(-4, -1, -4, 4, -1, 4, "ROCK")
- *             .fill(-4, 0, -4, 4, 0, 4, "WATER");
+ *             .fill(-4, -4, -1, 4, 4, -1, "ROCK")
+ *             .fill(-4, -4, 0, 4, 4, 0, "WATER");
  *     }
  */
 export class SceneGenerator extends ChunkGenerator {
@@ -48,11 +47,10 @@ export class SceneGenerator extends ChunkGenerator {
         const value = (typeof block === "string" ? BLOCK_IDS[block] : block) >>> 0;
         if (typeof block === "string" && !(block in BLOCK_IDS))
             throw new Error(`no block "${block}"`);
-        // world (x, y up, z) -> chunk space (x, -z - 1, height y)
         this.#boxes.push({
             x0: Math.min(x0, x1), x1: Math.max(x0, x1),
-            y0: -Math.max(z0, z1) - 1, y1: -Math.min(z0, z1) - 1,
-            h0: Math.min(y0, y1), h1: Math.max(y0, y1),
+            y0: Math.min(y0, y1), y1: Math.max(y0, y1),
+            h0: Math.min(z0, z1), h1: Math.max(z0, z1),
             value
         });
         return this;

@@ -11,10 +11,11 @@ class Camera {
     #lookingAt = new FVec3(0, 0, 0);
     #right = new FVec3(0, 0, 0);
     #direction = new FVec3(1, 0, 0);
-    #directionXZ = new FVec2(1, 0,);
+    #directionXY = new FVec2(1, 0);
     #yaw = 0; #pitch = 0;
 
-    static #DIRECTION_UP = new FVec3(0.0, 1.0, 0.0);
+    // the world's up: z (the blocks' height); the view matrix makes it the screen's y
+    static #DIRECTION_UP = new FVec3(0.0, 0.0, 1.0);
 
     /**
      * @param {FVec3} position 
@@ -54,11 +55,11 @@ class Camera {
         if (len < 1e-8) return; // ignore zero vector
         const nx = x / len, ny = y / len, nz = z / len;
 
-        // pitch = asin(y)
-        let pitch = Math.asin(Math.max(-1, Math.min(1, ny))) * RAD_TO_DEG;
+        // pitch = asin(z)
+        let pitch = Math.asin(Math.max(-1, Math.min(1, nz))) * RAD_TO_DEG;
 
-        // yaw = atan2(z, x)
-        let yaw = Math.atan2(nz, nx) * RAD_TO_DEG;
+        // yaw = atan2(-y, x): clockwise seen from above (see update)
+        let yaw = Math.atan2(-ny, nx) * RAD_TO_DEG;
         if (yaw < 0) yaw += 360.0;
 
         if (pitch > 89.0) pitch = 89.0;
@@ -68,17 +69,21 @@ class Camera {
         this.#yaw = yaw;
     }
 
+    /**
+     * The direction from yaw and pitch: yaw 0 looks along +x, 90 along -y (clockwise seen from above, so a growing yaw
+     * turns right), pitch up towards +z.
+     */
     update() {
         const pitchRads = this.#pitch * DEG_TO_RAD;
         const yawRads = this.#yaw * DEG_TO_RAD;
-        this.#direction.y = Math.sin(pitchRads);
+        this.#direction.z = Math.sin(pitchRads);
         const cosPitch = Math.cos(pitchRads);
         const cosYaw = Math.cos(yawRads);
-        const sinYaw = Math.sin(yawRads);
+        const sinYaw = -Math.sin(yawRads);
         this.#direction.x = cosYaw * cosPitch;
-        this.#direction.z = sinYaw * cosPitch;
-        this.#directionXZ.x = cosYaw;
-        this.#directionXZ.y = sinYaw;
+        this.#direction.y = sinYaw * cosPitch;
+        this.#directionXY.x = cosYaw;
+        this.#directionXY.y = sinYaw;
         FVec3.cross(this.#direction, Camera.#DIRECTION_UP, this.#right);
         this.#right.normalizeIn();
         FVec3.cross(this.#right, this.#direction, this.#up);
@@ -137,8 +142,9 @@ class Camera {
     }
 
     /**@returns {FVec2} */
-    get directionXZ() {
-        return this.#directionXZ;
+    /** the horizontal look direction, unit length */
+    get directionXY() {
+        return this.#directionXY;
     }
 
     /**@returns {FVec3} */

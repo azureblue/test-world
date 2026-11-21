@@ -236,7 +236,7 @@ export class UIntMesher extends ChunkMesher {
         const meshStart = performance.now();
         const meshData = this.mesh(chunkData);
         this.#lastMeshTime = perfDiff(meshStart);
-        return new UIntMeshData(vec3(position.x * CHUNK_SIZE, position.z * CHUNK_SIZE, -position.y * CHUNK_SIZE),
+        return new UIntMeshData(vec3(position.x * CHUNK_SIZE, position.y * CHUNK_SIZE, position.z * CHUNK_SIZE),
             meshData.data, meshData.solidEnd, meshData.liquidEnd, meshData.xQuadEnd, meshData.cutoutEnd);
     }
 

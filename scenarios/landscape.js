@@ -10,6 +10,6 @@ export async function world(seed) {
 /** @param {import("./testGame.js").TestGame} game */
 export async function run(game) {
     game.fly();
-    game.setPosition(0, 25, 0);
-    game.lookAt(60, 18, 60);
+    game.setPosition(0, 0, 25);
+    game.lookAt(60, -60, 18);
 }

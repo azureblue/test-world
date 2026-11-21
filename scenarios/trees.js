@@ -1,4 +1,4 @@
-// Every tree species (TreeBuilder) on flat grass: each column along x one species, each row along -z another seed of
+// Every tree species (TreeBuilder) on flat grass: each column along x one species, each row along y another seed of
 // it (see TreeGalleryGenerator).
 import { SceneGenerator } from "../src/gen/sceneGenerator.js";
 
@@ -11,6 +11,6 @@ export async function world(seed) {
 /** @param {import("./testGame.js").TestGame} game */
 export async function run(game) {
     game.fly();
-    game.setPosition(-10, 10, 12);
-    game.lookAt(30, 5, -30);
+    game.setPosition(-10, -12, 10);
+    game.lookAt(30, 30, 5);
 }

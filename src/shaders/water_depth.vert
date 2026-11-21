@@ -19,7 +19,7 @@ void main() {
     uint y = (a_in_bits >> 7) & 0x7Fu;
     uint z = (a_in_bits >> 14) & 0x1FFu;
 
-    vec3 pos = vec3(float(x), float(z) * FRACT_UNIT, -float(y)) + m_translation;
+    vec3 pos = vec3(float(x), float(y), float(z) * FRACT_UNIT) + m_translation;
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 }

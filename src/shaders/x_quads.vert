@@ -36,7 +36,7 @@ void main() {
     float m_y = float(a_in >> 22 & 1u);
     uint tex_idx = (a_in >> 23) & b_1111_1111;
 
-    vec3 pos = vec3(float(x), float(z), -float(y)) + m_translation;
+    vec3 pos = vec3(float(x), float(y), float(z)) + m_translation;
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 

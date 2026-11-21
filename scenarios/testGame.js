@@ -8,8 +8,8 @@ const TEST_SETTINGS = {
 };
 
 /**
- * The game started for a test scenario (scenarios/index.html), and what a scenario does with it. Positions are world
- * coordinates (y up), as the game shows them.
+ * The game started for a test scenario (scenarios/index.html), and what a scenario does with it. Positions are the
+ * game's: x, y on the ground, z up.
  *
  * The scene itself (the blocks) comes from the scenario's generator (src/gen/sceneGenerator.js), so it's there before
  * the chunks load; {@link set} and {@link fill} change blocks while the game runs, like the player does (the world
@@ -52,7 +52,7 @@ export class TestGame {
 
     /** Puts the player's feet at a position (moved up out of blocks if it's inside them). */
     setPosition(x, y, z) {
-        this.player.setEyePosition(x, y + Settings.player.eyeHeight, z);
+        this.player.setEyePosition(x, y, z + Settings.player.eyeHeight);
     }
 
     /** Turns the camera to look at a point (from where the eye is now). */
@@ -80,7 +80,7 @@ export class TestGame {
 
     /** @returns {number} the block at a position (unsigned) */
     block(x, y, z) {
-        return this.world.blockWorldAt(x, y, z) >>> 0;
+        return this.world.blockAt(x, y, z) >>> 0;
     }
 
     /**
@@ -88,7 +88,7 @@ export class TestGame {
      * @param {number | string} block a block value or a key of BLOCK_IDS
      */
     set(x, y, z, block) {
-        this.world.setBlockWorld(x, y, z, blockValue(block));
+        this.world.setBlock(x, y, z, blockValue(block));
     }
 
     /**
@@ -101,7 +101,7 @@ export class TestGame {
         for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++)
             for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++)
                 for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z++)
-                    this.world.setBlockWorld(x, y, z, value);
+                    this.world.setBlock(x, y, z, value);
     }
 
     /**

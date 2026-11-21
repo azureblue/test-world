@@ -11,7 +11,8 @@ import { ChunkManager } from "./chunkManager.js";
  * chunks come from it through {@link ChunkManager}, the client's edits go to it through {@link ChunkEditor}, which
  * predicts them until the worker's chunk messages include them.
  *
- * Two coordinate systems: world coordinates (y up, the *World methods) and chunk space (x, y, and z as the height).
+ * Coordinates are the blocks' everywhere: x, y on the ground, z the height; the block (ix, iy, iz) fills
+ * [ix, ix + 1) x [iy, iy + 1) x [iz, iz + 1). Only the camera's view matrix turns that into the screen's y up.
  */
 export class World {
     #chunks;
@@ -41,13 +42,13 @@ export class World {
     }
 
     /**
-     * Moves the center of the loaded range. World coordinates.
+     * Moves the center of the loaded range to the chunk of a position.
      */
-    moveToWorldPos(x, y, z) {
+    moveTo(x, y, z) {
         this.#chunks.setCenter(
             Math.floor(x) >> CHUNK_SIZE_BIT_LEN,
-            Math.floor(-z - 1) >> CHUNK_SIZE_BIT_LEN,
-            Math.floor(y) >> CHUNK_SIZE_BIT_LEN);
+            Math.floor(y) >> CHUNK_SIZE_BIT_LEN,
+            Math.floor(z) >> CHUNK_SIZE_BIT_LEN);
     }
 
     /** Call once per frame. */
@@ -79,7 +80,7 @@ export class World {
      * Any non-empty block except water stops the ray (solid blocks, plants as full cubes, also plants in water); the
      * starting cell stops it only if it's solid (standing in a plant's cell doesn't keep targeting the plant).
      * @returns {{hit: boolean, x: number, y: number, z: number, block: number, nx: number, ny: number, nz: number} | null}
-     *   the hit block in world coordinates and the normal of the face the ray entered through
+     *   the hit block and the normal of the face the ray entered through
      *   (pointing back towards the ray origin; all 0 when the origin itself is inside the block)
      */
     raycasti(pos, dir, maxDist = 5) {
@@ -115,7 +116,7 @@ export class World {
         let first = true;
 
         while (t <= maxDist) {
-            const block = this.blockWorldAt(x, y, z);
+            const block = this.blockAt(x, y, z);
             const stops = first ? isSolid(block) : block !== BLOCK_IDS.EMPTY && (!isLiquid(block) || isXQuads(block));
             if (stops) {
                 return { hit: true, x, y, z, block, nx, ny, nz };
@@ -145,38 +146,15 @@ export class World {
     }
 
     /**
-     * World coordinates, as returned by {@link World#raycasti}.
-     * @returns {boolean} whether the block was changed
-     */
-    setBlockWorld(iwx, iwy, iwz, value) {
-        return this.setBlock(iwx, -iwz - 1, iwy, value);
-    }
-
-    /**
-     * Changes a block in a loaded chunk, see {@link ChunkEditor}. Chunk space coordinates (iz is the height), like
-     * {@link World#blockAt}.
+     * Changes a block in a loaded chunk, see {@link ChunkEditor}.
      * @returns {boolean} whether the block was changed
      */
     setBlock(ix, iy, iz, value) {
         return this.#editor.setBlock(ix, iy, iz, value);
     }
 
-    blockWorldAt(iwx, iwy, iwz) {
-        return this.blockAt(iwx, -iwz - 1, iwy);
-    }
-
     /**
-     * Whether the chunk holding a block is loaded (blockWorldAt returns EMPTY for blocks of chunks that aren't).
-     * @param {number} iwx world block position
-     * @param {number} iwy
-     * @param {number} iwz
-     */
-    isLoadedWorld(iwx, iwy, iwz) {
-        return this.isLoaded(iwx, -iwz - 1, iwy);
-    }
-
-    /**
-     * Whether the chunk holding a block is loaded. Chunk space coordinates (iz is the height).
+     * Whether the chunk holding a block is loaded (blockAt returns EMPTY for blocks of chunks that aren't).
      */
     isLoaded(ix, iy, iz) {
         return this.#chunks.getLoaded(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN) !== undefined;
@@ -184,18 +162,14 @@ export class World {
 
     /**
      * Whether a point is under the water surface: in a water cell, below its level (as the mesher draws it).
-     * @param {number} wx world position
-     * @param {number} wy
-     * @param {number} wz
      */
-    isInWater(wx, wy, wz) {
-        const iy = Math.floor(wy);
-        const block = this.blockWorldAt(Math.floor(wx), iy, Math.floor(wz));
-        return isLiquid(block) && wy - iy < blockHeight(block) / BLOCK_HEIGHT_FULL;
+    isInWater(x, y, z) {
+        const iz = Math.floor(z);
+        const block = this.blockAt(Math.floor(x), Math.floor(y), iz);
+        return isLiquid(block) && z - iz < blockHeight(block) / BLOCK_HEIGHT_FULL;
     }
 
     /**
-     * Chunk space coordinates (iz is the height).
      * @returns {number} the block, EMPTY in chunks that aren't loaded
      */
     blockAt(ix, iy, iz) {
@@ -207,109 +181,50 @@ export class World {
 }
 
 /**
- * A position in chunk space (x, y, h: the blocks' data coordinates) or in the world (x, y up, z; the camera's), and
- * the block, chunk and block in chunk holding it. World z runs against chunk space y: the block at world z (floored)
- * is at y = -z - 1, see World.blockWorldAt.
+ * A position, and the block, chunk and block in its chunk holding it.
  */
 export class Position {
-    #x; #y; #z;
-
-    constructor(x = 0, y = 0, z = 0, world = false) {
-        if (world) {
-            this.setWorld(x, y, z);
-        } else {
-            this.set(x, y, z);
-        }
-    }
+    x = 0; y = 0; z = 0;
 
     set(x, y, z) {
-        this.#x = x;
-        this.#y = y;
-        this.#z = z;
+        this.x = x;
+        this.y = y;
+        this.z = z;
     }
 
-    setWorld(x, y, z) {
-        this.set(x, -z - 1, y);
+    get ix() {
+        return Math.floor(this.x);
+    }
+
+    get iy() {
+        return Math.floor(this.y);
+    }
+
+    get iz() {
+        return Math.floor(this.z);
     }
 
     get cx() {
         return this.ix >> CHUNK_SIZE_BIT_LEN;
     }
 
-    get cz() {
-        return this.iz >> CHUNK_SIZE_BIT_LEN;
-    }
-
     get cy() {
         return this.iy >> CHUNK_SIZE_BIT_LEN;
+    }
+
+    get cz() {
+        return this.iz >> CHUNK_SIZE_BIT_LEN;
     }
 
     get bx() {
         return this.ix & CHUNK_SIZE_MASK;
     }
 
-    get bz() {
-        return this.iz & CHUNK_SIZE_MASK;
-    }
-
     get by() {
         return this.iy & CHUNK_SIZE_MASK;
     }
 
-    get x() {
-        return this.#x;
-    }
-
-    get y() {
-        return this.#y;
-    }
-
-    get z() {
-        return this.#z;
-    }
-
-    get ix() {
-        return Math.floor(this.#x);
-    }
-
-    // the block of world z (floored), not floor(y): y = -z - 1 isn't the block's y unless z is whole
-    get iy() {
-        return -this.iwz - 1;
-    }
-
-    get iz() {
-        return Math.floor(this.#z);
-    }
-
-    get wx() {
-        return this.#x;
-    }
-
-    get wy() {
-        return this.#z;
-    }
-
-    get wz() {
-        return -this.#y - 1;
-    }
-
-    get iwx() {
-        return Math.floor(this.#x);
-    }
-
-    get iwy() {
-        return Math.floor(this.#z);
-    }
-
-    get iwz() {
-        return Math.floor(-this.#y - 1);
-    }
-
-    static from(x, y, z) {
-        return new Position(x, y, z, false);
-    }
-
-    static fromWorld(x, y, z) {
-        return new Position(x, y, z, true);
+    get bz() {
+        return this.iz & CHUNK_SIZE_MASK;
     }
 }

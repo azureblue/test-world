@@ -123,7 +123,7 @@ export class Game {
         input.down = pressed(controls.down);
         input.sprint = pressed(controls.sprint);
         const camera = this.camera;
-        this.player.tick(this.ticker.tickTime, input, camera.directionXZ, camera.direction, camera.right);
+        this.player.tick(this.ticker.tickTime, input, camera.directionXY, camera.direction, camera.right);
     }
 
     #frame() {
@@ -150,7 +150,7 @@ export class Game {
         }
 
         const camPos = camera.position;
-        world.moveToWorldPos(camPos.x, camPos.y, camPos.z);
+        world.moveTo(camPos.x, camPos.y, camPos.z);
         world.update();
         this.interaction.update(camPos, camera.direction);
 

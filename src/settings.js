@@ -31,9 +31,9 @@ export const Settings = {
     },
 
     camera: {
-        // world position of the eye, y up (the player's feet are eyeHeight below)
+        // world position of the eye: x, y on the ground, z up (the player's feet are eyeHeight below)
         startPosition: [2, 2, 2],
-        // degrees; yaw 0 looks along +x, 90 along +z; pitch is up/down, -89..89
+        // degrees; yaw 0 looks along +x, 90 along -y (clockwise seen from above); pitch is up/down, -89..89
         startYaw: 0,
         startPitch: 0,
         // vertical, degrees
@@ -162,7 +162,8 @@ export const Settings = {
         horizonColor: "#add9fa",
         // where the sky is the zenith colour: the view direction's height, 0 at the horizon, 1 straight up
         gradientHeight: 0.5,
-        // the sun, in degrees: height above the horizon, direction around it (0 towards +x, 90 towards +z), radius
+        // the sun, in degrees: height above the horizon, direction around it (like the camera's yaw: 0 towards +x, 90
+        // towards -y), radius
         sunElevation: 40,
         sunAzimuth: 120,
         sunSize: 2.5,

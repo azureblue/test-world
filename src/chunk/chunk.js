@@ -214,11 +214,11 @@ export class Chunk {
         const minX = cp.x * CHUNK_SIZE + bounds.minX;
         const maxX = cp.x * CHUNK_SIZE + bounds.maxX;
 
-        const minY = cp.z * CHUNK_SIZE + bounds.minH;
-        const maxY = cp.z * CHUNK_SIZE + bounds.maxH;
+        const minY = cp.y * CHUNK_SIZE + bounds.minY;
+        const maxY = cp.y * CHUNK_SIZE + bounds.maxY;
 
-        const maxZ = -cp.y * CHUNK_SIZE - bounds.minY;
-        const minZ = -cp.y * CHUNK_SIZE - bounds.maxY;
+        const minZ = cp.z * CHUNK_SIZE + bounds.minH;
+        const maxZ = cp.z * CHUNK_SIZE + bounds.maxH;
 
         const arr = this.#worldAABBData;
         arr[0] = minX; arr[1] = minY; arr[2] = minZ;

@@ -62,19 +62,19 @@ export class StatsOverlay {
             return;
         const pos = this.#pos;
         const camPos = camera.position, camDir = camera.direction;
-        pos.setWorld(camPos.x, camPos.y, camPos.z);
+        pos.set(camPos.x, camPos.y, camPos.z);
         const block = world.blockAt(pos.ix, pos.iy, pos.iz);
         const overdraw = renderer.overdrawStats;
         this.#text.data =
-            `world pos ${pos.wx.toFixed(1)}x ${pos.wz.toFixed(1)}z ${pos.wy.toFixed(1)}y ` +
-            `dir ${camDir.x.toFixed(1)}x ${camDir.z.toFixed(1)}z ${camDir.y.toFixed(1)}y ` +
+            `pos ${camPos.x.toFixed(1)}x ${camPos.y.toFixed(1)}y ${camPos.z.toFixed(1)}z ` +
+            `dir ${camDir.x.toFixed(1)}x ${camDir.y.toFixed(1)}y ${camDir.z.toFixed(1)}z ` +
             `cam ${camera.pitch.toFixed(1)}p ${camera.yaw.toFixed(1)}y ` +
             `fps ${fps} ` +
             `${player.mode}${player.mode === "fly" && player.noclip ? " noclip" : ""}` +
             `${player.mode === "walk" ? (player.inWater ? " swimming" : player.onGround ? " ground" : " air") : ""} ` +
             `chunks ${frameStats.chunksDrawn}/${frameStats.chunksInRange}/${world.chunksInView} ` +
             (overdraw ? `overdraw avg:${overdraw.avg.toFixed(2)} max:${overdraw.max} ` : "") +
-            `pos x:${pos.ix} y:${pos.iy} z:${pos.iz} ` +
+            `block x:${pos.ix} y:${pos.iy} z:${pos.iz} ` +
             `chunk x:${pos.cx} y:${pos.cy} z:${pos.cz} ` +
             `local x:${pos.bx} y:${pos.by} z:${pos.bz} ` +
             `${getBlockById(block).name} ` +

@@ -32,9 +32,9 @@ void main() {
     // highp: distances squared go far beyond the mediump range
     highp float dist_sq = dot(v_to_cam, v_to_cam);
 #ifdef FRESNEL
-    // 1 / cos of the angle to the vertical: the cosine is |v_to_cam.y| / |v_to_cam|, so this is distance / height
+    // 1 / cos of the angle to the vertical: the cosine is |v_to_cam.z| / |v_to_cam|, so this is distance / height
     // difference; from above or below alike (no seam at eye level on a waterfall), at most 20 (a cosine of 0.05)
-    highp float inv_cos = min(sqrt(dist_sq) / max(abs(v_to_cam.y), 1e-4), 20.0);
+    highp float inv_cos = min(sqrt(dist_sq) / max(abs(v_to_cam.z), 1e-4), 20.0);
     // 1 - (1 - alpha)^exponent as 1 - exp2(log2(1 - alpha) * exponent)
     color.a = 1.0 - exp2(fresnel.y * (1.0 + fresnel.x * (inv_cos - 1.0)));
 #endif

@@ -1,5 +1,9 @@
 # Shaders
 
+World space is the blocks' space everywhere: x, y on the ground, z up. The vertex shaders place a mesh vertex at its
+(x, y, z) plus the chunk's `m_translation`, and only the camera's view matrix (`Camera`, its up vector z) turns that
+into the screen's y up. Shaders that need "up" (the sky's gradient, the water's Fresnel angle) use z.
+
 ## Camera and Fog blocks
 
 Two uniform buffers shared by all programs: the camera, bound to binding 0, used by the vertex shaders, and the fog,

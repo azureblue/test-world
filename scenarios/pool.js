@@ -9,18 +9,18 @@ export async function world(seed) {
     const surface = flooded(BLOCK_IDS.EMPTY, WATER_SURFACE_LEVEL);
     const plant = BLOCK_IDS.GRASS_SHORT_0;
     return (await SceneGenerator.over("flat", seed))
-        .fill(-6, -3, -6, 6, 0, 6, "EMPTY")
-        .fill(-6, -3, -6, 6, -2, 6, "WATER")
-        .fill(-6, -1, -6, 6, -1, 6, surface)
-        // a slab over the north end, at the surface's height: the water under it stays 7/8
-        .fill(-6, 0, -6, 6, 0, -3, "ROCK")        
-        .set(2, -3, 2, flooded(plant, BLOCK_HEIGHT_FULL))
-        .set(-2, -1, 3, flooded(plant, WATER_SURFACE_LEVEL));
+        .fill(-6, -6, -3, 6, 6, 0, "EMPTY")
+        .fill(-6, -6, -3, 6, 6, -2, "WATER")
+        .fill(-6, -6, -1, 6, 6, -1, surface)
+        // a slab over the north end (+y), at the surface's height: the water under it stays 7/8
+        .fill(-6, 3, 0, 6, 6, 0, "ROCK")
+        .set(2, -2, -3, flooded(plant, BLOCK_HEIGHT_FULL))
+        .set(-2, -3, -1, flooded(plant, WATER_SURFACE_LEVEL));
 }
 
 /** @param {import("./testGame.js").TestGame} game */
 export async function run(game) {
     game.walk();
-    game.setPosition(0, 3, 12);
-    game.lookAt(0, -1, 0);
+    game.setPosition(0, -12, 3);
+    game.lookAt(0, 0, -1);
 }

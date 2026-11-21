@@ -35,7 +35,7 @@ Worker to client:
 A `ChunkResponse` is the answer to a request or an update after the chunk changed; either way a complete snapshot of
 the chunk as the worker had it.
 
-Positions are chunk space: x, y, and z as the height (world coordinates are y up, see `World`). A block value is a
+Positions are the game's: x, y on the ground, and z as the height (the same everywhere, see `World`). A block value is a
 32 bit number: bit 31 solid cube, bit 30 liquid, bit 29 x-quads (plants), bit 27 flowing (water that isn't a
 source), bits 24..26 the height in 1/8 of a block
 (0 meaning full; water levels), bits 0..23 the block id (`src/blocks.js`, `src/mesh/cpp/blocks.hpp`). A plant in

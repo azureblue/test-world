@@ -16,12 +16,12 @@ out vec4 color_out;
 void main() {
     vec3 dir = normalize(v_dir);
     // smoothstep: no edge at the horizon (the colour starts changing slowly), none where it reaches the zenith colour
-    vec3 color = mix(sky_horizon, sky_zenith, smoothstep(0.0, sky_height, dir.y));
+    vec3 color = mix(sky_horizon, sky_zenith, smoothstep(0.0, sky_height, dir.z));
 
     // the glow is smooth; it fades out towards the horizon: there the sky stays the fog's colour, so far terrain fading
     // into the fog doesn't stand out against a glowing sky
     float toSun = dot(dir, sun_dir);
-    color += sun_color * (sun_glow.x * pow(max(toSun, 0.0), sun_glow.y) * smoothstep(0.0, 0.2, dir.y));
+    color += sun_color * (sun_glow.x * pow(max(toSun, 0.0), sun_glow.y) * smoothstep(0.0, 0.2, dir.z));
     // the disc is blocky: the direction projected onto the plane facing the sun, cut into square pixels; a pixel is in
     // the disc if its centre is
     vec2 pixel = floor(vec2(dot(dir, sun_u), dot(dir, sun_v)) / max(toSun, 1e-3)) + 0.5;

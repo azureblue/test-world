@@ -17,7 +17,8 @@ export class PlayerInput {
 
 /**
  * The player body: a box (width x width x height) with the feet at the bottom centre, moved by simple physics and
- * collided with solid blocks (plants and water don't block). Positions are world coordinates, y up.
+ * collided with solid blocks (plants and water don't block). Positions are world coordinates: x, y on the ground, z
+ * up (the blocks' coordinates).
  *
  * Modes: "walk" with gravity and jumping, swimming when in water; "fly" moves freely, colliding with blocks unless
  * noclip is on. The physics runs per simulation tick (see ticker.js), split into substeps no longer than
@@ -66,13 +67,13 @@ export class Player {
     }
 
     get eyeX() { return this.x; }
-    get eyeY() { return this.y + this.#settings.eyeHeight + this.bob; }
-    get eyeZ() { return this.z; }
+    get eyeY() { return this.y; }
+    get eyeZ() { return this.z + this.#settings.eyeHeight + this.bob; }
 
     setEyePosition(x, y, z) {
         this.x = x;
-        this.y = y - this.#settings.eyeHeight;
-        this.z = z;
+        this.y = y;
+        this.z = z - this.#settings.eyeHeight;
         // a jump, not a move: nothing to interpolate
         this.prevX = this.x;
         this.prevY = this.y;
@@ -83,7 +84,7 @@ export class Player {
 
     toggleFly() {
         this.mode = this.mode === "fly" ? "walk" : "fly";
-        this.vy = 0;
+        this.vz = 0;
         this.#needsFreeSpot = true;
     }
 
@@ -98,24 +99,24 @@ export class Player {
     intersectsBlock(ix, iy, iz) {
         const hw = this.#halfWidth;
         return ix < this.x + hw && ix + 1 > this.x - hw &&
-            iy < this.y + this.#settings.height && iy + 1 > this.y &&
-            iz < this.z + hw && iz + 1 > this.z - hw;
+            iy < this.y + hw && iy + 1 > this.y - hw &&
+            iz < this.z + this.#settings.height && iz + 1 > this.z;
     }
 
     /**
-     * Whether a block can be placed into the body (see {@link intersectsBlock}) at height iy, the physics then pushing
+     * Whether a block can be placed into the body (see {@link intersectsBlock}) at height iz, the physics then pushing
      * the player up onto it: walking, the block is in the lowest layer the body is in, the lift is at most
      * Settings.player.placeLiftMax (near the top of a jump, floating in water; not standing on the ground, and once per
      * jump: at the top of it the next block would need most of a block), and the body fits on top.
      */
-    canStepOnto(iy) {
-        const lift = iy + 1 + this.#settings.skin - this.y;
-        if (this.mode !== "walk" || iy !== Math.floor(this.y) || lift > this.#settings.placeLiftMax)
+    canStepOnto(iz) {
+        const lift = iz + 1 + this.#settings.skin - this.z;
+        if (this.mode !== "walk" || iz !== Math.floor(this.z) || lift > this.#settings.placeLiftMax)
             return false;
-        const y = this.y;
-        this.y = iy + 1 + this.#settings.skin;
+        const z = this.z;
+        this.z = iz + 1 + this.#settings.skin;
         const fits = !this.#overlapsBlocks();
-        this.y = y;
+        this.z = z;
         return fits;
     }
 
@@ -123,11 +124,11 @@ export class Player {
      * Advances the physics by one tick.
      * @param {number} tickTime seconds per tick
      * @param {PlayerInput} input
-     * @param {{x: number, y: number}} lookXZ horizontal look direction, unit length, z in y (camera.directionXZ)
+     * @param {{x: number, y: number}} lookXY horizontal look direction, unit length (camera.directionXY)
      * @param {{x: number, y: number, z: number}} look look direction, unit length
      * @param {{x: number, y: number, z: number}} right horizontal right vector, unit length
      */
-    tick(tickTime, input, lookXZ, look, right) {
+    tick(tickTime, input, lookXY, look, right) {
         this.prevX = this.x;
         this.prevY = this.y;
         this.prevZ = this.z;
@@ -136,7 +137,7 @@ export class Player {
         const substeps = Math.ceil(tickTime * this.#settings.physicsRate - 1e-9);
         const dt = tickTime / substeps;
         for (let i = 0; i < substeps; i++)
-            this.#step(dt, input, lookXZ, look, right);
+            this.#step(dt, input, lookXY, look, right);
         this.#updateBob(tickTime);
     }
 
@@ -164,12 +165,12 @@ export class Player {
      */
     interpolatedEye(alpha, out) {
         out.x = this.prevX + (this.x - this.prevX) * alpha;
-        out.y = this.prevY + (this.y - this.prevY) * alpha + this.#settings.eyeHeight +
+        out.y = this.prevY + (this.y - this.prevY) * alpha;
+        out.z = this.prevZ + (this.z - this.prevZ) * alpha + this.#settings.eyeHeight +
             this.prevBob + (this.bob - this.prevBob) * alpha;
-        out.z = this.prevZ + (this.z - this.prevZ) * alpha;
     }
 
-    #step(dt, input, lookXZ, look, right) {
+    #step(dt, input, lookXY, look, right) {
         const s = this.#settings;
         const collide = this.mode === "walk" || !this.noclip;
         if (collide && this.#needsFreeSpot && !this.#moveToFreeSpot())
@@ -178,11 +179,11 @@ export class Player {
         if (this.mode === "fly") {
             this.#fly(input, look, right);
         } else {
-            this.inWater = this.#world.isInWater(this.x, this.y + s.swim.enterHeight, this.z);
+            this.inWater = this.#world.isInWater(this.x, this.y, this.z + s.swim.enterHeight);
             if (this.inWater)
-                this.#swim(dt, input, lookXZ, right);
+                this.#swim(dt, input, lookXY, right);
             else
-                this.#walk(dt, input, lookXZ, right);
+                this.#walk(dt, input, lookXY, right);
         }
 
         if (!collide) {
@@ -196,36 +197,36 @@ export class Player {
         // position, a jump going up faster isn't changed, falling into it stops
         const lift = this.#feetLift();
         if (lift > 0) {
-            if (this.vy < 0)
-                this.vy = 0;
-            this.y += Math.max(0, Math.min(lift, s.placeLiftSpeed * dt) - this.vy * dt);
+            if (this.vz < 0)
+                this.vz = 0;
+            this.z += Math.max(0, Math.min(lift, s.placeLiftSpeed * dt) - this.vz * dt);
         }
         // vertical first: standing on a block edge doesn't catch the horizontal move
-        const hitY = this.#moveAxis(1, this.vy * dt);
-        this.onGround = hitY && this.vy < 0;
-        if (hitY)
-            this.vy = 0;
+        const hitZ = this.#moveAxis(2, this.vz * dt);
+        this.onGround = hitZ && this.vz < 0;
+        if (hitZ)
+            this.vz = 0;
         const hitX = this.#moveAxis(0, this.vx * dt);
         this.#wallX = hitX ? Math.sign(this.vx) : 0;
         if (hitX)
             this.vx = 0;
-        const hitZ = this.#moveAxis(2, this.vz * dt);
-        this.#wallZ = hitZ ? Math.sign(this.vz) : 0;
-        if (hitZ)
-            this.vz = 0;
+        const hitY = this.#moveAxis(1, this.vy * dt);
+        this.#wallY = hitY ? Math.sign(this.vy) : 0;
+        if (hitY)
+            this.vy = 0;
     }
 
-    /** the side (-1, 0, 1 on x and z) of the walls the last step ran into */
+    /** the side (-1, 0, 1 on x and y) of the walls the last step ran into */
     #wallX = 0;
-    #wallZ = 0;
+    #wallY = 0;
 
     #fly(input, look, right) {
         const s = this.#settings.fly;
         const speed = s.speed * (input.sprint ? s.sprintMultiplier : 1);
         const up = (input.jump ? 1 : 0) - (input.down ? 1 : 0);
         let dx = look.x * input.forward + right.x * input.right;
-        let dy = look.y * input.forward + up;
-        let dz = look.z * input.forward + right.z * input.right;
+        let dy = look.y * input.forward + right.y * input.right;
+        let dz = look.z * input.forward + up;
         const len = Math.hypot(dx, dy, dz);
         const scale = len > 0 ? speed / len : 0;
         this.vx = dx * scale;
@@ -233,29 +234,29 @@ export class Player {
         this.vz = dz * scale;
     }
 
-    #walk(dt, input, lookXZ, right) {
+    #walk(dt, input, lookXY, right) {
         const s = this.#settings.walk;
         const speed = s.speed * (input.sprint ? s.sprintMultiplier : 1);
-        this.#accelerateHorizontal(dt, input, lookXZ, right, speed, this.onGround ? s.groundAcceleration : s.airAcceleration);
+        this.#accelerateHorizontal(dt, input, lookXY, right, speed, this.onGround ? s.groundAcceleration : s.airAcceleration);
         // with jump held, the next jump waits for the cooldown (landing on a step mid-jump would jump again at once);
         // a new press jumps right away
         this.#sinceJump = input.jump ? this.#sinceJump + dt : Infinity;
         if (input.jump && this.onGround && this.#sinceJump >= s.jumpCooldown) {
-            this.vy = s.jumpSpeed;
+            this.vz = s.jumpSpeed;
             this.onGround = false;
             this.#sinceJump = 0;
         }
-        this.vy = Math.max(this.vy - s.gravity * dt, -s.maxFallSpeed);
+        this.vz = Math.max(this.vz - s.gravity * dt, -s.maxFallSpeed);
     }
 
     /** seconds since the last jump while jump is held; Infinity once it's released */
     #sinceJump = Infinity;
 
-    #swim(dt, input, lookXZ, right) {
+    #swim(dt, input, lookXY, right) {
         const s = this.#settings.swim;
         const speed = s.speed * (input.sprint ? s.sprintMultiplier : 1);
-        this.#accelerateHorizontal(dt, input, lookXZ, right, speed, s.acceleration);
-        if (input.jump && (this.#wallX !== 0 || this.#wallZ !== 0) && this.#nearSurface()) {
+        this.#accelerateHorizontal(dt, input, lookXY, right, speed, s.acceleration);
+        if (input.jump && (this.#wallX !== 0 || this.#wallY !== 0) && this.#nearSurface()) {
             // climbing out onto a low bank: a hop just high enough to get the feet over its edge; swimming up alone
             // stops at the surface (above it the walk physics takes over)
             const rise = this.#bankRise();
@@ -263,46 +264,46 @@ export class Player {
                 // the speed that reaches the peak from here; once hopping, falling under gravity reaches the same peak
                 const gravity = this.#settings.walk.gravity;
                 const hop = Math.sqrt(2 * gravity * (rise + s.exitClearance));
-                this.vy = Math.max(this.vy - gravity * dt, hop);
+                this.vz = Math.max(this.vz - gravity * dt, hop);
                 return;
             }
         }
         // with jump held the player rises towards the floating point (the waist) at the surface, slower the closer it
         // gets, and floats there, still swimming, instead of popping out into the walk physics
-        const floatY = this.y + this.#settings.height * s.depthFraction;
-        const surface = this.#waterSurface(floatY);
-        const depth = surface === null ? 0 : surface - floatY;
+        const floatZ = this.z + this.#settings.height * s.depthFraction;
+        const surface = this.#waterSurface(floatZ);
+        const depth = surface === null ? 0 : surface - floatZ;
         if (surface !== null && Math.abs(depth) < s.bobRange)
             this.#floating = true;
-        let targetVy;
+        let targetVz;
         if (input.down)
-            targetVy = -s.downSpeed;
+            targetVz = -s.downSpeed;
         else if (input.jump)
-            targetVy = Math.min(Math.max(depth * s.floatStiffness, -s.floatSinkSpeed), s.upSpeed);
+            targetVz = Math.min(Math.max(depth * s.floatStiffness, -s.floatSinkSpeed), s.upSpeed);
         else if (depth < 0)
-            targetVy = -s.floatSinkSpeed;
+            targetVz = -s.floatSinkSpeed;
         else
-            targetVy = Math.max(this.vy - s.gravity * dt, -s.maxSinkSpeed);
-        this.vy += clampAbs(targetVy - this.vy, s.acceleration * dt * 2);
+            targetVz = Math.max(this.vz - s.gravity * dt, -s.maxSinkSpeed);
+        this.vz += clampAbs(targetVz - this.vz, s.acceleration * dt * 2);
     }
 
     /**
-     * The height of the water surface over the player at height y: the top of the water column in the cell at y or,
-     * if y is just above the water, in the cell below; the top cell is filled up to its level (as the mesher draws
+     * The height of the water surface over the player at height z: the top of the water column in the cell at z or,
+     * if z is just above the water, in the cell below; the top cell is filled up to its level (as the mesher draws
      * it). Null if there's no water there.
      */
-    #waterSurface(y) {
+    #waterSurface(z) {
         const world = this.#world;
-        const ix = Math.floor(this.x), iz = Math.floor(this.z);
-        let iy = Math.floor(y);
-        if (!isLiquid(world.blockWorldAt(ix, iy, iz))) {
-            iy--;
-            if (!isLiquid(world.blockWorldAt(ix, iy, iz)))
+        const ix = Math.floor(this.x), iy = Math.floor(this.y);
+        let iz = Math.floor(z);
+        if (!isLiquid(world.blockAt(ix, iy, iz))) {
+            iz--;
+            if (!isLiquid(world.blockAt(ix, iy, iz)))
                 return null;
         }
-        for (let i = 0; i < 16 && isLiquid(world.blockWorldAt(ix, iy + 1, iz)); i++)
-            iy++;
-        return iy + blockHeight(world.blockWorldAt(ix, iy, iz)) / BLOCK_HEIGHT_FULL;
+        for (let i = 0; i < 16 && isLiquid(world.blockAt(ix, iy, iz + 1)); i++)
+            iz++;
+        return iz + blockHeight(world.blockAt(ix, iy, iz)) / BLOCK_HEIGHT_FULL;
     }
 
     /**
@@ -314,19 +315,19 @@ export class Player {
         const maxRise = s.swim.exitMaxRise;
         const reach = this.#halfWidth + 0.05;
         let best = null;
-        for (const [dx, dz] of [[this.#wallX, 0], [0, this.#wallZ]]) {
-            if (dx === 0 && dz === 0)
+        for (const [dx, dy] of [[this.#wallX, 0], [0, this.#wallY]]) {
+            if (dx === 0 && dy === 0)
                 continue;
-            const ix = Math.floor(this.x + dx * reach), iz = Math.floor(this.z + dz * reach);
+            const ix = Math.floor(this.x + dx * reach), iy = Math.floor(this.y + dy * reach);
             // the first free cell above the wall, from the feet up
-            let top = Math.floor(this.y);
-            while (top <= this.y + maxRise && this.#blocks(ix, top, iz))
+            let top = Math.floor(this.z);
+            while (top <= this.z + maxRise && this.#blocks(ix, iy, top))
                 top++;
-            const rise = top - this.y;
+            const rise = top - this.z;
             if (rise <= 0 || rise > maxRise)
                 continue;
             let room = true;
-            for (let iy = top; iy < top + s.height; iy++)
+            for (let iz = top; iz < top + s.height; iz++)
                 room &&= !this.#blocks(ix, iy, iz);
             if (room && (best === null || rise < best))
                 best = rise;
@@ -337,38 +338,38 @@ export class Player {
     /** whether the point swim.exitDepth above the swimming point is out of the water */
     #nearSurface() {
         const s = this.#settings;
-        return !this.#world.isInWater(this.x, this.y + s.height * s.swim.depthFraction + s.swim.exitDepth, this.z);
+        return !this.#world.isInWater(this.x, this.y, this.z + s.height * s.swim.depthFraction + s.swim.exitDepth);
     }
 
     /**
      * Changes the horizontal velocity towards the wished one (movement keys relative to the look direction) by at
      * most acceleration * dt.
      */
-    #accelerateHorizontal(dt, input, lookXZ, right, speed, acceleration) {
-        let wx = lookXZ.x * input.forward + right.x * input.right;
-        let wz = lookXZ.y * input.forward + right.z * input.right;
-        const len = Math.hypot(wx, wz);
+    #accelerateHorizontal(dt, input, lookXY, right, speed, acceleration) {
+        let wx = lookXY.x * input.forward + right.x * input.right;
+        let wy = lookXY.y * input.forward + right.y * input.right;
+        const len = Math.hypot(wx, wy);
         if (len > 0) {
             wx *= speed / len;
-            wz *= speed / len;
+            wy *= speed / len;
         }
-        let dvx = wx - this.vx, dvz = wz - this.vz;
-        const dv = Math.hypot(dvx, dvz);
+        let dvx = wx - this.vx, dvy = wy - this.vy;
+        const dv = Math.hypot(dvx, dvy);
         const maxDv = acceleration * dt;
         if (dv > maxDv) {
             dvx *= maxDv / dv;
-            dvz *= maxDv / dv;
+            dvy *= maxDv / dv;
         }
         this.vx += dvx;
-        this.vz += dvz;
+        this.vy += dvy;
     }
 
     #boxMin(axis) {
-        return axis === 1 ? this.y : (axis === 0 ? this.x : this.z) - this.#halfWidth;
+        return axis === 2 ? this.z : (axis === 0 ? this.x : this.y) - this.#halfWidth;
     }
 
     #boxMax(axis) {
-        return axis === 1 ? this.y + this.#settings.height : (axis === 0 ? this.x : this.z) + this.#halfWidth;
+        return axis === 2 ? this.z + this.#settings.height : (axis === 0 ? this.x : this.y) + this.#halfWidth;
     }
 
     #shift(axis, delta) {
@@ -383,7 +384,7 @@ export class Player {
      */
     #blocks(ix, iy, iz) {
         const world = this.#world;
-        return !world.isLoadedWorld(ix, iy, iz) || isSolid(world.blockWorldAt(ix, iy, iz));
+        return !world.isLoaded(ix, iy, iz) || isSolid(world.blockAt(ix, iy, iz));
     }
 
     /**
@@ -445,7 +446,7 @@ export class Player {
         for (let ix = lo[0]; ix <= hi[0]; ix++)
             for (let iy = lo[1]; iy <= hi[1]; iy++)
                 for (let iz = lo[2]; iz <= hi[2]; iz++)
-                    if (isSolid(this.#world.blockWorldAt(ix, iy, iz)))
+                    if (isSolid(this.#world.blockAt(ix, iy, iz)))
                         return true;
         return false;
     }
@@ -458,14 +459,14 @@ export class Player {
         if (!this.#overlapsBlocks())
             return 0;
         const s = this.#settings;
-        const top = Math.floor(this.y) + 1 + s.skin;
-        if (top - this.y > s.placeLiftMax)
+        const top = Math.floor(this.z) + 1 + s.skin;
+        if (top - this.z > s.placeLiftMax)
             return 0;
-        const y = this.y;
-        this.y = top;
+        const z = this.z;
+        this.z = top;
         const fits = !this.#overlapsBlocks();
-        this.y = y;
-        return fits ? top - y : 0;
+        this.z = z;
+        return fits ? top - z : 0;
     }
 
     /**
@@ -473,10 +474,10 @@ export class Player {
      */
     #moveToFreeSpot() {
         const ix = Math.floor(this.x), iy = Math.floor(this.y), iz = Math.floor(this.z);
-        if (!this.#world.isLoadedWorld(ix, iy, iz) || !this.#world.isLoadedWorld(ix, iy + 2, iz))
+        if (!this.#world.isLoaded(ix, iy, iz) || !this.#world.isLoaded(ix, iy, iz + 2))
             return false;
         for (let i = 0; i < 256 && this.#overlapsBlocks(); i++)
-            this.y = Math.floor(this.y) + 1 + this.#settings.skin;
+            this.z = Math.floor(this.z) + 1 + this.#settings.skin;
         this.#needsFreeSpot = false;
         return true;
     }

@@ -34,7 +34,7 @@ void main() {
 
     float m_x = float(a_in_aux_bits & 0x1FFu) * FRACT_UNIT;
     float m_y = float(a_in_aux_bits >> 9 & 0x1FFu) * FRACT_UNIT;
-    vec3 pos = vec3(float(x), float(z) * FRACT_UNIT, -float(y)) + m_translation;
+    vec3 pos = vec3(float(x), float(y), float(z) * FRACT_UNIT) + m_translation;
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 

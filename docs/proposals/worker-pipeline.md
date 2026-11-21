@@ -156,7 +156,7 @@ re-requests them on return, ignores late responses and leaks no meshes.
 
 ## Block edits (done)
 
-`World.setBlock(ix, iy, iz, value)` (chunk space) / `setBlockWorld(...)` (raycast coordinates). Left click removes
+`World.setBlock(ix, iy, iz, value)` (the raycast's coordinates too: the game uses the blocks' coordinates everywhere). Left click removes
 the block under the crosshair, right click places rock on the face the ray hit (`raycasti` returns the face normal:
 the opposite of its last step; none when the camera is inside the block; no block is placed in the camera's cell).
 The ray stops at any non-empty block except water (solid blocks, plants as full cubes); the starting cell stops it only
