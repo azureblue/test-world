@@ -12,6 +12,8 @@ struct block_table_t {
     uint water_texture;
     // by block id, then face (Direction: up, front, left, back, right, down)
     uint faces[MAX_BLOCK_ID][6];
+    // the same with the opaque textures: a cutout block covered on all sides is drawn with them (see is_buried)
+    uint opaque_faces[MAX_BLOCK_ID][6];
     // 1: a cutout block (leaves with holes): solid, but it doesn't hide the faces next to it
     uint8 cutout_blocks[MAX_BLOCK_ID];
     // 1: a cutout texture: its faces go to the cutout output, drawn alpha tested

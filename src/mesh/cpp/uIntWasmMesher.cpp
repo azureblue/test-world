@@ -336,7 +336,7 @@ extern "C"
                 if (block_id == BLOCK_EMPTY) {
                     continue;
                 }
-                const uint* block_textures = block_table.faces[block_id];
+                const uint* block_textures = data.is_buried(h, x, y) ? block_table.opaque_faces[block_id] : block_table.faces[block_id];
 
                 if (is_x_quads(block_data)) {                    
                     x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[1]);

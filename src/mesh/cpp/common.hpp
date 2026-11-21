@@ -75,6 +75,15 @@ struct array_3d {
         data[h * plane_size + y * sy + x] = value;
     }
 
+    // a cutout block solid on all 6 sides: drawn opaque (opaque_faces), so looking through the outer leaves of a canopy
+    // ends at its core instead of going through every leaf layer
+    inline_always bool is_buried(uint h, uint x, uint y) const {
+        uint idx = h * plane_size + y * sy + x;
+        return block_table.cutout_blocks[decode_block_id(data[idx])] &
+               is_solid_at(idx - 1) & is_solid_at(idx + 1) & is_solid_at(idx - sy) & is_solid_at(idx + sy) &
+               is_solid_at(idx - plane_size) & is_solid_at(idx + plane_size);
+    }
+
     inline_always uint* get_plane(uint plane) const {
         return &data[plane * plane_size];
     }

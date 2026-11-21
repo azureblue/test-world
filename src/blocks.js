@@ -138,17 +138,19 @@ if (definitions.textures.length > MAX_TEXTURES)
  * with cutout the cutout blocks (their cutout textures instead, faces next to them not hidden) and textures (faces
  * drawn alpha tested, apart from the opaque ones).
  * @param {boolean} cutout whether blocks with cutout textures use them (Settings.render.cutoutLeaves)
- * @returns {{waterTexture: number, faces: Uint32Array, cutoutBlocks: Uint8Array, cutoutTextures: Uint8Array}}
- *   faces: MAX_BLOCK_ID * 6, by id then face; cutoutBlocks: 1 by id; cutoutTextures: 1 by layer
+ * @returns {{waterTexture: number, faces: Uint32Array, opaqueFaces: Uint32Array, cutoutBlocks: Uint8Array, cutoutTextures: Uint8Array}}
+ *   faces: MAX_BLOCK_ID * 6, by id then face; opaqueFaces: the same with the opaque textures (cutout blocks covered on
+ *   all sides use them); cutoutBlocks: 1 by id; cutoutTextures: 1 by layer
  */
 export function meshTextureTable(cutout) {
-    const faces = new Uint32Array(MAX_BLOCK_ID * 6);
+    const faces = new Uint32Array(MAX_BLOCK_ID * 6), opaqueFaces = new Uint32Array(MAX_BLOCK_ID * 6);
     const cutoutBlocks = new Uint8Array(MAX_BLOCK_ID), cutoutTextures = new Uint8Array(MAX_TEXTURES);
     for (const block of BLOCKS) {
         if (block === undefined)
             continue;
         const ids = cutout && block.cutoutTextureIds !== null ? block.cutoutTextureIds : block.textureIds;
         faces.set(ids, block.id * 6);
+        opaqueFaces.set(block.textureIds, block.id * 6);
         if (ids !== block.textureIds) {
             cutoutBlocks[block.id] = 1;
             for (const id of ids)
@@ -158,7 +160,7 @@ export function meshTextureTable(cutout) {
     for (const block of BLOCKS)
         if (block !== undefined && !cutoutBlocks[block.id] && block.textureIds.some(id => cutoutTextures[id]))
             throw new Error(`blocks.json: block ${block.name} uses a cutout texture without being cutout`);
-    return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], faces, cutoutBlocks, cutoutTextures };
+    return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], faces, opaqueFaces, cutoutBlocks, cutoutTextures };
 }
 
 export function isSolid(block) {

@@ -28,7 +28,8 @@ extern "C"
                 }
                 uint block_id = decode_block_id(block_data);
 
-                const uint(&block_textures)[6] = block_table.faces[block_id];
+                const bool buried = data.is_buried(h, x, y);
+                const uint(&block_textures)[6] = buried ? block_table.opaque_faces[block_id] : block_table.faces[block_id];
                 if (is_x_quads(block_data)) {
                     x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[1]);
                     x_quads_encoder::encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[2]);
@@ -60,8 +61,8 @@ extern "C"
                         water_encoder::encode_face_q<Direction::Right>(water_buffer, x - 1, y - 1, h - 1, level, bottom, water_texture);
                     continue;
                 }
-                // cutout blocks (leaves with holes) to their own output, drawn alpha tested
-                auto& face_buffer = block_table.cutout_blocks[block_id] ? buffers.mesh_cutout_cur : buffers.mesh_solid_cur;
+                // cutout blocks (leaves with holes) to their own output, drawn alpha tested; buried ones are opaque
+                auto& face_buffer = block_table.cutout_blocks[block_id] && !buried ? buffers.mesh_cutout_cur : buffers.mesh_solid_cur;
 
                 if (!hides_face(above)) {
                     quad_encoder::encode_face_q<Direction::Up>(face_buffer, data, x, y, h, block_textures[Direction::Up]);
