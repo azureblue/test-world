@@ -10,12 +10,13 @@ constexpr uint MAX_TEXTURES = 256;
 struct block_table_t {
     // the water faces' texture (water, plants in water)
     uint water_texture;
+    // the cutout bit of block values (bit 16) when cutout textures are used, 0 when not: a cutout block (leaves with
+    // holes) is solid, but it doesn't hide the faces next to it
+    uint cutout_flag;
     // by block id, then face (Direction: up, front, left, back, right, down)
     uint faces[MAX_BLOCK_ID][6];
     // the same with the opaque textures: a cutout block covered on all sides is drawn with them (see is_buried)
     uint opaque_faces[MAX_BLOCK_ID][6];
-    // 1: a cutout block (leaves with holes): solid, but it doesn't hide the faces next to it
-    uint8 cutout_blocks[MAX_BLOCK_ID];
     // 1: a cutout texture: its faces go to the cutout output, drawn alpha tested
     uint8 cutout_textures[MAX_TEXTURES];
 };
@@ -40,12 +41,12 @@ static inline uint is_solid_01(uint block) {
 }
 
 static inline uint decode_block_id(uint id) {
-    return id & 0xff'ffff;
+    return id & 0xffff;
 }
 
 // whether a block hides the face of its neighbour: solid and not cutout (its holes show what's behind)
 static inline bool hides_face(uint block) {
-    return is_solid(block) && !block_table.cutout_blocks[decode_block_id(block)];
+    return (block & (0x8000'0000u | block_table.cutout_flag)) == 0x8000'0000u;
 }
 
 static inline uint block_height(uint block) {

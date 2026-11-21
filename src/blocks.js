@@ -53,14 +53,15 @@ export class Block {
 
 // A block value: bit 31 solid cube, bit 30 liquid, bit 29 x-quads (plants), bit 27 flowing (water that isn't a
 // source, see world/waterFlow.js), bits 24..26 the height in 1/8 of a block (0 meaning full: water levels, later
-// slabs; see mesh/cpp/blocks.hpp), bits 0..23 the block id. A plant in water (waterlogged) is the plant with the
+// slabs; see mesh/cpp/blocks.hpp), bit 16 cutout (a cube with cutout textures), bits 0..15 the block id. A plant in water (waterlogged) is the plant with the
 // liquid bit, the water level and maybe the flowing bit: it's water for everything that checks isLiquid.
 const SOLID_CUBE_BIT = 31;
 const LIQUID_BIT = 30;
 const X_QUADS = 29;
 const FLOWING_BIT = 27;
 const HEIGHT_SHIFT = 24;
-const ID_MASK = 0xFFFFFF;
+const CUTOUT_BIT = 16;
+const ID_MASK = 0xFFFF;
 /** the water bits of a cell: liquid, flowing, height */
 const WATER_BITS = (1 << LIQUID_BIT) | (1 << FLOWING_BIT) | (0b111 << HEIGHT_SHIFT);
 export const BLOCK_HEIGHT_FULL = 8;
@@ -125,7 +126,7 @@ Object.freeze(BLOCKS);
 
 /** block values by name (the id with the model's kind bits), e.g. BLOCK_IDS.DIRT_GRASS */
 export const BLOCK_IDS = Object.freeze(Object.fromEntries(
-    BLOCKS.filter(b => b !== undefined).map(b => [b.name, b.id | MODEL_BITS[b.model]])));
+    BLOCKS.filter(b => b !== undefined).map(b => [b.name, (b.id | MODEL_BITS[b.model] | (b.cutoutTextureIds !== null ? 1 << CUTOUT_BIT : 0)) >>> 0])));
 
 /** texture layers are below this: 8 bits in the solid vertices (mesh/cpp/quad_encode.hpp), the meshers' table */
 export const MAX_TEXTURES = 256;
@@ -138,9 +139,9 @@ if (definitions.textures.length > MAX_TEXTURES)
  * with cutout the cutout blocks (their cutout textures instead, faces next to them not hidden) and textures (faces
  * drawn alpha tested, apart from the opaque ones).
  * @param {boolean} cutout whether blocks with cutout textures use them (Settings.render.cutoutLeaves)
- * @returns {{waterTexture: number, faces: Uint32Array, opaqueFaces: Uint32Array, cutoutBlocks: Uint8Array, cutoutTextures: Uint8Array}}
+ * @returns {{waterTexture: number, cutoutFlag: number, faces: Uint32Array, opaqueFaces: Uint32Array, cutoutTextures: Uint8Array}}
  *   faces: MAX_BLOCK_ID * 6, by id then face; opaqueFaces: the same with the opaque textures (cutout blocks covered on
- *   all sides use them); cutoutBlocks: 1 by id; cutoutTextures: 1 by layer
+ *   all sides use them); cutoutFlag: the cutout bit of block values with cutout, else 0; cutoutTextures: 1 by layer
  */
 export function meshTextureTable(cutout) {
     const faces = new Uint32Array(MAX_BLOCK_ID * 6), opaqueFaces = new Uint32Array(MAX_BLOCK_ID * 6);
@@ -160,7 +161,7 @@ export function meshTextureTable(cutout) {
     for (const block of BLOCKS)
         if (block !== undefined && !cutoutBlocks[block.id] && block.textureIds.some(id => cutoutTextures[id]))
             throw new Error(`blocks.json: block ${block.name} uses a cutout texture without being cutout`);
-    return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], faces, opaqueFaces, cutoutBlocks, cutoutTextures };
+    return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], cutoutFlag: cutout ? 1 << CUTOUT_BIT : 0, faces, opaqueFaces, cutoutTextures };
 }
 
 export function isSolid(block) {

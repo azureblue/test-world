@@ -35,8 +35,8 @@ const INITIAL_PAGES = WASM.bytesToPages(TOTAL_BYTES);
 
 /**
  * Writes the blocks' face textures (src/blocks.json) into a mesher's memory, where its block_table() points
- * (block_table_t in mesh/cpp/blocks.hpp: the water texture, MAX_BLOCK_ID * 6 face textures, as many opaque ones, then a
- * byte per block id and per texture: cutout or not).
+ * (block_table_t in mesh/cpp/blocks.hpp: the water texture, the cutout flag, MAX_BLOCK_ID * 6 face textures, as many
+ * opaque ones, then a byte per texture: cutout or not).
  * @param {WebAssembly.Exports} exports
  * @param {WebAssembly.Memory} mem
  * @param {boolean} cutout whether blocks with cutout textures use them (meshTextureTable)
@@ -44,15 +44,14 @@ const INITIAL_PAGES = WASM.bytesToPages(TOTAL_BYTES);
 function writeTextureTable(exports, mem, cutout) {
     if (exports.max_block_id() !== MAX_BLOCK_ID)
         throw new Error(`mesher: MAX_BLOCK_ID ${exports.max_block_id()}, blocks.js has ${MAX_BLOCK_ID}`);
-    const { waterTexture, faces, opaqueFaces, cutoutBlocks, cutoutTextures } = meshTextureTable(cutout);
+    const { waterTexture, cutoutFlag, faces, opaqueFaces, cutoutTextures } = meshTextureTable(cutout);
     const base = exports.block_table();
-    const table = new Uint32Array(mem.buffer, base, 1 + faces.length + opaqueFaces.length);
+    const table = new Uint32Array(mem.buffer, base, 2 + faces.length + opaqueFaces.length);
     table[0] = waterTexture;
-    table.set(faces, 1);
-    table.set(opaqueFaces, 1 + faces.length);
-    const bytes = new Uint8Array(mem.buffer, base + table.byteLength, MAX_BLOCK_ID + MAX_TEXTURES);
-    bytes.set(cutoutBlocks);
-    bytes.set(cutoutTextures, MAX_BLOCK_ID);
+    table[1] = cutoutFlag;
+    table.set(faces, 2);
+    table.set(opaqueFaces, 2 + faces.length);
+    new Uint8Array(mem.buffer, base + table.byteLength, MAX_TEXTURES).set(cutoutTextures);
 }
 
 export class UIntExtWasmMesher extends UIntMesher {

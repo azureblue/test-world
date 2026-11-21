@@ -80,7 +80,7 @@ struct array_3d {
     inline_always bool is_buried(uint h, uint x, uint y) const {
         uint idx = h * plane_size + y * sy + x;
         // the neighbours only for cutout blocks (a few of all)
-        if (!block_table.cutout_blocks[decode_block_id(data[idx])])
+        if (!(data[idx] & block_table.cutout_flag))
             return false;
         return is_solid_at(idx - 1) & is_solid_at(idx + 1) & is_solid_at(idx - sy) & is_solid_at(idx + sy) &
                is_solid_at(idx - plane_size) & is_solid_at(idx + plane_size);

@@ -20,7 +20,7 @@ headers := int.h blocks.hpp common.hpp quad_encode.hpp
 
 ../uIntWasmMesherQ.wasm: uIntWasmMesherQ.cpp $(headers)
 	clang --target=wasm32 \
-	-O3 \
+	-O3 -msimd128 \
 	-std=c++20 \
 	-ffreestanding -fno-builtin \
 	-fno-exceptions -fno-rtti \
