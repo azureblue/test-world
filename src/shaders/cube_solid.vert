@@ -1,7 +1,9 @@
 #version 300 es
 
-// a_in.x: position x, y, z; a_in.y: texture coordinates x, y (the merged face's size), n normal, t texture, s shadow
-//           zzzzzzzyyyyyyyxxxxxxx
+// a_in.x: position x, y, z, the light: b block light, d sky darkness (7 - sky light), each the sum of the 4 cells
+//   around the vertex (solid ones add 0); a_in.y: texture coordinates x, y (the merged face's size), n normal,
+//   t texture, s shadow (AO)
+//bbbbb dddddzzzzzzzyyyyyyyxxxxxxx
 //   ssttttttttnnn  yyyyyyyxxxxxxx
 //10987654321098765432109876543210
 layout (location = 0) in uvec2 a_in;
@@ -19,6 +21,18 @@ flat out uint o_norm;
 // vertex to camera; linear across a triangle, so the fragment shader gets the exact distance for the fog
 smooth out highp vec3 v_to_cam;
 smooth out float v_shadow;
+// the light's brightness, 0..1
+smooth out float v_light;
+
+// LIGHT_FALLOFF, LIGHT_SUN: Settings.light (WorldRenderer)
+float light_brightness(uint sky_darkness_sum, uint block_light_sum, uint shadow) {
+    // the open cells of the 4: AO 0..2 is the number of solid ones; 3 is two solid sides (the diagonal may be open,
+    // its light then makes the corner a bit brighter or darker, clamped)
+    float open_cells = shadow == 3u ? 1.0f : 4.0f - float(shadow);
+    float sky = 7.0f - min(float(sky_darkness_sum) / open_cells, 7.0f);
+    float block = min(float(block_light_sum) / open_cells, 7.0f);
+    return pow(LIGHT_FALLOFF, 7.0f - max(sky * LIGHT_SUN, block));
+}
 
 void main() {
     uint a_in_bits = a_in.x;
@@ -39,6 +53,7 @@ void main() {
 
     v_to_cam = cam_pos - pos;
     v_shadow = shadow_values[shadow];
+    v_light = light_brightness((a_in_bits >> 21) & 0x1Fu, a_in_bits >> 27, shadow);
     v_tex_coord = vec3(m_x, m_y, float(tex_idx));
     o_norm = normal_idx;
 }

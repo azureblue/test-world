@@ -65,13 +65,13 @@ inline_always static inner_masks inner_row(const uint* __restrict row, uint hide
     inner_masks m{0, 0, 0, 0};
     for (uint k = 0; k < CHUNK_SIZE / 4; k++) {
         const u32x4 blocks = *reinterpret_cast<const u32x4*>(row + 1 + k * 4);
-        const u32x4 special = blocks & special_bits;
         const uint at = k * 4;
         m.hides |= top_bits((blocks & hide_test) == solid_bit) << at;
         m.solid |= top_bits(blocks) << at;
-        m.cubes |= top_bits((blocks != 0) & (special == 0)) << at;
-        m.specials |= top_bits(special != 0) << at;
+        m.specials |= top_bits((blocks & special_bits) != 0) << at;
     }
+    // every cube is solid (the "cube" model, src/blocks.js); not a block value != 0 test: air has light bits
+    m.cubes = m.solid & ~m.specials;
     return m;
 }
 

@@ -40,8 +40,10 @@ static inline uint is_solid_01(uint block) {
     return block >> 31;
 }
 
+// the id below MAX_BLOCK_ID: the bits above it are free for the light in the mesher's input (LIGHT_BITS in common.hpp)
+static_assert((MAX_BLOCK_ID & (MAX_BLOCK_ID - 1)) == 0);
 static inline uint decode_block_id(uint id) {
-    return id & 0xffff;
+    return id & (MAX_BLOCK_ID - 1);
 }
 
 // whether a block hides the face of its neighbour: solid and not cutout (its holes show what's behind)

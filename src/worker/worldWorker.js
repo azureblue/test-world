@@ -23,7 +23,7 @@ const logger = new Logger("world worker " + workerId);
 const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator, Settings.world.seed);
 
 const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory());
-const meshOptions = { cutout: Settings.render.cutoutLeaves };
+const meshOptions = { cutout: Settings.render.cutoutLeaves, fakeLight: Settings.light.debugFake };
 const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
 
 /**

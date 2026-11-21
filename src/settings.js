@@ -30,6 +30,18 @@ export const Settings = {
         cutoutLeaves: true
     },
 
+    // sky and block light, 8 levels (0..7) each (docs/proposals/lighting.md); for now only the cubes' faces
+    light: {
+        // the brightness of a light level l is falloff^(7 - l): 0.75 makes level 0 (a cave) 0.13 of full light
+        falloff: 0.75,
+        // the sky light's strength, 0..1 (later: day and night)
+        sun: 1,
+        // test light until the light is computed, within each chunk only: full sky light in the cells open to its top,
+        // less in the cells that see the sky at 45° (less directly under a block, full 6 blocks or more under it),
+        // spread from there 1 less per block (2 sideways under a block); no light from the chunks around
+        debugFake: false
+    },
+
     camera: {
         // world position of the eye: x, y on the ground, z up (the player's feet are eyeHeight below)
         startPosition: [2, 2, 2],

@@ -14,11 +14,12 @@ inline_always constexpr static T encode_value(V value) {
 
 class quad_encoder {
    public:
+    // a merged face (the main mesher): ao_shadows 2 bits per vertex, light 8 bits per vertex (encode_layer_light_bits)
     template <Direction DIR>
-    inline_always static void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex, uint ao_shadows) {
+    inline_always static void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex, uint ao_shadows, uint light) {
         uint64 v0, v1, v2, v3;
 
-        bool reverse_winding = encode_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, tex, ao_shadows);
+        bool reverse_winding = encode_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, tex, ao_shadows, light);
         encode(out, v0, v1, v2, v3, reverse_winding);
     }
 
@@ -31,7 +32,7 @@ class quad_encoder {
     }
 
     template <Direction DIR>
-    inline_always static bool encode_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex_id, uint ao_shadow) {
+    inline_always static bool encode_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex_id, uint ao_shadow, uint light) {
         uint ao0 = (ao_shadow >> 0) & 0b11;
         uint ao1 = (ao_shadow >> 2) & 0b11;
         uint ao2 = (ao_shadow >> 4) & 0b11;
@@ -39,10 +40,10 @@ class quad_encoder {
 
         uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, tex_id);
 
-        v0 = base_bits | encode_ao_bits(ao0);
-        v1 = base_bits + POS_OFFSET_W<DIR> * w | MERGE_BIT_W * w | encode_ao_bits(ao1);
-        v2 = base_bits + POS_OFFSET_W<DIR> * w + POS_OFFSET_H<DIR> * h | MERGE_BIT_W * w | MERGE_BIT_H * h | encode_ao_bits(ao2);
-        v3 = base_bits + POS_OFFSET_H<DIR> * h | MERGE_BIT_H * h | encode_ao_bits(ao3);
+        v0 = base_bits | encode_ao_bits(ao0) | encode_layer_light_bits(light);
+        v1 = base_bits + POS_OFFSET_W<DIR> * w | MERGE_BIT_W * w | encode_ao_bits(ao1) | encode_layer_light_bits(light >> 8);
+        v2 = base_bits + POS_OFFSET_W<DIR> * w + POS_OFFSET_H<DIR> * h | MERGE_BIT_W * w | MERGE_BIT_H * h | encode_ao_bits(ao2) | encode_layer_light_bits(light >> 16);
+        v3 = base_bits + POS_OFFSET_H<DIR> * h | MERGE_BIT_H * h | encode_ao_bits(ao3) | encode_layer_light_bits(light >> 24);
 
         return (ao0 + ao2) > (ao1 + ao3);
     }
@@ -67,10 +68,10 @@ class quad_encoder {
 
         uint64 base_bits = (pos_bits + pos_offset_bits<DIR>) | encode_tex_bits(tex) | encode_dir_bits(DIR);
 
-        uint64 v0 = base_bits | encode_ao_bits(aos.v0);
-        uint64 v1 = base_bits + POS_OFFSET_W<DIR> | MERGE_BIT_W | encode_ao_bits(aos.v1);
-        uint64 v2 = base_bits + POS_OFFSET_W<DIR> + POS_OFFSET_H<DIR> | MERGE_BIT_W | MERGE_BIT_H | encode_ao_bits(aos.v2);
-        uint64 v3 = base_bits + POS_OFFSET_H<DIR> | MERGE_BIT_H | encode_ao_bits(aos.v3);
+        uint64 v0 = base_bits | encode_ao_bits(aos.v0) | encode_light_bits(aos.l0);
+        uint64 v1 = base_bits + POS_OFFSET_W<DIR> | MERGE_BIT_W | encode_ao_bits(aos.v1) | encode_light_bits(aos.l1);
+        uint64 v2 = base_bits + POS_OFFSET_W<DIR> + POS_OFFSET_H<DIR> | MERGE_BIT_W | MERGE_BIT_H | encode_ao_bits(aos.v2) | encode_light_bits(aos.l2);
+        uint64 v3 = base_bits + POS_OFFSET_H<DIR> | MERGE_BIT_H | encode_ao_bits(aos.v3) | encode_light_bits(aos.l3);
 
         bool reverse_winding = (aos.v0 + aos.v2) > (aos.v1 + aos.v3);
         encode(out, v0, v1, v2, v3, reverse_winding);
@@ -92,6 +93,18 @@ class quad_encoder {
 
     inline_always static uint64 encode_tex_bits(uint tex_id) {
         return encode_value<uint64, 51>(tex_id);
+    }
+
+    // a vertex's light (corner_light in common.hpp: the sums of 4 cells, the sky darkness in bits 11..15, the block
+    // light in 17..21) to bits 21..25 and 27..31; without it (the main mesher) 0: full sky light
+    inline_always static uint64 encode_light_bits(uint light) {
+        return encode_value<uint64, 21 - SKY_DARKNESS_SHIFT>(light);
+    }
+
+    // a vertex's light from the main mesher's layers (the low 8 bits: corner_light's sums halved, the sky darkness in
+    // bits 0..3, the block light in 4..7) to the same vertex bits, doubled back (their lowest bit lost)
+    inline_always static uint64 encode_layer_light_bits(uint light) {
+        return encode_value<uint64, 22>(light & 0xf) | encode_value<uint64, 28>(light >> 4 & 0xf);
     }
 
     inline_always static uint64 encode_dir_bits(Direction dir) {

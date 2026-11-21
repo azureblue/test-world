@@ -11,18 +11,21 @@ constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
 // A face in a layer, 32 bits: bits 0..7 the AO shadows (2 bits per vertex) or the water's level and bottom, 8..19 the
 // texture + 1 (0 is no face, so a face with texture 0 and no shadows is one), then the merge counters: 20..25 the
-// width, 26..31 the height (1..32 each). Faces merge when bits 0..19 match.
+// width, 26..31 the height (1..32 each). Its vertices' light (8 bits each, layer_vertex_light) is at the same place in
+// the light layers: written with every face and read only where there is one, so the scans over empty layers don't
+// touch it and it's never cleared. Faces merge when both match.
 constexpr uint LAYER_TEXTURE_SHIFT = 8;
 constexpr uint LAYER_WIDTH_SHIFT = 20;
 constexpr uint LAYER_HEIGHT_SHIFT = 26;
-// what merged faces share
+// what merged faces share (besides the light)
 constexpr uint LAYER_FACE_BITS = (1u << LAYER_WIDTH_SHIFT) - 1;
 // the face and its width: a row merged along x, to merge with the row's run above if both match
 constexpr uint LAYER_FACE_WIDTH_BITS = (1u << LAYER_HEIGHT_SHIFT) - 1;
 
 // the face layers: the current height's up and down faces (planes 0, 5), the side faces of the current height and the
-// one below (planes 1..4 and 7..10, by turns), whose runs merge upwards
+// one below (planes 1..4 and 7..10, by turns), whose runs merge upwards; and their faces' light
 static uint layers_data[CHUNK_SIZE * CHUNK_SIZE * 12];
+static uint lights_data[CHUNK_SIZE * CHUNK_SIZE * 12];
 
 static inline uint layer_face(uint texture, uint data) {
     return (texture + 1) << LAYER_TEXTURE_SHIFT | data;
@@ -42,6 +45,30 @@ static inline uint layer_height(uint face) {
 
 static inline uint with_layer_height(uint face, uint height) {
     return (face & LAYER_FACE_WIDTH_BITS) | height << LAYER_HEIGHT_SHIFT;
+}
+
+// a vertex's light (corner_light) in 8 bits: the sums halved, the sky darkness in bits 0..3, the block light in 4..7
+static inline uint layer_vertex_light(uint light) {
+    return (light >> (SKY_DARKNESS_SHIFT + 1) & 0xf) | (light >> (BLOCK_LIGHT_SHIFT + 1) & 0xf) << 4;
+}
+
+// a face's data (the AO shadows, or the water's level and bottom) and its vertices' light
+struct face_shading_t {
+    uint data;
+    uint light;
+};
+
+template <Direction DIR>
+static inline face_shading_t face_shading(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    const ao_shadows::vertex_data v = ao_shadows::compute<DIR>(data, h, x, y);
+    return {v.v0 | v.v1 << 2 | v.v2 << 4 | v.v3 << 6,
+            layer_vertex_light(v.l0) | layer_vertex_light(v.l1) << 8 | layer_vertex_light(v.l2) << 16 | layer_vertex_light(v.l3) << 24};
+}
+
+// a face into the layers: plane, then the layer's x and y
+static inline void set_face(array_3d<CHUNK_SIZE>& layers, array_3d<CHUNK_SIZE>& lights, uint plane, uint lx, uint ly, uint texture, face_shading_t shading) {
+    layers.set_hxy(plane, lx, ly, layer_face(texture, shading.data));
+    lights.set_hxy(plane, lx, ly, shading.light);
 }
 
 // Solid faces are sorted front-to-back per direction, so early depth test rejects hidden faces inside a chunk.
@@ -82,9 +109,9 @@ static inline void begin(face_buffers& buffers) {
 }
 
 template <Direction DIR>
-inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows) {
+inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows, uint light) {
     keys[count++] = static_cast<uint8>(key<DIR>(x, y, h));
-    quad_encoder::encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows);
+    quad_encoder::encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows, light);
 }
 
 static void finish(face_buffers& buffers) {
@@ -127,28 +154,28 @@ static inline void begin() {
 }
 
 template <Direction DIR>
-inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows) {
+inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows, uint light) {
     keys[count++] = static_cast<uint8>(solid_sort::key<DIR>(x, y, h));
-    quad_encoder::encode_face<DIR>(buffers.mesh_cutout_cur, x, y, h, width, height, texture_id, shadows);
+    quad_encoder::encode_face<DIR>(buffers.mesh_cutout_cur, x, y, h, width, height, texture_id, shadows, light);
 }
 }  // namespace cutout_sort
 
 // a merged face to its output: water, cutout or solid; x, y, h the block position of its first corner
 template <Direction DIR>
-inline_always static void encode_merged(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint face) {
+inline_always static void encode_merged(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint face, uint light) {
     const uint texture_id = layer_face_texture(face);
     const uint shadows = face & 0xff;
     if (texture_id == block_table.water_texture) {
         water_encoder::encode_face<DIR>(buffers.mesh_water_cur, x, y, h, width, height, shadows & 0b1111, shadows >> 4, texture_id);
     } else if (block_table.cutout_textures[texture_id]) {
-        cutout_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows);
+        cutout_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows, light);
     } else {
-        solid_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows);
+        solid_sort::encode_face<DIR>(buffers, x, y, h, width, height, texture_id, shadows, light);
     }
 }
 
 template <Direction DIR>
-static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint face) {
+static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint light) {
     constexpr uint dir_encode_base_idx = (DIR << 3);
     constexpr int dir_xx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 0];
     constexpr int dir_xy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 1];
@@ -158,21 +185,21 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
     constexpr int dir_yy_add = DIRECTION_ENCODE[dir_encode_base_idx + 5];
     uint x = dir_xx_add + dir_xx_mul * layer_x + dir_xy_mul * layer_y;
     uint y = dir_yy_add + dir_yx_mul * layer_x + dir_yy_mul * layer_y;
-    encode_merged<DIR>(buffers, x, y, h, width, height, face);
+    encode_merged<DIR>(buffers, x, y, h, width, height, face, light);
 }
 
 template <>
-inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face) {
-    encode_merged<Direction::Up>(buffers, layer_x, layer_y, layer_h, width, height, face);
+inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint light) {
+    encode_merged<Direction::Up>(buffers, layer_x, layer_y, layer_h, width, height, face, light);
 }
 
 template <>
-inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face) {
-    encode_merged<Direction::Down>(buffers, layer_x, (CHUNK_SIZE - 1) - layer_y, layer_h, width, height, face);
+inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint light) {
+    encode_merged<Direction::Down>(buffers, layer_x, (CHUNK_SIZE - 1) - layer_y, layer_h, width, height, face, light);
 }
 
 template <Direction DIR>
-void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {
+void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const array_3d<CHUNK_SIZE>& lights, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {
     uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
     uint layer_start_top = layers.plane_idx(DIR + top_layer_offset);
     uint layer_end_idx = layer_start_current + PLANE_SIZE;
@@ -186,8 +213,9 @@ void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& 
                 i++;
                 continue;
             }
+            const uint light_i = lights.get_idx(i);
             while (j < row_end) {
-                if (data_i != layers.get_idx(j))
+                if (data_i != layers.get_idx(j) || light_i != lights.get_idx(j))
                     break;
                 j += 1;
             }
@@ -204,20 +232,22 @@ void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& 
         uint top_w = layer_width(top);
         uint top_h = layer_height(top);
         uint cur = layers.get_idx((layer_start_current + i));
-        if ((top & LAYER_FACE_WIDTH_BITS) == (cur & LAYER_FACE_WIDTH_BITS) && top_h < CHUNK_SIZE) {
+        const uint top_light = lights.get_idx(layer_start_top + i);
+        if ((top & LAYER_FACE_WIDTH_BITS) == (cur & LAYER_FACE_WIDTH_BITS) && top_h < CHUNK_SIZE && top_light == lights.get_idx(layer_start_current + i)) {
             layers.set_idx((layer_start_current + i), with_layer_height(cur, top_h + 1));
         } else {
             uint x = i & 31;
             uint y = i >> 5;
-            merge_encode_face<DIR>(buffer, real_h - top_h, x, y, top_w, top_h, top & LAYER_FACE_BITS);
+            merge_encode_face<DIR>(buffer, real_h - top_h, x, y, top_w, top_h, top & LAYER_FACE_BITS, top_light);
         }
         i += top_w;
     }
 }
 
 template <Direction DIR>
-void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint real_h) {
-    // the current row and the one before, copied from the layer: the runs merged along x, then upwards (y)
+void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const array_3d<CHUNK_SIZE>& lights, uint real_h) {
+    // the current row and the one before, copied from the layer: the runs merged along x, then upwards (y); a run's
+    // light is its first face's in the layer
     uint t_c[CHUNK_SIZE * 2];
 
     for (uint i = 0; i < CHUNK_SIZE * 2; i++) {
@@ -238,10 +268,11 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, ui
                 i += 1;
                 continue;
             }
+            const uint light_i = lights.get_idx(row_idx + i);
             uint j = i + 1;
             for (; j < CHUNK_SIZE; j++) {
                 uint idx_j = (current_row_idx + j);
-                if (t_c[idx_i] != t_c[idx_j]) {
+                if (t_c[idx_i] != t_c[idx_j] || light_i != lights.get_idx(row_idx + j)) {
                     break;
                 }
             }
@@ -259,10 +290,11 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, ui
             uint top_w = layer_width(top);
             uint top_h = layer_height(top);
             uint cur = t_c[idx_i];
-            if ((top & LAYER_FACE_WIDTH_BITS) == (cur & LAYER_FACE_WIDTH_BITS)) {
+            const uint top_light = lights.get_idx(row_idx - CHUNK_SIZE + i);
+            if ((top & LAYER_FACE_WIDTH_BITS) == (cur & LAYER_FACE_WIDTH_BITS) && top_light == lights.get_idx(row_idx + i)) {
                 t_c[idx_i] = with_layer_height(cur, top_h + 1);
             } else {
-                merge_encode_face<DIR>(buffer, real_h, i, y - top_h, top_w, top_h, top & LAYER_FACE_BITS);
+                merge_encode_face<DIR>(buffer, real_h, i, y - top_h, top_w, top_h, top & LAYER_FACE_BITS, top_light);
             }
             i += top_w;
         }
@@ -277,13 +309,13 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, ui
         uint top_h = layer_height(top);
         uint top_w = layer_width(top);
         uint y = (CHUNK_SIZE - top_h);
-        merge_encode_face<DIR>(buffer, real_h, i, y, top_w, top_h, top & LAYER_FACE_BITS);
+        merge_encode_face<DIR>(buffer, real_h, i, y, top_w, top_h, top & LAYER_FACE_BITS, lights.get_idx(layers.row_idx(DIR, CHUNK_SIZE - 1) + i));
         i += top_w;
     }
 }
 
 template <Direction DIR>
-void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, uint& current_layer_offset) {
+void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const array_3d<CHUNK_SIZE>& lights, uint& current_layer_offset) {
     const uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
 
     for (uint i = 0; i < layer_len;) {
@@ -296,7 +328,7 @@ void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers,
         uint top_h = layer_height(top);
         uint x = i & 31;
         uint y = i >> 5;
-        merge_encode_face<DIR>(buffer, CHUNK_SIZE - top_h, x, y, top_w, top_h, top & LAYER_FACE_BITS);
+        merge_encode_face<DIR>(buffer, CHUNK_SIZE - top_h, x, y, top_w, top_h, top & LAYER_FACE_BITS, lights.get_idx(layer_start_current + i));
         i += top_w;
     }
 }
@@ -322,6 +354,7 @@ extern "C"
 
     array_3d<CHUNK_SIZE_E> data(in_chunk_data_ptr);
     array_3d<CHUNK_SIZE> layers(layers_data);
+    array_3d<CHUNK_SIZE> lights(lights_data);
     layers.fill_planes(6, 5, 0);
 
     uint current_layer_offset = 0;
@@ -361,68 +394,68 @@ extern "C"
                     // no AO on water, the low byte of the face data holds the water level and the side face bottom
                     uint level = block_height(block_data);
                     if (!water_top_hidden(level, above))
-                        layers.set_hxy(0, real_x, real_y, layer_face(water_texture, water_face_data(level, 0)));
+                        set_face(layers, lights, 0, real_x, real_y, water_texture, {water_face_data(level, 0), 0});
                     if (!water_bottom_hidden(data.get_hxy(h - 1, x, y)))
-                        layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, layer_face(water_texture, water_face_data(level, 0)));
+                        set_face(layers, lights, 5, real_x, CHUNK_SIZE - 1 - real_y, water_texture, {water_face_data(level, 0), 0});
                     uint bottom = water_side_bottom(level, data.get_hxy(h, x, y - 1));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, layer_face(water_texture, water_face_data(level, bottom)));
+                        set_face(layers, lights, current_layer_offset + Direction::Front, real_x, real_y, water_texture, {water_face_data(level, bottom), 0});
                     bottom = water_side_bottom(level, data.get_hxy(h, x - 1, y));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Left, CHUNK_SIZE - 1 - real_y, real_x, layer_face(water_texture, water_face_data(level, bottom)));
+                        set_face(layers, lights, current_layer_offset + Direction::Left, CHUNK_SIZE - 1 - real_y, real_x, water_texture, {water_face_data(level, bottom), 0});
                     bottom = water_side_bottom(level, data.get_hxy(h, x, y + 1));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Back, CHUNK_SIZE - 1 - real_x, CHUNK_SIZE - 1 - real_y, layer_face(water_texture, water_face_data(level, bottom)));
+                        set_face(layers, lights, current_layer_offset + Direction::Back, CHUNK_SIZE - 1 - real_x, CHUNK_SIZE - 1 - real_y, water_texture, {water_face_data(level, bottom), 0});
                     bottom = water_side_bottom(level, data.get_hxy(h, x + 1, y));
                     if (bottom < level)
-                        layers.set_hxy(current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, layer_face(water_texture, water_face_data(level, bottom)));
+                        set_face(layers, lights, current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, water_texture, {water_face_data(level, bottom), 0});
                     continue;
                 }
 
                 if (!hides_face(above)) {
-                    uint shadows = ao_shadows::encode<Direction::Up>(data, h, x, y);
-                    layers.set_hxy(0, real_x, real_y, layer_face(block_textures[0], shadows));
+                    const face_shading_t shading = face_shading<Direction::Up>(data, h, x, y);
+                    set_face(layers, lights, 0, real_x, real_y, block_textures[0], shading);
                 }
 
                 if (!hides_face(data.get_hxy(h - 1, x, y))) {
-                    uint shadows = ao_shadows::encode<Direction::Down>(data, h, x, y);
-                    layers.set_hxy(5, real_x, CHUNK_SIZE - 1 - real_y, layer_face(block_textures[5], shadows));
+                    const face_shading_t shading = face_shading<Direction::Down>(data, h, x, y);
+                    set_face(layers, lights, 5, real_x, CHUNK_SIZE - 1 - real_y, block_textures[5], shading);
                 }
 
                 if (!hides_face(data.get_hxy(h, x, y - 1))) {
-                    uint shadows = ao_shadows::encode<Direction::Front>(data, h, x, y);
-                    layers.set_hxy(current_layer_offset + Direction::Front, real_x, real_y, layer_face(block_textures[1], shadows));
+                    const face_shading_t shading = face_shading<Direction::Front>(data, h, x, y);
+                    set_face(layers, lights, current_layer_offset + Direction::Front, real_x, real_y, block_textures[1], shading);
                 }
 
                 if (!hides_face(data.get_hxy(h, x - 1, y))) {
-                    uint shadows = ao_shadows::encode<Direction::Left>(data, h, x, y);
-                    layers.set_hxy(current_layer_offset + Direction::Left, CHUNK_SIZE - 1 - real_y, real_x, layer_face(block_textures[2], shadows));
+                    const face_shading_t shading = face_shading<Direction::Left>(data, h, x, y);
+                    set_face(layers, lights, current_layer_offset + Direction::Left, CHUNK_SIZE - 1 - real_y, real_x, block_textures[2], shading);
                 }
 
                 if (!hides_face(data.get_hxy(h, x, y + 1))) {
-                    uint shadows = ao_shadows::encode<Direction::Back>(data, h, x, y);
-                    layers.set_hxy(current_layer_offset + Direction::Back, CHUNK_SIZE - 1 - real_x, CHUNK_SIZE - 1 - real_y, layer_face(block_textures[3], shadows));
+                    const face_shading_t shading = face_shading<Direction::Back>(data, h, x, y);
+                    set_face(layers, lights, current_layer_offset + Direction::Back, CHUNK_SIZE - 1 - real_x, CHUNK_SIZE - 1 - real_y, block_textures[3], shading);
                 }
 
                 if (!hides_face(data.get_hxy(h, x + 1, y))) {
-                    uint shadows = ao_shadows::encode<Direction::Right>(data, h, x, y);
-                    layers.set_hxy(current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, layer_face(block_textures[4], shadows));
+                    const face_shading_t shading = face_shading<Direction::Right>(data, h, x, y);
+                    set_face(layers, lights, current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, block_textures[4], shading);
                 }
             }
         }
 
-        merge_top_down_faces<Direction::Up>(buffers, layers, real_h);
-        merge_top_down_faces<Direction::Down>(buffers, layers, real_h);
-        merge_side_faces<Direction::Front>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
-        merge_side_faces<Direction::Left>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
-        merge_side_faces<Direction::Back>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
-        merge_side_faces<Direction::Right>(buffers, layers, current_layer_offset, top_layer_offset, real_h);
+        merge_top_down_faces<Direction::Up>(buffers, layers, lights, real_h);
+        merge_top_down_faces<Direction::Down>(buffers, layers, lights, real_h);
+        merge_side_faces<Direction::Front>(buffers, layers, lights, current_layer_offset, top_layer_offset, real_h);
+        merge_side_faces<Direction::Left>(buffers, layers, lights, current_layer_offset, top_layer_offset, real_h);
+        merge_side_faces<Direction::Back>(buffers, layers, lights, current_layer_offset, top_layer_offset, real_h);
+        merge_side_faces<Direction::Right>(buffers, layers, lights, current_layer_offset, top_layer_offset, real_h);
     }
 
-    merge_side_faces_finish<Direction::Front>(buffers, layers, current_layer_offset);
-    merge_side_faces_finish<Direction::Left>(buffers, layers, current_layer_offset);
-    merge_side_faces_finish<Direction::Back>(buffers, layers, current_layer_offset);
-    merge_side_faces_finish<Direction::Right>(buffers, layers, current_layer_offset);
+    merge_side_faces_finish<Direction::Front>(buffers, layers, lights, current_layer_offset);
+    merge_side_faces_finish<Direction::Left>(buffers, layers, lights, current_layer_offset);
+    merge_side_faces_finish<Direction::Back>(buffers, layers, lights, current_layer_offset);
+    merge_side_faces_finish<Direction::Right>(buffers, layers, lights, current_layer_offset);
 
     solid_sort::finish(buffers);
     return complete_buffers(buffers, cutout_sort::keys);

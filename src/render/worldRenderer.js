@@ -150,10 +150,11 @@ export class WorldRenderer {
             withDefines(await Resources.loadText(`shaders/${vert}`), defines),
             withDefines(await Resources.loadText(`shaders/${frag}`), defines));
         const cubeFrag = Settings.debug.overdraw ? "overdraw.frag" : "cube_solid.frag";
+        const light = { LIGHT_FALLOFF: Settings.light.falloff, LIGHT_SUN: Settings.light.sun };
         const programs = {
-            cubeSolid: await program("cube_solid.vert", cubeFrag),
+            cubeSolid: await program("cube_solid.vert", cubeFrag, light),
             // the cube program with the alpha test (cube_solid.frag, CUTOUT), for the cutout faces
-            cubeCutout: await program("cube_solid.vert", cubeFrag, { CUTOUT: true }),
+            cubeCutout: await program("cube_solid.vert", cubeFrag, { ...light, CUTOUT: true }),
             xQuads: await program("x_quads.vert", "x_quads.frag"),
             water: await program("water.vert", "water.frag", waterDefines()),
             waterDepth: await program("water_depth.vert", "water_depth.frag"),

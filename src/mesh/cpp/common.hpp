@@ -131,6 +131,22 @@ inline_always constexpr static bool is_bit_set(uint value, uint bit) {
     return (value >> bit) & 1;
 }
 
+// A cell's light, only in the mesher's input (docs/proposals/lighting.md), in bits the block values leave 0 (ids are
+// below MAX_BLOCK_ID): bits 11..13 the sky light's darkness (7 - sky light), bits 17..19 the block light; solid cells 0.
+// 0, data without light, is full sky light and no block light. Each field has 2 free bits above it, so the lights of 4
+// cells add up without carrying into the next field (28 at most).
+constexpr uint SKY_DARKNESS_SHIFT = 11;
+constexpr uint BLOCK_LIGHT_SHIFT = 17;
+constexpr uint LIGHT_BITS = 7u << SKY_DARKNESS_SHIFT | 7u << BLOCK_LIGHT_SHIFT;
+static_assert(MAX_BLOCK_ID <= 1u << SKY_DARKNESS_SHIFT);
+
+// A vertex's light: the sum of the face's front cell and the 3 cells around the vertex (sides a, b, diagonal c), still
+// in LIGHT_BITS' fields. Solid cells add 0: the shader divides by the open cells, which the vertex's AO tells.
+inline_always static uint corner_light(uint front, uint a, uint b, uint c) {
+    return (front & LIGHT_BITS) + (a & LIGHT_BITS) + (b & LIGHT_BITS) + (c & LIGHT_BITS);
+}
+
+// a face's AO shadows (v) and light (l, see corner_light) per vertex
 class ao_shadows {
    public:
     struct vertex_data {
@@ -138,20 +154,19 @@ class ao_shadows {
         uint v1;
         uint v2;
         uint v3;
+        uint l0;
+        uint l1;
+        uint l2;
+        uint l3;
     };
     template <Direction DIR>
     inline_always static vertex_data compute(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y);
 
-    template <Direction DIR>
-    inline_always static uint encode(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-        vertex_data shadows = compute<DIR>(data, h, x, y);
-        return (shadows.v0) | (shadows.v1 << 2) | (shadows.v2 << 4) | (shadows.v3 << 6);
-    }
-
    private:
-    inline_always static constexpr uint ao_value(uint a, uint b, uint c) {
-        const uint s = a + b;
-        return s == 2 ? 3 : s + c;
+    // the cells around a vertex: sides a, b, diagonal c
+    inline_always static uint ao_value(uint a, uint b, uint c) {
+        const uint s = is_solid_01(a) + is_solid_01(b);
+        return s == 2 ? 3 : s + is_solid_01(c);
     }
 };
 
@@ -161,18 +176,23 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Up>(const a
     constexpr int S = CHUNK_SIZE_E;
     constexpr int P = PLANE_SIZE_E;
     ao_shadows::vertex_data shadows;
-    uint c0 = is_solid_01(base[P - S - 1]);
-    uint c1 = is_solid_01(base[P - S]);
-    uint c2 = is_solid_01(base[P - S + 1]);
-    uint c3 = is_solid_01(base[P - 1]);
+    const uint front = base[P];
+    uint c0 = base[P - S - 1];
+    uint c1 = base[P - S];
+    uint c2 = base[P - S + 1];
+    uint c3 = base[P - 1];
     shadows.v0 = ao_value(c3, c1, c0);
-    uint c4 = is_solid_01(base[P + 1]);
+    shadows.l0 = corner_light(front, c3, c1, c0);
+    uint c4 = base[P + 1];
     shadows.v1 = ao_value(c1, c4, c2);
-    uint c5 = is_solid_01(base[P + S - 1]);
-    uint c6 = is_solid_01(base[P + S]);
+    shadows.l1 = corner_light(front, c1, c4, c2);
+    uint c5 = base[P + S - 1];
+    uint c6 = base[P + S];
     shadows.v3 = ao_value(c6, c3, c5);
-    uint c7 = is_solid_01(base[P + S + 1]);
+    shadows.l3 = corner_light(front, c6, c3, c5);
+    uint c7 = base[P + S + 1];
     shadows.v2 = ao_value(c4, c6, c7);
+    shadows.l2 = corner_light(front, c4, c6, c7);
     return shadows;
 }
 
@@ -182,19 +202,24 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Front>(cons
     constexpr int S = CHUNK_SIZE_E;
     constexpr int P = PLANE_SIZE_E;
     ao_shadows::vertex_data shadows;
+    const uint front = base[-S];
 
-    uint c0 = is_solid_01(base[-P - S - 1]);
-    uint c1 = is_solid_01(base[-P - S]);
-    uint c2 = is_solid_01(base[-P - S + 1]);
-    uint c3 = is_solid_01(base[-S - 1]);
+    uint c0 = base[-P - S - 1];
+    uint c1 = base[-P - S];
+    uint c2 = base[-P - S + 1];
+    uint c3 = base[-S - 1];
     shadows.v0 = ao_value(c3, c1, c0);
-    uint c4 = is_solid_01(base[-S + 1]);
+    shadows.l0 = corner_light(front, c3, c1, c0);
+    uint c4 = base[-S + 1];
     shadows.v1 = ao_value(c1, c4, c2);
-    uint c5 = is_solid_01(base[P - S - 1]);
-    uint c6 = is_solid_01(base[P - S]);
+    shadows.l1 = corner_light(front, c1, c4, c2);
+    uint c5 = base[P - S - 1];
+    uint c6 = base[P - S];
     shadows.v3 = ao_value(c6, c3, c5);
-    uint c7 = is_solid_01(base[P - S + 1]);
+    shadows.l3 = corner_light(front, c6, c3, c5);
+    uint c7 = base[P - S + 1];
     shadows.v2 = ao_value(c4, c6, c7);
+    shadows.l2 = corner_light(front, c4, c6, c7);
     return shadows;
 }
 
@@ -204,18 +229,23 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Left>(const
     constexpr int S = CHUNK_SIZE_E;
     constexpr int P = PLANE_SIZE_E;
     ao_shadows::vertex_data shadows;
-    uint c0 = is_solid_01(base[-P - S - 1]);
-    uint c1 = is_solid_01(base[-P - 1]);
-    uint c2 = is_solid_01(base[-P + S - 1]);
-    uint c3 = is_solid_01(base[-S - 1]);
+    const uint front = base[-1];
+    uint c0 = base[-P - S - 1];
+    uint c1 = base[-P - 1];
+    uint c2 = base[-P + S - 1];
+    uint c3 = base[-S - 1];
     shadows.v1 = ao_value(c1, c3, c0);
-    uint c4 = is_solid_01(base[S - 1]);
+    shadows.l1 = corner_light(front, c1, c3, c0);
+    uint c4 = base[S - 1];
     shadows.v0 = ao_value(c4, c1, c2);
-    uint c5 = is_solid_01(base[P - S - 1]);
-    uint c6 = is_solid_01(base[P - 1]);
+    shadows.l0 = corner_light(front, c4, c1, c2);
+    uint c5 = base[P - S - 1];
+    uint c6 = base[P - 1];
     shadows.v2 = ao_value(c3, c6, c5);
-    uint c7 = is_solid_01(base[P + S - 1]);
+    shadows.l2 = corner_light(front, c3, c6, c5);
+    uint c7 = base[P + S - 1];
     shadows.v3 = ao_value(c6, c4, c7);
+    shadows.l3 = corner_light(front, c6, c4, c7);
     return shadows;
 }
 
@@ -225,18 +255,23 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Back>(const
     constexpr int S = CHUNK_SIZE_E;
     constexpr int P = PLANE_SIZE_E;
     ao_shadows::vertex_data shadows;
-    uint c0 = is_solid_01(base[-P + S - 1]);
-    uint c1 = is_solid_01(base[-P + S]);
-    uint c2 = is_solid_01(base[-P + S + 1]);
-    uint c3 = is_solid_01(base[S - 1]);
+    const uint front = base[S];
+    uint c0 = base[-P + S - 1];
+    uint c1 = base[-P + S];
+    uint c2 = base[-P + S + 1];
+    uint c3 = base[S - 1];
     shadows.v1 = ao_value(c1, c3, c0);
-    uint c4 = is_solid_01(base[S + 1]);
+    shadows.l1 = corner_light(front, c1, c3, c0);
+    uint c4 = base[S + 1];
     shadows.v0 = ao_value(c4, c1, c2);
-    uint c5 = is_solid_01(base[P + S - 1]);
-    uint c6 = is_solid_01(base[P + S]);
+    shadows.l0 = corner_light(front, c4, c1, c2);
+    uint c5 = base[P + S - 1];
+    uint c6 = base[P + S];
     shadows.v2 = ao_value(c3, c6, c5);
-    uint c7 = is_solid_01(base[P + S + 1]);
+    shadows.l2 = corner_light(front, c3, c6, c5);
+    uint c7 = base[P + S + 1];
     shadows.v3 = ao_value(c6, c4, c7);
+    shadows.l3 = corner_light(front, c6, c4, c7);
     return shadows;
 }
 
@@ -246,18 +281,23 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Right>(cons
     constexpr int P = PLANE_SIZE_E;
     uint* __restrict base = data.get_ptr_hxy(h, x, y);
     ao_shadows::vertex_data shadows;
-    uint c0 = is_solid_01(base[-P - S + 1]);
-    uint c1 = is_solid_01(base[-P + 1]);
-    uint c2 = is_solid_01(base[-P + S + 1]);
-    uint c3 = is_solid_01(base[-S + 1]);
+    const uint front = base[1];
+    uint c0 = base[-P - S + 1];
+    uint c1 = base[-P + 1];
+    uint c2 = base[-P + S + 1];
+    uint c3 = base[-S + 1];
     shadows.v0 = ao_value(c3, c1, c0);
-    uint c4 = is_solid_01(base[S + 1]);
+    shadows.l0 = corner_light(front, c3, c1, c0);
+    uint c4 = base[S + 1];
     shadows.v1 = ao_value(c1, c4, c2);
-    uint c5 = is_solid_01(base[P - S + 1]);
-    uint c6 = is_solid_01(base[P + 1]);
+    shadows.l1 = corner_light(front, c1, c4, c2);
+    uint c5 = base[P - S + 1];
+    uint c6 = base[P + 1];
     shadows.v3 = ao_value(c6, c3, c5);
-    uint c7 = is_solid_01(base[P + S + 1]);
+    shadows.l3 = corner_light(front, c6, c3, c5);
+    uint c7 = base[P + S + 1];
     shadows.v2 = ao_value(c4, c6, c7);
+    shadows.l2 = corner_light(front, c4, c6, c7);
     return shadows;
 }
 
@@ -267,18 +307,23 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Down>(const
     constexpr int S = CHUNK_SIZE_E;
     constexpr int P = PLANE_SIZE_E;
     ao_shadows::vertex_data shadows;
-    uint c0 = is_solid_01(base[-P - S - 1]);
-    uint c1 = is_solid_01(base[-P - S]);
-    uint c2 = is_solid_01(base[-P - S + 1]);
-    uint c3 = is_solid_01(base[-P - 1]);
+    const uint front = base[-P];
+    uint c0 = base[-P - S - 1];
+    uint c1 = base[-P - S];
+    uint c2 = base[-P - S + 1];
+    uint c3 = base[-P - 1];
     shadows.v3 = ao_value(c1, c3, c0);
-    uint c4 = is_solid_01(base[-P + 1]);
+    shadows.l3 = corner_light(front, c1, c3, c0);
+    uint c4 = base[-P + 1];
     shadows.v2 = ao_value(c4, c1, c2);
-    uint c5 = is_solid_01(base[-P + S - 1]);
-    uint c6 = is_solid_01(base[-P + S]);
+    shadows.l2 = corner_light(front, c4, c1, c2);
+    uint c5 = base[-P + S - 1];
+    uint c6 = base[-P + S];
     shadows.v0 = ao_value(c3, c6, c5);
-    uint c7 = is_solid_01(base[-P + S + 1]);
+    shadows.l0 = corner_light(front, c3, c6, c5);
+    uint c7 = base[-P + S + 1];
     shadows.v1 = ao_value(c6, c4, c7);
+    shadows.l1 = corner_light(front, c6, c4, c7);
     return shadows;
 }
 
