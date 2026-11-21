@@ -79,8 +79,10 @@ struct array_3d {
     // ends at its core instead of going through every leaf layer
     inline_always bool is_buried(uint h, uint x, uint y) const {
         uint idx = h * plane_size + y * sy + x;
-        return block_table.cutout_blocks[decode_block_id(data[idx])] &
-               is_solid_at(idx - 1) & is_solid_at(idx + 1) & is_solid_at(idx - sy) & is_solid_at(idx + sy) &
+        // the neighbours only for cutout blocks (a few of all)
+        if (!block_table.cutout_blocks[decode_block_id(data[idx])])
+            return false;
+        return is_solid_at(idx - 1) & is_solid_at(idx + 1) & is_solid_at(idx - sy) & is_solid_at(idx + sy) &
                is_solid_at(idx - plane_size) & is_solid_at(idx + plane_size);
     }
 
