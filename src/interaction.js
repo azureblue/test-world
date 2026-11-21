@@ -2,6 +2,7 @@ import { BLOCK_HEIGHT_FULL, blockHeight, flooded, isFlowing, isLiquid, isXQuads,
 import { ItemBar } from "./itemBar.js";
 import { Player } from "./player.js";
 import { Settings } from "./settings.js";
+import { Particles } from "./world/particles.js";
 import { World } from "./world/world.js";
 
 /**
@@ -12,6 +13,7 @@ export class BlockInteraction {
     #world;
     #player;
     #itemBar;
+    #particles;
     /** @type {ReturnType<World["raycasti"]>} */
     #target = null;
 
@@ -19,11 +21,13 @@ export class BlockInteraction {
      * @param {World} world
      * @param {Player} player
      * @param {ItemBar} itemBar
+     * @param {Particles} [particles] the broken blocks' fragments go here
      */
-    constructor(world, player, itemBar) {
+    constructor(world, player, itemBar, particles = null) {
         this.#world = world;
         this.#player = player;
         this.#itemBar = itemBar;
+        this.#particles = particles;
     }
 
     /** the block looked at (and the face hit), or null */
@@ -39,11 +43,11 @@ export class BlockInteraction {
         this.#target = this.#world.raycasti(eye, direction, Settings.interaction.reach);
     }
 
-    /** Removes the block looked at; a plant in water leaves its water. */
+    /** Removes the block looked at, throwing out its fragments; a plant in water leaves its water. */
     breakBlock() {
         const t = this.#target;
-        if (t !== null)
-            this.#world.setBlock(t.x, t.y, t.z, removed(t.block));
+        if (t !== null && this.#world.setBlock(t.x, t.y, t.z, removed(t.block)))
+            this.#particles?.spawnBlockBreak(t.x, t.y, t.z, t.block);
     }
 
     /** Places the item bar's block on the face looked at. */

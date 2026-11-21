@@ -21,7 +21,8 @@ function drawStatsLine(d) {
     ];
     const draws = passes.reduce((sum, p) => sum + p[1], 0), tris = passes.reduce((sum, p) => sum + p[2], 0);
     return `draws ${passes.map(([name, n]) => `${name}:${n}`).join(" ")} all:${draws} ` +
-        `| triangles ${passes.map(([name, , t]) => `${name}:${formatK(t)}`).join(" ")} all:${formatK(tris)}`;
+        `| triangles ${passes.map(([name, , t]) => `${name}:${formatK(t)}`).join(" ")} all:${formatK(tris)} ` +
+        `| particles ${d.particles}`;
 }
 
 /**

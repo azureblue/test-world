@@ -155,6 +155,29 @@ export const Settings = {
         itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0", "SPRUCE_TRUNK", "SPRUCE_LEAVES"]
     },
 
+    // fragments of broken blocks (world/particles.js): small squares of the block's texture, facing the camera
+    particles: {
+        enabled: true,
+        // fragments per broken block
+        perBlock: 24,
+        // alive at most (more aren't made)
+        max: 4096,
+        // in blocks (the patch of the texture they show is as big)
+        minSize: 0.06,
+        maxSize: 0.16,
+        // seconds, varied by -40%..+40%
+        lifetime: 1.4,
+        // blocks per second: out from the block's centre, and up
+        speed: 1.5,
+        upSpeed: 3,
+        // blocks per second squared
+        gravity: 20,
+        // the speed kept when bouncing off a block
+        bounce: 0.3,
+        // how fast they stop sliding on the ground, per second
+        groundFriction: 8
+    },
+
     sky: {
         // the sky's colour straight up and at the horizon (and below it); terrain fades into the horizon colour (the
         // fog's), so the far world reads as haze, with the sky going on above it

@@ -10,6 +10,7 @@ import { WorldRenderer } from "./render/worldRenderer.js";
 import { Settings } from "./settings.js";
 import { StatsOverlay } from "./statsOverlay.js";
 import { Ticker } from "./ticker.js";
+import { Particles } from "./world/particles.js";
 import { World } from "./world/world.js";
 
 /**
@@ -31,6 +32,8 @@ export class Game {
     itemBar;
     /** @type {BlockInteraction} */
     interaction;
+    /** fragments of broken blocks */
+    particles = new Particles();
     /** frames and simulation ticks stop while paused */
     paused = false;
 
@@ -80,7 +83,7 @@ export class Game {
         this.player = new Player(this.world, cameraSettings.startPosition);
         this.ticker = new Ticker(Settings.simulation.tickRate, Settings.simulation.maxTicksPerFrame);
         this.itemBar = new ItemBar(container, Settings.interaction.itemBar, textures, TEXTURE_SIZE);
-        this.interaction = new BlockInteraction(this.world, this.player, this.itemBar);
+        this.interaction = new BlockInteraction(this.world, this.player, this.itemBar, this.particles);
         this.#stats = new StatsOverlay(document.getElementById("stats"));
         this.#initInput(canvas);
     }
@@ -153,10 +156,11 @@ export class Game {
         world.moveTo(camPos.x, camPos.y, camPos.z);
         world.update();
         this.interaction.update(camPos, camera.direction);
+        this.particles.update(frameTime, world);
 
         const frameNumber = this.#fpsCounter.getCurrentFrame();
         this.#lastFrame = this.renderer.render(world, this.interaction.target,
-            frameNumber % Settings.debug.overdrawSampleInterval === 0);
+            frameNumber % Settings.debug.overdrawSampleInterval === 0, this.particles);
         this.#stats.update(frameNumber, {
             camera, player, world, renderer: this.renderer, frame: this.#lastFrame,
             fps: this.#fpsCounter.fps(), target: this.interaction.target

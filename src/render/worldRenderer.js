@@ -8,6 +8,7 @@ import { UIntMeshDrawer, UIntMeshHandler } from "../mesh/uIntMesh.js";
 import { rgb, Settings } from "../settings.js";
 import { TextureArray } from "../textures.js";
 import { GenericBuffer, Resources, writeVoxelWireframe } from "../utils.js";
+import { PARTICLE_FLOATS, PARTICLE_INSTANCE, Particles } from "../world/particles.js";
 import { World } from "../world/world.js";
 
 /**
@@ -95,7 +96,7 @@ function waterState(colorScale, alpha, fresnelStrength) {
 
 /**
  * Draws the world from the camera: the opaque blocks, the cutout blocks (leaves with holes, alpha tested, their own
- * program so only they discard), the sky, the selected block's outline, plants, then water (blended, with an optional
+ * program so only they discard), the particles (block fragments, one instanced draw), the sky, the selected block's outline, plants, then water (blended, with an optional
  * depth pre-pass). Owns the shader programs, the block textures and the Camera and Fog uniform
  * blocks (shaders/README.md) shared by them.
  */
@@ -135,6 +136,8 @@ export class WorldRenderer {
     #overdraw = Settings.debug.overdraw;
     #overdrawStats;
     #sky;
+    /** the particles' vertex array and instance buffer (room for Settings.particles.max), the camera vectors */
+    #particles;
 
     /**
      * @param {WebGL2RenderingContext} gl
@@ -155,6 +158,7 @@ export class WorldRenderer {
             water: await program("water.vert", "water.frag", waterDefines()),
             waterDepth: await program("water_depth.vert", "water_depth.frag"),
             blockHighlight: await program("blockhighlight.vert", "blockhighlight.frag"),
+            particles: await program("particles.vert", "particles.frag"),
             sky: await program("sky.vert", "sky.frag")
         };
         return new WorldRenderer(gl, programs, textures, camera);
@@ -269,6 +273,49 @@ export class WorldRenderer {
             xQuads.getUniformLocation("m_translation"), this.#locations.waterTranslation,
             programs.cubeCutout.getUniformLocation("m_translation"));
         this.#overdrawStats = this.#overdraw ? new OverdrawStats() : null;
+
+        // the particles: their array uploaded as it is (Particles.data), per instance the fields the shader takes
+        // (position and size, texture patch, light; particles.vert); the corners come from gl_VertexID, so no vertex
+        // buffer
+        const particleVa = gl.createVertexArray(), particleVb = gl.createBuffer();
+        gl.bindVertexArray(particleVa);
+        gl.bindBuffer(gl.ARRAY_BUFFER, particleVb);
+        gl.bufferData(gl.ARRAY_BUFFER, Settings.particles.max * PARTICLE_FLOATS * 4, gl.DYNAMIC_DRAW);
+        const stride = PARTICLE_FLOATS * 4;
+        const fields = PARTICLE_INSTANCE;
+        for (const [location, size, field] of [[0, 4, fields.position], [1, 4, fields.texture], [2, 1, fields.light]]) {
+            gl.enableVertexAttribArray(location);
+            gl.vertexAttribPointer(location, size, gl.FLOAT, false, stride, field * 4);
+            gl.vertexAttribDivisor(location, 1);
+        }
+        gl.bindVertexArray(null);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        const particleProgram = programs.particles;
+        this.#particles = {
+            va: particleVa, vb: particleVb,
+            right: particleProgram.getUniformLocation("u_right"), up: particleProgram.getUniformLocation("u_up")
+        };
+    }
+
+    /**
+     * The particles: their instances uploaded, a camera-facing square each, alpha tested like the cutout blocks.
+     * @param {Particles} particles
+     */
+    #drawParticles(particles) {
+        const count = particles.count;
+        if (count === 0)
+            return;
+        const gl = this.#gl, p = this.#particles, camera = this.#camera;
+        this.#programs.particles.use();
+        gl.uniform3f(p.right, camera.right.x, camera.right.y, camera.right.z);
+        gl.uniform3f(p.up, camera.up.x, camera.up.y, camera.up.z);
+        gl.bindBuffer(gl.ARRAY_BUFFER, p.vb);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, particles.data, 0, count * PARTICLE_FLOATS);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+        gl.bindVertexArray(p.va);
+        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
+        gl.bindVertexArray(null);
+        this.#meshDrawer.stats.particles = count;
     }
 
     /** uploads and frees the chunk meshes (for the world) */
@@ -310,9 +357,10 @@ export class WorldRenderer {
      * @param {World} world
      * @param {{x: number, y: number, z: number} | null} highlight the block to outline
      * @param {boolean} sampleOverdraw with Settings.debug.overdraw: read back this frame's overdraw
+     * @param {Particles} [particles] the block fragments to draw (updated for this frame)
      * @returns {FrameStats}
      */
-    render(world, highlight, sampleOverdraw) {
+    render(world, highlight, sampleOverdraw, particles = null) {
         const gl = this.#gl;
         const { cubeSolid, cubeCutout, xQuads, water, waterDepth, blockHighlight } = this.#programs;
         const camera = this.#camera;
@@ -372,6 +420,9 @@ export class WorldRenderer {
                 this.#overdrawStats.sample(gl);
             return { chunksInRange, chunksDrawn, inWater };
         }
+
+        if (particles !== null)
+            this.#drawParticles(particles);
 
         if (!inWater)
             this.#drawSky();

@@ -254,6 +254,8 @@ export class DrawStats {
     xQuadTris = 0;
     cutoutDraws = 0;
     cutoutTris = 0;
+    /** particles drawn (one instanced draw) */
+    particles = 0;
 
     reset() {
         this.solidDraws = 0;
@@ -264,6 +266,7 @@ export class DrawStats {
         this.xQuadTris = 0;
         this.cutoutDraws = 0;
         this.cutoutTris = 0;
+        this.particles = 0;
     }
 }
 
