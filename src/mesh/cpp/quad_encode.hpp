@@ -14,9 +14,9 @@ inline_always constexpr static T encode_value(V value) {
 
 class quad_encoder {
    public:
-    // a merged face (the main mesher): ao_shadows 2 bits per vertex, light 8 bits per vertex (encode_layer_light_bits)
+    // a merged face (the main mesher): ao_shadows 2 bits per vertex, light 10 bits per vertex (encode_layer_light_bits)
     template <Direction DIR>
-    inline_always static void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex, uint ao_shadows, uint light) {
+    inline_always static void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex, uint ao_shadows, uint64 light) {
         uint64 v0, v1, v2, v3;
 
         bool reverse_winding = encode_quad<DIR>(v0, v1, v2, v3, vx_x, vx_y, vx_z, w, h, tex, ao_shadows, light);
@@ -32,7 +32,7 @@ class quad_encoder {
     }
 
     template <Direction DIR>
-    inline_always static bool encode_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex_id, uint ao_shadow, uint light) {
+    inline_always static bool encode_quad(uint64& v0, uint64& v1, uint64& v2, uint64& v3, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex_id, uint ao_shadow, uint64 light) {
         uint ao0 = (ao_shadow >> 0) & 0b11;
         uint ao1 = (ao_shadow >> 2) & 0b11;
         uint ao2 = (ao_shadow >> 4) & 0b11;
@@ -41,9 +41,9 @@ class quad_encoder {
         uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, tex_id);
 
         v0 = base_bits | encode_ao_bits(ao0) | encode_layer_light_bits(light);
-        v1 = base_bits + POS_OFFSET_W<DIR> * w | MERGE_BIT_W * w | encode_ao_bits(ao1) | encode_layer_light_bits(light >> 8);
-        v2 = base_bits + POS_OFFSET_W<DIR> * w + POS_OFFSET_H<DIR> * h | MERGE_BIT_W * w | MERGE_BIT_H * h | encode_ao_bits(ao2) | encode_layer_light_bits(light >> 16);
-        v3 = base_bits + POS_OFFSET_H<DIR> * h | MERGE_BIT_H * h | encode_ao_bits(ao3) | encode_layer_light_bits(light >> 24);
+        v1 = base_bits + POS_OFFSET_W<DIR> * w | MERGE_BIT_W * w | encode_ao_bits(ao1) | encode_layer_light_bits(light >> 10);
+        v2 = base_bits + POS_OFFSET_W<DIR> * w + POS_OFFSET_H<DIR> * h | MERGE_BIT_W * w | MERGE_BIT_H * h | encode_ao_bits(ao2) | encode_layer_light_bits(light >> 20);
+        v3 = base_bits + POS_OFFSET_H<DIR> * h | MERGE_BIT_H * h | encode_ao_bits(ao3) | encode_layer_light_bits(light >> 30);
 
         return (ao0 + ao2) > (ao1 + ao3);
     }
@@ -101,10 +101,10 @@ class quad_encoder {
         return encode_value<uint64, 21 - SKY_DARKNESS_SHIFT>(light);
     }
 
-    // a vertex's light from the main mesher's layers (the low 8 bits: corner_light's sums halved, the sky darkness in
-    // bits 0..3, the block light in 4..7) to the same vertex bits, doubled back (their lowest bit lost)
-    inline_always static uint64 encode_layer_light_bits(uint light) {
-        return encode_value<uint64, 22>(light & 0xf) | encode_value<uint64, 28>(light >> 4 & 0xf);
+    // a vertex's light from the main mesher's layers (the low 10 bits: corner_light's sums, the sky darkness in bits
+    // 0..4, the block light in 5..9) to the same vertex bits as encode_light_bits
+    inline_always static uint64 encode_layer_light_bits(uint64 light) {
+        return (light & 0x1f) << 21 | (light >> 5 & 0x1f) << 27;
     }
 
     inline_always static uint64 encode_dir_bits(Direction dir) {
@@ -206,15 +206,21 @@ class water_encoder {
 
 class x_quads_encoder {
    public:
+    // a vertex is 2 uint32: the position and texture, then the light of the plant's cell (its block value's
+    // LIGHT_BITS, the same for the 4 vertices)
     template <Direction DIR>
-    inline_always static void encode_quad(uint64* __restrict& out, uint x, uint y, uint z, uint tex) {
+    inline_always static void encode_quad(uint64* __restrict& out, uint x, uint y, uint z, uint tex, uint block_data) {
         uint v0, v1, v2, v3;
         encode_x_quad<DIR>(v0, v1, v2, v3, x, y, z, tex);
+        const uint64 light = static_cast<uint64>(block_data & LIGHT_BITS) << 32;
 
-        out[0] = static_cast<uint64>(v0) | (static_cast<uint64>(v1) << 32);
-        out[1] = static_cast<uint64>(v2) | (static_cast<uint64>(v0) << 32);
-        out[2] = static_cast<uint64>(v2) | (static_cast<uint64>(v3) << 32);
-        out += 3;
+        out[0] = v0 | light;
+        out[1] = v1 | light;
+        out[2] = v2 | light;
+        out[3] = v0 | light;
+        out[4] = v2 | light;
+        out[5] = v3 | light;
+        out += 6;
     }
 
     template <Direction DIR>

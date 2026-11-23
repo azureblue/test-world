@@ -15,7 +15,7 @@ import { WorldClient } from "./worldClient.js";
 const logger = new Logger("ChunkEditor");
 
 // unoptimized but fast mesher for predicted edits; the optimized mesh comes from the world worker
-const editMesher = await UIntExtWasmMesher.createFastMesher({ cutout: Settings.render.cutoutLeaves, fakeLight: Settings.light.debugFake });
+const editMesher = await UIntExtWasmMesher.createFastMesher({ cutout: Settings.render.cutoutLeaves });
 
 /**
  * The client's own block edits. The world worker owns the world, so an edit is sent there, and predicted here until
@@ -133,11 +133,41 @@ export class ChunkEditor {
         if (data.getExtVoxel(ex, ey, eh) === value)
             return false;
         data.setExtVoxel(ex, ey, eh, value);
+        this.#predictLight(entry, ex, ey, eh, value);
         const inside = ex >= 1 && ex <= CHUNK_SIZE && ey >= 1 && ey <= CHUNK_SIZE && eh >= 1 && eh <= CHUNK_SIZE;
         if (inside && value !== BLOCK_IDS.EMPTY)
             entry.chunk.includeBlock(ex - 1, ey - 1, eh - 1);
         this.#quickMeshQueue.add(entry);
         return true;
+    }
+
+    /**
+     * The light of a changed cell for the quick mesh, until the world worker's update has the real one: 0 for a solid
+     * block (as the mesher expects); for an open cell, its brightest open neighbour's light, 1 less (none: dark). A
+     * chunk without light (null: full sky light, or all solid) gets its own, all 0: full sky light in its open cells.
+     * @param {ChunkEntry} entry
+     */
+    #predictLight(entry, ex, ey, eh, value) {
+        const size = CHUNK_SIZE + 2;
+        const light = entry.light ??= new Uint8Array(size ** 3);
+        const i = (eh * size + ey) * size + ex;
+        if (value >>> 31) {
+            light[i] = 0;
+            return;
+        }
+        const data = /** @type {ChunkDataExt} */ (entry.chunk.data);
+        let sky = 0, block = 0;
+        const from = (x, y, h) => {
+            if (x < 0 || x >= size || y < 0 || y >= size || h < 0 || h >= size || data.getExtVoxel(x, y, h) >>> 31)
+                return;
+            const l = light[(h * size + y) * size + x];
+            sky = Math.max(sky, 7 - (l & 7));
+            block = Math.max(block, l >> 3);
+        };
+        from(ex - 1, ey, eh); from(ex + 1, ey, eh);
+        from(ex, ey - 1, eh); from(ex, ey + 1, eh);
+        from(ex, ey, eh - 1); from(ex, ey, eh + 1);
+        light[i] = (7 - Math.max(0, sky - 1)) | Math.max(0, block - 1) << 3;
     }
 
     /**
@@ -166,11 +196,12 @@ export class ChunkEditor {
     }
 
     /**
-     * Replaces the chunk's mesh with a quick one from its current data.
+     * Replaces the chunk's mesh with a quick one from its current data, with the light of the last chunk message (the
+     * edit's own change to the light comes with the world worker's update).
      * @param {ChunkEntry} entry
      */
     #replaceMesh(entry) {
-        const meshData = editMesher.createMesh(entry.position, /** @type {ChunkDataExt} */ (entry.chunk.data));
+        const meshData = editMesher.createMesh(entry.position, /** @type {ChunkDataExt} */ (entry.chunk.data), entry.light);
         const oldMesh = entry.chunk.mesh;
         entry.chunk.mesh = meshData.isEmpty() ? null : this.#meshHandler.upload(meshData);
         if (oldMesh)

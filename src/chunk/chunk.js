@@ -10,6 +10,9 @@ export const TEX_ID_BIT_LEN = 9 | 0;
 
 export const CHUNK_SIZE_MASK = (CHUNK_SIZE - 1) | 0;
 
+/** a block column's top when it has no solid block (ChunkGenerator.solidTops, world/skyTops.js) */
+export const NO_TOP = -0x80000000;
+
 export function posToKey3(cx, cy, cz) {
     return `${cx},${cy},${cz}`;
 }
@@ -26,6 +29,22 @@ export class ChunkBlockData extends Array3D {
 export class ChunkGenerator {
     /** the world's seed: every generation from the same seed is the same */
     seed;
+
+    /** no block is generated above this height (the default {@link solidTops}) */
+    get maxHeight() {
+        return 256;
+    }
+
+    /**
+     * Per block column of a chunk column (index y * 32 + x), a height no generated solid block is above (NO_TOP: none
+     * in the column): the sky light looks for the column's highest solid block from there down
+     * (world/skyTops.js). Exact or a little above is best: every chunk between it and the real top is generated to
+     * look. The default is {@link maxHeight} everywhere; a generator that knows its surface returns that.
+     * @returns {Int32Array}
+     */
+    solidTops(cx, cy) {
+        return new Int32Array(CHUNK_SIZE * CHUNK_SIZE).fill(this.maxHeight);
+    }
 
     /** @param {number} seed an integer */
     constructor(seed) {
@@ -339,6 +358,15 @@ export class ChunkDataLoader {
     getBlock(ix, iy, iz) {
         const blockData = this.#loadChunkBlockData(new Vec3(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN));
         return blockData.data[((iz & CHUNK_SIZE_MASK) * CHUNK_SIZE + (iy & CHUNK_SIZE_MASK)) * CHUNK_SIZE + (ix & CHUNK_SIZE_MASK)];
+    }
+
+    /**
+     * A chunk's blocks with the edits applied, generated if it isn't cached; don't change them (see setBlock).
+     * @param {Vec3} chunkPos
+     * @returns {ChunkBlockData}
+     */
+    blockData(chunkPos) {
+        return this.#loadChunkBlockData(chunkPos);
     }
 
     /**

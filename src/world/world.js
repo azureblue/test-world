@@ -1,7 +1,8 @@
 import { BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, isLiquid, isSolid, isXQuads } from "../blocks.js";
-import { Chunk, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk/chunk.js";
+import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk/chunk.js";
 import { FVec3 } from "../geom.js";
 import { MeshHandler } from "../mesh/mesh.js";
+import { Settings } from "../settings.js";
 import { ChunkEditor } from "./chunkEditor.js";
 import { ChunkManager } from "./chunkManager.js";
 
@@ -177,6 +178,21 @@ export class World {
         if (entry === undefined)
             return BLOCK_IDS.EMPTY;
         return entry.chunk.data.getVoxelXYZ(ix & CHUNK_SIZE_MASK, iy & CHUNK_SIZE_MASK, iz & CHUNK_SIZE_MASK);
+    }
+
+    /**
+     * The brightness of a cell's light, 0..1, as cube_solid.vert works it out (without the faces' shading): full in
+     * chunks without light or not loaded.
+     */
+    brightnessAt(ix, iy, iz) {
+        const entry = this.#chunks.getLoaded(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN);
+        if (entry?.light == null)
+            return 1;
+        // the cell in the light, the chunk with a 1 block border
+        const size = CHUNK_SIZE + 2;
+        const l = entry.light[(((iz & CHUNK_SIZE_MASK) + 1) * size + (iy & CHUNK_SIZE_MASK) + 1) * size + (ix & CHUNK_SIZE_MASK) + 1];
+        const { falloff, sun } = Settings.light;
+        return Math.pow(falloff, 7 - Math.max((7 - (l & 7)) * sun, l >> 3));
     }
 }
 

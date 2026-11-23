@@ -21,17 +21,18 @@ flat out uint o_norm;
 // vertex to camera; linear across a triangle, so the fragment shader gets the exact distance for the fog
 smooth out highp vec3 v_to_cam;
 smooth out float v_shadow;
-// the light's brightness, 0..1
-smooth out float v_light;
+// the light: x the sky light's brightness, y the block light's, z how direct the sky light is (sky light / 7: the
+// faces' sun shading fades with it, the light deep in a cave comes from everywhere)
+smooth out vec3 v_light;
 
 // LIGHT_FALLOFF, LIGHT_SUN: Settings.light (WorldRenderer)
-float light_brightness(uint sky_darkness_sum, uint block_light_sum, uint shadow) {
-    // the open cells of the 4: AO 0..2 is the number of solid ones; 3 is two solid sides (the diagonal may be open,
-    // its light then makes the corner a bit brighter or darker, clamped)
+vec3 light_brightness(uint sky_darkness_sum, uint block_light_sum, uint shadow) {
+    // the open cells of the 4: AO 0..2 is the number of solid ones; 3 is two solid sides, the mesher then takes the
+    // front cell alone (the diagonal is behind a wall corner)
     float open_cells = shadow == 3u ? 1.0f : 4.0f - float(shadow);
     float sky = 7.0f - min(float(sky_darkness_sum) / open_cells, 7.0f);
     float block = min(float(block_light_sum) / open_cells, 7.0f);
-    return pow(LIGHT_FALLOFF, 7.0f - max(sky * LIGHT_SUN, block));
+    return vec3(pow(LIGHT_FALLOFF, 7.0f - sky * LIGHT_SUN), pow(LIGHT_FALLOFF, 7.0f - block), sky / 7.0f);
 }
 
 void main() {

@@ -662,6 +662,20 @@ export class ClimateGenerator extends ChunkGenerator {
         return trees;
     }
 
+    /** the ground's top block, or the top a tree that can reach the column can have */
+    solidTops(cx, cy) {
+        const { heights, trees } = this.#column(cx, cy);
+        const tops = heights.map(h => h - 1);
+        const startX = cx * CHUNK_SIZE, startY = cy * CHUNK_SIZE, r = TreeBuilder.MAX_RADIUS;
+        for (const tree of trees) {
+            const top = tree.h + TreeBuilder.MAX_HEIGHT;
+            for (let y = Math.max(tree.y - r - startY, 0); y <= Math.min(tree.y + r - startY, CHUNK_SIZE - 1); y++)
+                for (let x = Math.max(tree.x - r - startX, 0); x <= Math.min(tree.x + r - startX, CHUNK_SIZE - 1); x++)
+                    tops[y * CHUNK_SIZE + x] = Math.max(tops[y * CHUNK_SIZE + x], top);
+        }
+        return tops;
+    }
+
     /**
      * @param {Vec3} chunkPos
      * @returns {ChunkBlockData}

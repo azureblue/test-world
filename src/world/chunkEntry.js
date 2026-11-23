@@ -14,6 +14,9 @@ export class ChunkEntry {
     requestId = 0;
     /** version of the chunk message the data and mesh come from, older ones are dropped */
     version = 0;
+    /** the light the mesh was made with (ChunkResponse.light), for the quick meshes of edits
+     * @type {Uint8Array | null} */
+    light = null;
 
     /** @param {Vec3} position */
     constructor(position) {

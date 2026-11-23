@@ -12,6 +12,7 @@ layout (std140) uniform Fog {
 uniform mediump sampler2DArray u_array_sampler;
 in highp vec3 v_tex_coord;
 smooth in highp vec3 v_to_cam;
+flat in float v_light;
 out vec4 color_out;
 
 void main() {
@@ -24,6 +25,6 @@ void main() {
     highp float fading = min(dot(v_to_cam, v_to_cam) * fog_inv_dist_sq, 1.0);
     float fog_t = clamp(fading * fog_scale + fog_bias, 0.0, 1.0);
     float fog = fog_min + fog_range * fog_t * fog_t * (3.0 - 2.0 * fog_t);
-    color_out = mix(tex, vec4(fog_color, 1.0), fog);
+    color_out = mix(vec4(tex.rgb * v_light, tex.a), vec4(fog_color, 1.0), fog);
     // color_out.a = alpha;
 }

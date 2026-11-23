@@ -197,6 +197,7 @@ export class ChunkManager {
         entry.chunk = new Chunk(chunkPos, response.chunkData, mesh);
         entry.loaded = true;
         entry.version = response.version;
+        entry.light = response.light;
         logger.debug(() => `uploading mesh time: ${perfDiff(now)}`);
         this.#onChunkData(entry, response);
     }

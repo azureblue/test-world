@@ -9,6 +9,8 @@ const U = 4, V = 5, PATCH = 6, LAYER = 7;
 const LIGHT = 8;
 const VX = 9, VY = 10, VZ = 11;
 const AGE = 12, LIFE = 13, SIZE = 14;
+// its own shade, 0.7..1 (the light is the cell's brightness times it)
+const TINT = 15;
 
 /**
  * Where the shader's per-instance inputs start in a particle's floats: the position and drawn size (4 floats), the
@@ -47,8 +49,9 @@ export class Particles {
      * @param {number} y
      * @param {number} z
      * @param {number} block the block that was there
+     * @param {{brightnessAt: (ix: number, iy: number, iz: number) => number}} world
      */
-    spawnBlockBreak(x, y, z, block) {
+    spawnBlockBreak(x, y, z, block, world) {
         const s = this.#s;
         if (!s.enabled)
             return;
@@ -78,14 +81,16 @@ export class Particles {
             d[o + V] = Math.random() * (1 - size);
             d[o + PATCH] = size;
             d[o + LAYER] = textures[face];
-            d[o + LIGHT] = 0.7 + Math.random() * 0.3;
+            d[o + TINT] = 0.7 + Math.random() * 0.3;
+            d[o + LIGHT] = d[o + TINT] * world.brightnessAt(x, y, z);
         }
     }
 
     /**
      * Moves the particles by a frame.
      * @param {number} dt seconds
-     * @param {{blockAt: (x: number, y: number, z: number) => number}} world
+     * @param {{blockAt: (x: number, y: number, z: number) => number,
+     *     brightnessAt: (ix: number, iy: number, iz: number) => number}} world
      */
     update(dt, world) {
         const s = this.#s, d = this.data;
@@ -132,6 +137,8 @@ export class Particles {
             }
             // shrinking over the last quarter second
             d[o + DRAWN_SIZE] = d[o + SIZE] * Math.min(1, left * 4);
+            // the light of the cell it's in
+            d[o + LIGHT] = d[o + TINT] * world.brightnessAt(Math.floor(d[o + X]), Math.floor(d[o + Y]), Math.floor(d[o + Z]));
             i++;
         }
     }

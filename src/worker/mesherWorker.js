@@ -13,7 +13,7 @@ const workerId = params.get("workerId");
 const fastMesher = params.get("fastMesher") === "true";
 
 const logger = new Logger("chunk mesher worker " + workerId);
-const meshOptions = { cutout: Settings.render.cutoutLeaves, fakeLight: Settings.light.debugFake };
+const meshOptions = { cutout: Settings.render.cutoutLeaves };
 const mesher = await (fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
 
 const workerServer = new WorkerServer(self, workerId, {

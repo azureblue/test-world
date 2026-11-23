@@ -47,7 +47,7 @@ export class BlockInteraction {
     breakBlock() {
         const t = this.#target;
         if (t !== null && this.#world.setBlock(t.x, t.y, t.z, removed(t.block)))
-            this.#particles?.spawnBlockBreak(t.x, t.y, t.z, t.block);
+            this.#particles?.spawnBlockBreak(t.x, t.y, t.z, t.block, this.#world);
     }
 
     /** Places the item bar's block on the face looked at. */

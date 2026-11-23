@@ -1,4 +1,4 @@
-all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm 
+all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../light.wasm
 
 headers := int.h blocks.hpp common.hpp quad_encode.hpp
 
@@ -34,5 +34,18 @@ headers := int.h blocks.hpp common.hpp quad_encode.hpp
 	-Wl,--strip-all \
 	uIntWasmMesherQ.cpp -o ../uIntWasmMesherQ.wasm
 
+../light.wasm: light.cpp int.h
+	clang --target=wasm32 \
+	-O3 \
+	-std=c++20 \
+	-ffreestanding -fno-builtin \
+	-fno-exceptions -fno-rtti \
+	-fno-threadsafe-statics \
+	-fno-stack-protector \
+	-nostdlib -nostdinc++ \
+	-Wl,--no-entry \
+	-Wl,--strip-all \
+	light.cpp -o ../light.wasm
+
 clean:
-	rm ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm
+	rm ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../light.wasm

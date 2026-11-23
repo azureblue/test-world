@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK, ChunkDataLoader } from "../chunk/chunk.js";
+import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, ChunkDataLoader } from "../chunk/chunk.js";
 import { ChunkExtDataFactory } from "../chunk/extChunk.js";
 import { ChunkGeneratorFactory } from "../gen/registry.js";
 import { Vec3 } from "../geom.js";
@@ -7,7 +7,10 @@ import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
 import { Settings } from "../settings.js";
 import { Ticker } from "../ticker.js";
 import { perfDiff } from "../utils.js";
+import { BLOCK_LIGHT, MAX_BLOCK_ID } from "../blocks.js";
 import { pos3ToKey } from "../world/chunkEntry.js";
+import { LIGHT_MARGIN, Lighting } from "../world/lighting.js";
+import { SkyTops } from "../world/skyTops.js";
 import { WaterFlow } from "../world/waterFlow.js";
 import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse } from "./common.js";
 import { WorkerConnection, WorkerServer } from "./worker.js";
@@ -23,8 +26,15 @@ const logger = new Logger("world worker " + workerId);
 const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator, Settings.world.seed);
 
 const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory());
-const meshOptions = { cutout: Settings.render.cutoutLeaves, fakeLight: Settings.light.debugFake };
+const meshOptions = { cutout: Settings.render.cutoutLeaves };
 const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
+const skyTops = new SkyTops(chunkDataLoader, generator);
+const lighting = Settings.light.enabled ? await Lighting.create(chunkDataLoader, skyTops) : null;
+
+/** what a block does to the light: solid (stops it), the block light it gives */
+function lightKind(block) {
+    return (block >>> 31) | BLOCK_LIGHT[block & (MAX_BLOCK_ID - 1)] << 1;
+}
 
 /**
  * A connected client: where its chunks go and the last of its edits applied.
@@ -103,26 +113,48 @@ class WorldState {
      */
     setBlock(ix, iy, iz, value) {
         value >>>= 0;
-        if (chunkDataLoader.getBlock(ix, iy, iz) === value)
+        const old = chunkDataLoader.getBlock(ix, iy, iz);
+        if (old === value)
             return false;
         chunkDataLoader.setBlock(ix, iy, iz, value);
-        const cx = ix >> CHUNK_SIZE_BIT_LEN, cy = iy >> CHUNK_SIZE_BIT_LEN, cz = iz >> CHUNK_SIZE_BIT_LEN;
-        const bx = ix & CHUNK_SIZE_MASK, by = iy & CHUNK_SIZE_MASK, bh = iz & CHUNK_SIZE_MASK;
-        for (let dz = -1; dz <= 1; dz++)
-            for (let dy = -1; dy <= 1; dy++)
-                for (let dx = -1; dx <= 1; dx++) {
-                    // the block's cell in this chunk's extended data (32^3 plus a 1 block border from the neighbours)
-                    const ex = bx + 1 - dx * CHUNK_SIZE;
-                    const ey = by + 1 - dy * CHUNK_SIZE;
-                    const eh = bh + 1 - dz * CHUNK_SIZE;
-                    if (ex < 0 || ex > CHUNK_SIZE + 1 || ey < 0 || ey > CHUNK_SIZE + 1 || eh < 0 || eh > CHUNK_SIZE + 1)
-                        continue;
-                    const key = pos3ToKey(cx + dx, cy + dy, cz + dz);
-                    if (!this.#changed.has(key))
-                        this.#changed.set(key, new Vec3(cx + dx, cy + dy, cz + dz));
-                }
+        // the chunks whose data has the block (32^3 plus a 1 block border from the neighbours); with a change to the
+        // light, the ones whose light it can reach, and under a column whose sky top moved
+        if (lightKind(old) === lightKind(value)) {
+            this.#changedAround(ix, iy, iz, iz, 1);
+        } else {
+            this.#changedAround(ix, iy, iz, iz, LIGHT_MARGIN);
+            const top = skyTops.onBlockChanged(ix, iy, iz, (value >>> 31) === 1);
+            if (top !== null)
+                this.#changedAround(ix, iy, Math.min(top.from, top.to), Math.max(top.from, top.to), LIGHT_MARGIN);
+        }
         this.water?.onBlockChanged(ix, iy, iz);
         return true;
+    }
+
+    /**
+     * Marks the chunks with a block within margin of the column ix, iy from height z0 to z1 as changed. For a taller
+     * range (a sky top that moved, maybe by far, or from or to NO_TOP), only the chunks in the simulated range.
+     */
+    #changedAround(ix, iy, z0, z1, margin) {
+        const column = z1 > z0;
+        // not >>: NO_TOP - margin is out of the 32-bit range
+        let cz0 = Math.floor((z0 - margin) / CHUNK_SIZE), cz1 = Math.floor((z1 + margin) / CHUNK_SIZE);
+        if (column) {
+            if (this.#center === null)
+                return;
+            const range = Math.ceil(Math.sqrt(this.#rangeSq));
+            cz0 = Math.max(cz0, this.#center.z - range);
+            cz1 = Math.min(cz1, this.#center.z + range);
+        }
+        for (let cz = cz0; cz <= cz1; cz++)
+            for (let cy = (iy - margin) >> CHUNK_SIZE_BIT_LEN; cy <= (iy + margin) >> CHUNK_SIZE_BIT_LEN; cy++)
+                for (let cx = (ix - margin) >> CHUNK_SIZE_BIT_LEN; cx <= (ix + margin) >> CHUNK_SIZE_BIT_LEN; cx++) {
+                    if (column && !this.isLoaded(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE))
+                        continue;
+                    const key = pos3ToKey(cx, cy, cz);
+                    if (!this.#changed.has(key))
+                        this.#changed.set(key, new Vec3(cx, cy, cz));
+                }
     }
 
     /**
@@ -155,8 +187,10 @@ class WorldState {
         const targets = client === null ? this.clients.values() : [client];
         for (const target of targets) {
             const chunkData = chunkDataLoader.loadChunk(chunkPos);
-            const meshData = mesher.createMesh(chunkPos, chunkData);
-            const response = new ChunkResponse(chunkPos, chunkData, meshData, requestId, ++this.#version, target.editAck);
+            const light = lighting?.compute(chunkPos) ?? null;
+            const meshData = mesher.createMesh(chunkPos, chunkData, light);
+            // the light's own copy: the lighting's buffer is reused, the message's is transferred
+            const response = new ChunkResponse(chunkPos, chunkData, meshData, requestId, ++this.#version, target.editAck, light?.slice() ?? null);
             ChunkResponse.toMessage(response).post(target.connection.port);
         }
         logger.debug(() => `sent chunk (${chunkPos.x}, ${chunkPos.y}, ${chunkPos.z}) ${requestId === 0 ? "update" : "response"} in ${perfDiff(start)} ms`);

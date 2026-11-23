@@ -266,8 +266,10 @@ export class ChunkResponse extends WorkerMessage {
      * @param {number} requestId - The id of the {@link ChunkRequest} this responds to, 0 for an update.
      * @param {number} version - Increases with every chunk message the worker sends.
      * @param {number} editAck - The seq of the last {@link BlockEdit} the worker applied before this snapshot.
+     * @param {Uint8Array | null} light - The light the mesh was made with (world/lighting.js), null: full sky light;
+     *   the client's quick meshes of its edits use it until the next message.
      */
-    constructor(chunkPos, chunkData, chunkMesh, requestId, version, editAck) {
+    constructor(chunkPos, chunkData, chunkMesh, requestId, version, editAck, light = null) {
         super();
         this.chunkPos = chunkPos;
         this.chunkData = chunkData;
@@ -275,15 +277,17 @@ export class ChunkResponse extends WorkerMessage {
         this.requestId = requestId;
         this.version = version;
         this.editAck = editAck;
+        this.light = light;
     }
 
     static toMessage(chunkResponse) {
         const tMeshData = MESH_DATA_TRANSFER.transfer(chunkResponse.chunkMesh);
         const tChunkData = CHUNK_DATA_TRANSFER.transfer(chunkResponse.chunkData);
+        const light = chunkResponse.light;
         return new MessageTransportData(ChunkResponse.type, {
             chunkPos: chunkResponse.chunkPos, chunkData: tChunkData.data, chunkMesh: tMeshData.data,
-            requestId: chunkResponse.requestId, version: chunkResponse.version, editAck: chunkResponse.editAck
-        }, [...tChunkData.transferList, ...tMeshData.transferList]);
+            requestId: chunkResponse.requestId, version: chunkResponse.version, editAck: chunkResponse.editAck, light
+        }, [...tChunkData.transferList, ...tMeshData.transferList, ...(light === null ? [] : [light.buffer])]);
     }
 
     /**
@@ -298,7 +302,7 @@ export class ChunkResponse extends WorkerMessage {
         return new ChunkResponse(toVec3(data.chunkPos),
             CHUNK_DATA_TRANSFER.createFrom(data.chunkData),
             MESH_DATA_TRANSFER.createFrom(data.chunkMesh),
-            data.requestId, data.version, data.editAck);
+            data.requestId, data.version, data.editAck, data.light ?? null);
     }
 }
 

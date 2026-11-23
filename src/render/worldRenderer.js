@@ -155,7 +155,7 @@ export class WorldRenderer {
             cubeSolid: await program("cube_solid.vert", cubeFrag, light),
             // the cube program with the alpha test (cube_solid.frag, CUTOUT), for the cutout faces
             cubeCutout: await program("cube_solid.vert", cubeFrag, { ...light, CUTOUT: true }),
-            xQuads: await program("x_quads.vert", "x_quads.frag"),
+            xQuads: await program("x_quads.vert", "x_quads.frag", light),
             water: await program("water.vert", "water.frag", waterDefines()),
             waterDepth: await program("water_depth.vert", "water_depth.frag"),
             blockHighlight: await program("blockhighlight.vert", "blockhighlight.frag"),

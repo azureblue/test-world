@@ -19,7 +19,8 @@
         { "name": "snow", "src": "snow" },
         { "name": "spruce_leaves", "src": "t:tree_leaves", "ops": [{ "name": "hsl", "hue": 25, "saturation": 0.7, "lightness": 0.75 }] },
         { "name": "tree_leaves_cutout", "src": "tree_leaves_t" },
-        { "name": "spruce_leaves_cutout", "src": "t:tree_leaves_cutout", "ops": [{ "name": "hsl", "hue": 25, "saturation": 0.7, "lightness": 0.75 }] }
+        { "name": "spruce_leaves_cutout", "src": "t:tree_leaves_cutout", "ops": [{ "name": "hsl", "hue": 25, "saturation": 0.7, "lightness": 0.75 }] },
+        { "name": "lamp", "src": "t:sand", "ops": [{ "name": "multiply", "color": "#ffe9a0", "factor": 1.3 }] }
     ],
     "blocks": [
         { "id": 0, "name": "EMPTY", "model": "none" },
@@ -37,6 +38,7 @@
         { "id": 18, "name": "SPRUCE_TRUNK", "model": "cube", "textures": { "top": "spruce_trunk_top", "sides": "spruce_trunk", "bottom": "spruce_trunk_top" } },
         { "id": 19, "name": "SPRUCE_LEAVES", "model": "cube", "textures": "spruce_leaves", "cutout": "spruce_leaves_cutout" },
         { "id": 20, "name": "SNOW", "model": "cube", "textures": "snow" },
+        { "id": 21, "name": "LAMP", "model": "cube", "textures": "lamp", "light": 7 },
         { "id": 255, "name": "CHUNK_EDGE", "model": "none" }
     ]
 }

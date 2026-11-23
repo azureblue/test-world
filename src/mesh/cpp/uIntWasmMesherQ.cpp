@@ -140,8 +140,8 @@ inline_always static uint has(uint64 mask, uint x) {
 inline_always static void encode_special(face_buffers& buffers, const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y, uint block_data) {
     if (is_x_quads(block_data)) {
         const uint(&block_textures)[6] = block_table.faces[decode_block_id(block_data)];
-        x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[1]);
-        x_quads_encoder::encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[2]);
+        x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[1], block_data);
+        x_quads_encoder::encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[2], block_data);
         if (!is_water(block_data))
             return;
         // a plant in water: the water faces too

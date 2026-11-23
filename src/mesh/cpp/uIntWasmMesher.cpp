@@ -11,9 +11,9 @@ constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
 // A face in a layer, 32 bits: bits 0..7 the AO shadows (2 bits per vertex) or the water's level and bottom, 8..19 the
 // texture + 1 (0 is no face, so a face with texture 0 and no shadows is one), then the merge counters: 20..25 the
-// width, 26..31 the height (1..32 each). Its vertices' light (8 bits each, layer_vertex_light) is at the same place in
-// the light layers: written with every face and read only where there is one, so the scans over empty layers don't
-// touch it and it's never cleared. Faces merge when both match.
+// width, 26..31 the height (1..32 each). Its vertices' light (10 bits each, layer_vertex_light) is at the same place in
+// the light layers, 64 bits: written with every face and read only where there is one, so the scans over empty layers
+// don't touch it and it's never cleared. Faces merge when both match.
 constexpr uint LAYER_TEXTURE_SHIFT = 8;
 constexpr uint LAYER_WIDTH_SHIFT = 20;
 constexpr uint LAYER_HEIGHT_SHIFT = 26;
@@ -25,7 +25,8 @@ constexpr uint LAYER_FACE_WIDTH_BITS = (1u << LAYER_HEIGHT_SHIFT) - 1;
 // the face layers: the current height's up and down faces (planes 0, 5), the side faces of the current height and the
 // one below (planes 1..4 and 7..10, by turns), whose runs merge upwards; and their faces' light
 static uint layers_data[CHUNK_SIZE * CHUNK_SIZE * 12];
-static uint lights_data[CHUNK_SIZE * CHUNK_SIZE * 12];
+static uint64 lights_data[CHUNK_SIZE * CHUNK_SIZE * 12];
+typedef array_3d<CHUNK_SIZE, uint64> light_layers;
 
 static inline uint layer_face(uint texture, uint data) {
     return (texture + 1) << LAYER_TEXTURE_SHIFT | data;
@@ -47,26 +48,27 @@ static inline uint with_layer_height(uint face, uint height) {
     return (face & LAYER_FACE_WIDTH_BITS) | height << LAYER_HEIGHT_SHIFT;
 }
 
-// a vertex's light (corner_light) in 8 bits: the sums halved, the sky darkness in bits 0..3, the block light in 4..7
-static inline uint layer_vertex_light(uint light) {
-    return (light >> (SKY_DARKNESS_SHIFT + 1) & 0xf) | (light >> (BLOCK_LIGHT_SHIFT + 1) & 0xf) << 4;
+// a vertex's light (corner_light) in 10 bits: the sums of the sky darkness in bits 0..4, of the block light in 5..9
+// (whole: halved sums lost half-steps, and a flat stretch in a gradient shows as a band)
+static inline uint64 layer_vertex_light(uint light) {
+    return (light >> SKY_DARKNESS_SHIFT & 0x1f) | (light >> BLOCK_LIGHT_SHIFT & 0x1f) << 5;
 }
 
 // a face's data (the AO shadows, or the water's level and bottom) and its vertices' light
 struct face_shading_t {
     uint data;
-    uint light;
+    uint64 light;
 };
 
 template <Direction DIR>
 static inline face_shading_t face_shading(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
     const ao_shadows::vertex_data v = ao_shadows::compute<DIR>(data, h, x, y);
     return {v.v0 | v.v1 << 2 | v.v2 << 4 | v.v3 << 6,
-            layer_vertex_light(v.l0) | layer_vertex_light(v.l1) << 8 | layer_vertex_light(v.l2) << 16 | layer_vertex_light(v.l3) << 24};
+            layer_vertex_light(v.l0) | layer_vertex_light(v.l1) << 10 | layer_vertex_light(v.l2) << 20 | layer_vertex_light(v.l3) << 30};
 }
 
 // a face into the layers: plane, then the layer's x and y
-static inline void set_face(array_3d<CHUNK_SIZE>& layers, array_3d<CHUNK_SIZE>& lights, uint plane, uint lx, uint ly, uint texture, face_shading_t shading) {
+static inline void set_face(array_3d<CHUNK_SIZE>& layers, light_layers& lights, uint plane, uint lx, uint ly, uint texture, face_shading_t shading) {
     layers.set_hxy(plane, lx, ly, layer_face(texture, shading.data));
     lights.set_hxy(plane, lx, ly, shading.light);
 }
@@ -109,7 +111,7 @@ static inline void begin(face_buffers& buffers) {
 }
 
 template <Direction DIR>
-inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows, uint light) {
+inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows, uint64 light) {
     keys[count++] = static_cast<uint8>(key<DIR>(x, y, h));
     quad_encoder::encode_face<DIR>(buffers.mesh_solid_cur, x, y, h, width, height, texture_id, shadows, light);
 }
@@ -154,7 +156,7 @@ static inline void begin() {
 }
 
 template <Direction DIR>
-inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows, uint light) {
+inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint texture_id, uint shadows, uint64 light) {
     keys[count++] = static_cast<uint8>(solid_sort::key<DIR>(x, y, h));
     quad_encoder::encode_face<DIR>(buffers.mesh_cutout_cur, x, y, h, width, height, texture_id, shadows, light);
 }
@@ -162,7 +164,7 @@ inline_always static void encode_face(face_buffers& buffers, uint x, uint y, uin
 
 // a merged face to its output: water, cutout or solid; x, y, h the block position of its first corner
 template <Direction DIR>
-inline_always static void encode_merged(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint face, uint light) {
+inline_always static void encode_merged(face_buffers& buffers, uint x, uint y, uint h, uint width, uint height, uint face, uint64 light) {
     const uint texture_id = layer_face_texture(face);
     const uint shadows = face & 0xff;
     if (texture_id == block_table.water_texture) {
@@ -175,7 +177,7 @@ inline_always static void encode_merged(face_buffers& buffers, uint x, uint y, u
 }
 
 template <Direction DIR>
-static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint light) {
+static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint64 light) {
     constexpr uint dir_encode_base_idx = (DIR << 3);
     constexpr int dir_xx_mul = DIRECTION_ENCODE[dir_encode_base_idx + 0];
     constexpr int dir_xy_mul = DIRECTION_ENCODE[dir_encode_base_idx + 1];
@@ -189,17 +191,17 @@ static inline void merge_encode_face(face_buffers& buffers, uint h, uint layer_x
 }
 
 template <>
-inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint light) {
+inline void merge_encode_face<Direction::Up>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint64 light) {
     encode_merged<Direction::Up>(buffers, layer_x, layer_y, layer_h, width, height, face, light);
 }
 
 template <>
-inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint light) {
+inline void merge_encode_face<Direction::Down>(face_buffers& buffers, uint layer_h, uint layer_x, uint layer_y, uint width, uint height, uint face, uint64 light) {
     encode_merged<Direction::Down>(buffers, layer_x, (CHUNK_SIZE - 1) - layer_y, layer_h, width, height, face, light);
 }
 
 template <Direction DIR>
-void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const array_3d<CHUNK_SIZE>& lights, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {
+void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const light_layers& lights, uint& current_layer_offset, uint& top_layer_offset, uint real_h) {
     uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
     uint layer_start_top = layers.plane_idx(DIR + top_layer_offset);
     uint layer_end_idx = layer_start_current + PLANE_SIZE;
@@ -213,7 +215,7 @@ void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const 
                 i++;
                 continue;
             }
-            const uint light_i = lights.get_idx(i);
+            const uint64 light_i = lights.get_idx(i);
             while (j < row_end) {
                 if (data_i != layers.get_idx(j) || light_i != lights.get_idx(j))
                     break;
@@ -232,7 +234,7 @@ void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const 
         uint top_w = layer_width(top);
         uint top_h = layer_height(top);
         uint cur = layers.get_idx((layer_start_current + i));
-        const uint top_light = lights.get_idx(layer_start_top + i);
+        const uint64 top_light = lights.get_idx(layer_start_top + i);
         if ((top & LAYER_FACE_WIDTH_BITS) == (cur & LAYER_FACE_WIDTH_BITS) && top_h < CHUNK_SIZE && top_light == lights.get_idx(layer_start_current + i)) {
             layers.set_idx((layer_start_current + i), with_layer_height(cur, top_h + 1));
         } else {
@@ -245,7 +247,7 @@ void merge_side_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const 
 }
 
 template <Direction DIR>
-void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const array_3d<CHUNK_SIZE>& lights, uint real_h) {
+void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const light_layers& lights, uint real_h) {
     // the current row and the one before, copied from the layer: the runs merged along x, then upwards (y); a run's
     // light is its first face's in the layer
     uint t_c[CHUNK_SIZE * 2];
@@ -268,7 +270,7 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, co
                 i += 1;
                 continue;
             }
-            const uint light_i = lights.get_idx(row_idx + i);
+            const uint64 light_i = lights.get_idx(row_idx + i);
             uint j = i + 1;
             for (; j < CHUNK_SIZE; j++) {
                 uint idx_j = (current_row_idx + j);
@@ -290,7 +292,7 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, co
             uint top_w = layer_width(top);
             uint top_h = layer_height(top);
             uint cur = t_c[idx_i];
-            const uint top_light = lights.get_idx(row_idx - CHUNK_SIZE + i);
+            const uint64 top_light = lights.get_idx(row_idx - CHUNK_SIZE + i);
             if ((top & LAYER_FACE_WIDTH_BITS) == (cur & LAYER_FACE_WIDTH_BITS) && top_light == lights.get_idx(row_idx + i)) {
                 t_c[idx_i] = with_layer_height(cur, top_h + 1);
             } else {
@@ -315,7 +317,7 @@ void merge_top_down_faces(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, co
 }
 
 template <Direction DIR>
-void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const array_3d<CHUNK_SIZE>& lights, uint& current_layer_offset) {
+void merge_side_faces_finish(face_buffers& buffer, array_3d<CHUNK_SIZE>& layers, const light_layers& lights, uint& current_layer_offset) {
     const uint layer_start_current = layers.plane_idx(DIR + current_layer_offset);
 
     for (uint i = 0; i < layer_len;) {
@@ -354,7 +356,7 @@ extern "C"
 
     array_3d<CHUNK_SIZE_E> data(in_chunk_data_ptr);
     array_3d<CHUNK_SIZE> layers(layers_data);
-    array_3d<CHUNK_SIZE> lights(lights_data);
+    light_layers lights(lights_data);
     layers.fill_planes(6, 5, 0);
 
     uint current_layer_offset = 0;
@@ -380,8 +382,8 @@ extern "C"
                 const uint* block_textures = data.is_buried(h, x, y) ? block_table.opaque_faces[block_id] : block_table.faces[block_id];
 
                 if (is_x_quads(block_data)) {                    
-                    x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[1]);
-                    x_quads_encoder::encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[2]);
+                    x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[1], block_data);
+                    x_quads_encoder::encode_quad<Direction::Diagonal1>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[2], block_data);
                     if (!is_water(block_data))
                         continue;
                     // a plant in water: the water faces too

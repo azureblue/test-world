@@ -29,7 +29,8 @@ constexpr uint MAX_VISIBLE_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
 constexpr uint MAX_OUTPUT_UINTS = MAX_FACES * 6 * 2;
 constexpr uint MAX_OUTPUT_UINTS64 = MAX_FACES * 6;
-constexpr uint MAX_CUTOUT_X_UINTS64 = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 6;
+// 2 quads per block, 6 vertices each, a uint64 per vertex
+constexpr uint MAX_CUTOUT_X_UINTS64 = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 12;
 // the solid faces' sort scratch (the main mesher), after the x-quads
 constexpr uint SORT_SCRATCH_UINTS64 = MAX_OUTPUT_UINTS64;
 constexpr uint HEADER_SIZE_IN_UINT64 = 4;
@@ -46,32 +47,33 @@ struct dir_xy {
     }
 };
 
-template <uint SIZE_XY>
+// a cube of SIZE_XY^3 values of type T (the block data, the main mesher's face layers and their 64-bit light)
+template <uint SIZE_XY, typename T = uint>
 struct array_3d {
-    uint* __restrict data;
+    T* __restrict data;
     constexpr static const uint plane_size = SIZE_XY * SIZE_XY;
     constexpr static const uint sy = SIZE_XY;
 
-    array_3d(uint* __restrict data) : data(data) {
+    array_3d(T* __restrict data) : data(data) {
     }
 
     inline_always uint is_solid_at(uint idx) const {
         return data[idx] >> 31;
     }
 
-    inline_always uint get_xyz(uint x, uint y, uint z) const {
+    inline_always T get_xyz(uint x, uint y, uint z) const {
         return data[z * plane_size + y * sy + x];
     }
 
-    inline_always uint get_hxy(uint h, uint x, uint y) const {
+    inline_always T get_hxy(uint h, uint x, uint y) const {
         return data[h * plane_size + y * sy + x];
     }
 
-    inline_always void set_xyz(uint x, uint y, uint z, uint value) {
+    inline_always void set_xyz(uint x, uint y, uint z, T value) {
         data[z * plane_size + y * sy + x] = value;
     }
 
-    inline_always void set_hxy(uint h, uint x, uint y, uint value) {
+    inline_always void set_hxy(uint h, uint x, uint y, T value) {
         data[h * plane_size + y * sy + x] = value;
     }
 
@@ -86,7 +88,7 @@ struct array_3d {
                is_solid_at(idx - plane_size) & is_solid_at(idx + plane_size);
     }
 
-    inline_always uint* get_plane(uint plane) const {
+    inline_always T* get_plane(uint plane) const {
         return &data[plane * plane_size];
     }
 
@@ -98,19 +100,19 @@ struct array_3d {
         return plane * plane_size + row * sy;
     }
 
-    inline_always void set_idx(uint idx, uint value) {
+    inline_always void set_idx(uint idx, T value) {
         data[idx] = value;
     }
 
-    inline_always uint get_idx(uint idx) const {
+    inline_always T get_idx(uint idx) const {
         return data[idx];
     }
 
-    inline_always uint* __restrict get_ptr_hxy(uint h, uint x, uint y) const {
+    inline_always T* __restrict get_ptr_hxy(uint h, uint x, uint y) const {
         return &data[h * plane_size + y * sy + x];
     }
 
-    inline void fill_planes(uint from, uint n, uint value) {
+    inline void fill_planes(uint from, uint n, T value) {
         uint start = from * plane_size;
         uint end = (from + n) * plane_size;
         for (uint i = start; i < end; i++) {
@@ -141,9 +143,11 @@ constexpr uint LIGHT_BITS = 7u << SKY_DARKNESS_SHIFT | 7u << BLOCK_LIGHT_SHIFT;
 static_assert(MAX_BLOCK_ID <= 1u << SKY_DARKNESS_SHIFT);
 
 // A vertex's light: the sum of the face's front cell and the 3 cells around the vertex (sides a, b, diagonal c), still
-// in LIGHT_BITS' fields. Solid cells add 0: the shader divides by the open cells, which the vertex's AO tells.
+// in LIGHT_BITS' fields. Solid cells add 0: the shader divides by the open cells, which the vertex's AO tells. With
+// both sides solid the diagonal is behind a wall corner (its light would leak through): left out, the front alone.
 inline_always static uint corner_light(uint front, uint a, uint b, uint c) {
-    return (front & LIGHT_BITS) + (a & LIGHT_BITS) + (b & LIGHT_BITS) + (c & LIGHT_BITS);
+    const uint diagonal_mask = LIGHT_BITS & (((a & b) >> 31) - 1);
+    return (front & LIGHT_BITS) + (a & LIGHT_BITS) + (b & LIGHT_BITS) + (c & diagonal_mask);
 }
 
 // a face's AO shadows (v) and light (l, see corner_light) per vertex

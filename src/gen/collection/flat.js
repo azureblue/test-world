@@ -28,6 +28,11 @@ export class FlatGenerator extends ChunkGenerator {
         return chunkData;
     }
 
+    /** the grass at 0 */
+    solidTops(cx, cy) {
+        return new Int32Array(CHUNK_SIZE * CHUNK_SIZE);
+    }
+
     static async create(seed, params = {}) {
         return new FlatGenerator(seed);
     }

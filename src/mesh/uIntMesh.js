@@ -86,7 +86,7 @@ export class UIntMeshHandler extends MeshHandler {
     upload(meshData) {
         const solidLen = meshData.solidEnd >> 1;
         const liquidLen = (meshData.liquidEnd - meshData.solidEnd) >> 1;
-        const xQuadLen = (meshData.xQuadEnd - meshData.liquidEnd);
+        const xQuadLen = (meshData.xQuadEnd - meshData.liquidEnd) >> 1;
         const cutoutLen = (meshData.cutoutEnd - meshData.xQuadEnd) >> 1;
         const gl = this.#gl;
         const va = gl.createVertexArray();
@@ -116,7 +116,7 @@ export class UIntMeshHandler extends MeshHandler {
         gl.enableVertexAttribArray(this.#aInXQuads);
         gl.bindBuffer(gl.ARRAY_BUFFER, vbXQuads);
         gl.bufferData(gl.ARRAY_BUFFER, meshData.data, gl.STATIC_DRAW, meshData.liquidEnd, meshData.xQuadEnd - meshData.liquidEnd);
-        gl.vertexAttribIPointer(this.#aInXQuads, 1, gl.UNSIGNED_INT, false, 0, 0);
+        gl.vertexAttribIPointer(this.#aInXQuads, 2, gl.UNSIGNED_INT, false, 0, 0);
         gl.bindVertexArray(null);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
@@ -220,21 +220,23 @@ export class UIntMesher extends ChunkMesher {
 
     /**
       * @param {ChunkDataExt} chunkData
+      * @param {Uint8Array | null} [light] the light of its cells (world/lighting.js); none: full sky light
       * @return {{data: Uint32Array, solidEnd: number, liquidEnd: number, xQuadEnd: number, cutoutEnd: number}}
       */
-    mesh(chunkData) {
+    mesh(chunkData, light = null) {
         throw new Error("Not implemented");
     }
 
     /**
      * @param {IVec3} position 
      * @param {ChunkDataExt} chunkData
+     * @param {Uint8Array | null} [light] the light of its cells (world/lighting.js); none: full sky light
      * 
      * @returns {UIntMeshData}
      */
-    createMesh(position, chunkData) {
+    createMesh(position, chunkData, light = null) {
         const meshStart = performance.now();
-        const meshData = this.mesh(chunkData);
+        const meshData = this.mesh(chunkData, light);
         this.#lastMeshTime = perfDiff(meshStart);
         return new UIntMeshData(vec3(position.x * CHUNK_SIZE, position.y * CHUNK_SIZE, position.z * CHUNK_SIZE),
             meshData.data, meshData.solidEnd, meshData.liquidEnd, meshData.xQuadEnd, meshData.cutoutEnd);

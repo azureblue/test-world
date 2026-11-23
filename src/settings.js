@@ -36,10 +36,8 @@ export const Settings = {
         falloff: 0.75,
         // the sky light's strength, 0..1 (later: day and night)
         sun: 1,
-        // test light until the light is computed, within each chunk only: full sky light in the cells open to its top,
-        // less in the cells that see the sky at 45° (less directly under a block, full 6 blocks or more under it),
-        // spread from there 1 less per block (2 sideways under a block); no light from the chunks around
-        debugFake: false
+        // off: no light computed, full sky light everywhere (the light pass costs time per chunk)
+        enabled: true
     },
 
     camera: {
@@ -164,7 +162,7 @@ export const Settings = {
         reach: 5,
         // the blocks in the bar at the bottom (keys of BLOCK_IDS); the selected one (mouse wheel, 1..9) is placed with the
         // right mouse button
-        itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0", "SPRUCE_TRUNK", "SPRUCE_LEAVES"]
+        itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0", "SPRUCE_TRUNK", "SPRUCE_LEAVES", "LAMP"]
     },
 
     // fragments of broken blocks (world/particles.js): small squares of the block's texture, facing the camera
