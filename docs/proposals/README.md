@@ -11,4 +11,4 @@ Each file describes the problem, the proposed design and a suggested order of wo
 | [Water flow](water-flow.md) | done: levels, source and flowing water; slopes and cost later |
 | [Water Fresnel: real face normals](water-fresnel.md) | proposed; now the sides follow the top |
 | [Block definitions and climate tints](block-definitions.md) | steps 1, 2 done: `blocks.json`, run-time mesher table, textures composed at load (colour ops, spruce); climate tints and the layer budget proposed |
-| [Lighting: sky and block light, 8 levels](lighting.md) | steps 1..3 done: light bits, vertex light, shader, the light pass, edits; particles, plants; water next |
+| [Lighting: sky light (8 levels), block light (16)](lighting.md) | steps 1..3 done: light bits, vertex light, shader, the light pass, edits; particles, plants; water next |

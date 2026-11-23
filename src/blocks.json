@@ -38,7 +38,7 @@
         { "id": 18, "name": "SPRUCE_TRUNK", "model": "cube", "textures": { "top": "spruce_trunk_top", "sides": "spruce_trunk", "bottom": "spruce_trunk_top" } },
         { "id": 19, "name": "SPRUCE_LEAVES", "model": "cube", "textures": "spruce_leaves", "cutout": "spruce_leaves_cutout" },
         { "id": 20, "name": "SNOW", "model": "cube", "textures": "snow" },
-        { "id": 21, "name": "LAMP", "model": "cube", "textures": "lamp", "light": 7 },
+        { "id": 21, "name": "LAMP", "model": "cube", "textures": "lamp", "light": 15 },
         { "id": 255, "name": "CHUNK_EDGE", "model": "none" }
     ]
 }

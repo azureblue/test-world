@@ -1,34 +1,44 @@
-# Lighting: sky and block light, 8 levels
+# Lighting: sky light (8 levels) and block light (16 levels)
 
 Status: steps 1 (plumbing) and 2 (the light pass, with edits) done for the cubes' faces, plants and particles; water next.
 
 ## Goal
 
-Two kinds of light, each 8 levels (0..7, 3 bits). Caves and anything under an overhang go dark. Blocks like a lamp
-can emit light.
+Two kinds of light: sky light, 8 levels (0..7, 3 bits), and block light, 16 levels (0..15, 4 bits). Caves and anything
+under an overhang go dark. Blocks like a lamp can emit light.
 
 - **Sky light:** 7 in every cell open to the sky straight up. Elsewhere it is the neighbours' light minus 1.
 - **Block light:** a light block's own level in the open cells next to it (a lamp is solid; its faces are as bright as
-  it), spreading out the same way, minus 1 per block. A level 7 lamp: 7 next to it, then 6, 5, ... 1 eight blocks
-  away. (At first the level was in the lamp's own cell, which no face shows: 6 next to it, dark from 4 blocks out.)
+  it), spreading out the same way, minus 1 per block. A level 15 lamp: 15 next to it, then 14, 13, ... 1 fifteen
+  blocks away.
 
-A face's brightness is `max(sky * sun, block)`, with the sun's face shading only for direct sky light. `sun` is a uniform, which leaves room for day and night later.
+A face's brightness is the brighter of the sky light's (times `sun`) and the block light's, with the sun's face
+shading only for direct sky light. `sun` is a uniform, which leaves room for day and night later.
 
-8 levels means light reaches at most 8 blocks (a lamp's; the sky's 7). That is what keeps the design below small: a chunk's light depends only
-on the blocks within 7 of it.
+Light reaches at most 7 blocks (sky) or 15 (block light). That is what keeps the design below small: a chunk's light
+depends only on the blocks that close to it.
+
+**Why block light has 16 levels and sky light 8.** With 8 levels a lamp lit too small a room: 7 next to it, under half
+as bright 3 blocks out, and two lamps 6 apart left a dark band between them (light takes the brighter level, it doesn't
+add). Minecraft has 16 levels for both (−1 per block). Here light is computed per chunk from the blocks around it, so
+how far light travels is how far around each chunk the pass reads:
+- Block light at 15 costs only near emitters, which are rare: its pass runs only when a chunk or a neighbour has one.
+- Sky light at 15 would cost on almost every chunk (a 62³ region instead of 46³, about 2× the pass), wouldn't fit the
+  vertex (11 free bits for two 6-bit sums), and would light caves twice as deep, retuning the overhang rules.
+Minecraft stores light and updates it incrementally, so its reach costs nothing when meshing; that's a bigger change.
 
 ## Where the light comes from: computed per chunk, not stored
 
 There is no persistent light storage and there are no incremental updates across chunks. When the world worker builds a
 chunk's mesh, it first computes that chunk's light from scratch:
 
-1. **Region.** Take the blocks of the chunk plus an 8-block margin: 48³ (`LIGHT_MARGIN`; 7 until lamps lit their
-   neighbours at their level, which took the light pass from 0.54 to 0.64 ms per chunk). The loader already caches the 27 neighbours, so
-   it can supply them. Only opacity and emission are needed (1 byte per cell), not the full block values.
+1. **Region.** Take the blocks of the chunk plus a 7-block margin: 46³ (`LIGHT_MARGIN`). Near emitters, also a
+   15-block margin for the block light: 62³ (`BLOCK_LIGHT_MARGIN`). The loader already caches the 27 neighbours, so it
+   can supply them. Only opacity and emission are needed (1 byte per cell), not the full block values.
 2. **Seeds.**
    - Sky 7 in every cell above its column's sky top (below).
    - Angled sky light under overhangs (see Shadows under overhangs).
-   - Block light at the emitters' levels (`light` in `blocks.json`).
+   - Block light at the emitters' levels (`light` in `blocks.json`, 0..15), in the open cells next to them.
 3. **Spread.** A spread over the region, highest light first, minus 1 per step (2 sideways under a block, for sky
    light). Opaque cells stop it.
 4. **Write.** Put the inner 34³ result (the mesher's input, border included) into the mesher's input block values,
@@ -38,7 +48,7 @@ Shortcuts for the common cases:
 
 - A chunk entirely above every sky top in its region, with no emitters: all sky 7, nothing to write (0 is full sky
   light).
-- A chunk entirely below every sky top, with no emitters within 8 blocks: all 0, no BFS.
+- A chunk entirely below every sky top, with no emitters within 15 blocks: all 0, no BFS.
 
 Only surface chunks and lit caves pay for the spread.
 
@@ -46,16 +56,22 @@ Lighting is its own WASM pass, run before meshing. The fast mesher only reads th
 
 **As built** (`world/lighting.js`, `mesh/cpp/light.cpp`):
 
-- **Gathering in JS.** The region's cells come from the loader's 27 chunks, one byte each: bit 0 solid, bits 1..3 the
+- **Gathering in JS.** The region's cells come from the loader's 27 chunks, one byte each: bit 0 solid, bits 1..4 the
   light given. The sky tops become, per region column, the lowest height that sees the sky straight up.
-- **The pass in WASM.** It seeds the sky light (with the angled light), spreads it highest first with a list per
-  level, then does the same for block light. The output is a byte per cell of the mesher's input: bits 0..2 the sky
-  darkness, 3..5 the block light. The mesher wrapper ORs it into its input bits.
+- **The pass in WASM.** `compute` seeds the sky light (with the angled light) and spreads it highest first with a list
+  per level. `compute_block`, only near emitters, spreads the block light over its own 62³ region a level at a time
+  (each cell is set once: its light is final when set) and adds it. The output is a byte per cell of the mesher's
+  input: bits 0..2 the sky darkness, 3..6 the block light. The mesher wrapper ORs it into its input bits.
+- **Emitters.** Whether a chunk has a block giving light is looked up once (a scan of its data) and kept per chunk;
+  edits update it. The block light pass runs when the chunk or one of its 26 neighbours has one (15 blocks fit in a
+  neighbour).
+- **Measured** (block light): in a rock world with a tunnel, 0.78 ms per chunk without a lamp, 1.44 ms in the chunks
+  around one (mostly gathering 62³ cells in JS).
 - **Open sky cells don't spread** unless a column beside them is covered at their height: all their other neighbours
   are open sky (or solid). Without this, an air chunk queued 100,000 cells.
-- **Shortcuts.** Every region column sees the sky from the region's bottom: there's no solid block, and so no emitter
-  (light blocks must be cubes, `blocks.js` checks), so there's no light to compute. That's checked from the sky tops
-  alone, before gathering. And when the chunk with its border is all solid, there's nothing to light.
+- **Shortcuts.** Every region column sees the sky from the region's bottom: there's no solid block, so no sky light to
+  compute (checked from the sky tops alone, before gathering); with no emitter near either, nothing at all. And when
+  the chunk with its border is all solid, there's nothing to light.
 - **Measured** on climate terrain, per chunk: surface 1.07 ms, underground 0.85 ms, air 0.02 ms (meshing is about
   0.55 ms, generating about 20 ms). In a surface chunk about 0.58 ms is the JS gathering and the rest the pass.
 - **The client gets the light** with each chunk (`ChunkResponse.light`, 39 KB transferred). The quick meshes of its
@@ -142,12 +158,13 @@ sky = 7 - floor(depth below the water surface / N)
 
 ## Edits
 
-Changing a block can change the light of anything within 8 blocks (`LIGHT_MARGIN`). An edit always resends the
-chunks whose bordered data includes the block. When it changes the light (solid or not, or the light given), it
-resends the chunks within 8 blocks of it: still at most the 27 neighbours, just more of them in practice. Water flow never changes it, so it
+Changing a block can change the light of anything within 7 blocks (`LIGHT_MARGIN`), or 15 near emitters. An edit
+always resends the chunks whose bordered data includes the block. When it changes the light (solid or not, or the
+light given), it resends the chunks within 7 blocks of it, or 15 when it places or removes an emitter or one is in its
+chunk or a neighbour (`Lighting.marginAt`): still at most the 27 neighbours, just more of them in practice. Water flow never changes it, so it
 causes no extra resends.
 
-If the edit moves the column's sky top, the chunks in the columns within 8 blocks are resent too, between the old and
+If the edit moves the column's sky top, the chunks in the columns within 7 blocks are resent too, between the old and
 new sky top (the shaft that opened or closed), only those in the simulated range.
 
 Resends already go through `sendChanged`, with its per-chunk interval, so a burst of edits stays bounded.
@@ -174,13 +191,14 @@ Light is never stored, so it can't go stale:
 | Bits | Holds |
 |---|---|
 | 11..13 | Sky darkness: 7 − sky light. |
-| 17..19 | Block light. |
+| 17..20 | Block light (0..15). |
 
 - Data without light (all 0) is full sky light, so chunks in the open sky need no writes, and the main mesher (no light
   yet) draws as before.
 - Block ids are below `MAX_BLOCK_ID` (1024), so bits 11..15 are 0 in block values. `decode_block_id` masks with
   `MAX_BLOCK_ID - 1`.
-- Each field has 2 zero bits above it, so the lights of 4 cells add up with one AND per cell and no unpacking.
+- Each field has 2 zero bits above it, so the lights of 4 cells add up with one AND per cell and no unpacking: the
+  sums in 11..15 (up to 28) and 17..22 (up to 60).
 
 **Smooth light per vertex** (`corner_light`):
 
@@ -191,8 +209,8 @@ Light is never stored, so it can't go stale:
   front cell's alone. Counting it leaked light around corners, a lamp's or the sky's from the other side (seen in a
   dug tunnel). It's a mask in `corner_light`, no branch: no measurable cost.
 
-**Vertex bits.** For solid faces, the sums go to bits 21..25 (sky darkness) and 27..31 (block light) of the position
-word, which were free.
+**Vertex bits.** For solid faces, the sums go to bits 21..25 (sky darkness) and 26..31 (block light) of the position
+word, which were free (all of them now).
 
 - **Water:** has free bits too (step 4).
 - **X-quads (32-bit vertices):** have only bit 31 free. They would move to `uvec2` vertices and take their own cell's
@@ -221,7 +239,7 @@ was. The one difference is the unused `CHUNK_EDGE` (model `none`), which was dra
   scans over empty layers no longer fit the L1 cache. Instead there are two arrays at the same indices:
   - **The face** (`LAYER_*` in `uIntWasmMesher.cpp`), 32 bits: AO 0..7, texture + 1 at 8..19 (12 bits, room for more
     textures), then the merge counters, width 20..25 and height 26..31 (1..32 each).
-  - **The light**, 64 bits: 10 bits per vertex, corner_light's sums whole (the same values as the fast mesher). It's
+  - **The light**, 64 bits: 11 bits per vertex, corner_light's sums whole (the same values as the fast mesher). It's
     written with every face and read only where there is one, so empty layers never touch it and it's never cleared.
 - **Whole sums, not halved.** At first the light was 8 bits per vertex, the sums halved. That lost the half-steps:
   in a tunnel two vertices with darkness 1.0 and 1.5 both came out 1.0. A flat stretch in a gradient reads as a dark
@@ -244,9 +262,25 @@ is:
 ```glsl
 float open_cells = shadow == 3u ? 1.0 : 4.0 - float(shadow);
 float sky = 7.0 - min(float(sky_darkness_sum) / open_cells, 7.0);
-float block = min(float(block_light_sum) / open_cells, 7.0);
-v_light = vec3(pow(LIGHT_FALLOFF, 7.0 - sky * LIGHT_SUN), pow(LIGHT_FALLOFF, 7.0 - block), sky / 7.0);
+float block = min(float(block_light_sum) / open_cells, 15.0);
+v_light = vec3(pow(LIGHT_FALLOFF, 7.0 - sky * LIGHT_SUN), block_brightness(block), sky / 7.0);
 ```
+
+Sky light falls by `LIGHT_FALLOFF` per level. Block light follows Minecraft's lightmap curve, bright near the source
+and falling late, scaled so that level 0 is as dark as sky light 0 (no edge where a lamp's light ends):
+
+```glsl
+float r = 1.0 - block / 15.0;
+float dark = pow(LIGHT_FALLOFF, 7.0);
+return dark + (1.0 - dark) * (1.0 - r) / (r * 3.0 + 1.0);
+```
+
+| blocks from a lamp | 1 | 2 | 3 | 4 | 6 | 8 | 10 | 12 | 15 |
+|---|---|---|---|---|---|---|---|---|---|
+| level | 15 | 14 | 13 | 12 | 10 | 8 | 6 | 4 | 1 |
+| brightness | 1.0 | 0.81 | 0.67 | 0.57 | 0.42 | 0.33 | 0.26 | 0.21 | 0.15 |
+
+The same is in `x_quads.vert` and `World.brightnessAt` (particles).
 
 The fragment shader adds the face shading:
 - The faces' fixed shading by the sun's direction (top 1.0, sides 0.6–0.8, bottom 0.5) is for sunlight only.
@@ -265,7 +299,7 @@ float light = max(v_light.x * mix(ambient_face, sun_face, v_light.z), v_light.y 
 - `falloff` (0.75): level 0, a cave, is 0.13 of full light.
 - `sun` (1).
 - `enabled` (true): off, no light is computed, and everything has full sky light.
-- The lamp (`LAMP`, `"light": 7` in `blocks.json`) is in the item bar.
+- The lamp (`LAMP`, `"light": 15` in `blocks.json`) is in the item bar.
 
 These are `#define`s for now. `sun` becomes a uniform with day and night.
 
@@ -287,7 +321,8 @@ Particles, and later the player's view and held items, need light at a point.
 - A plant's vertex is 2 uint32, like a solid face's: the position and texture as before, then the light of the
   plant's own cell (its value's `LIGHT_BITS` in the mesher's input, the same for the 4 vertices: a plant is in one
   cell, so no smoothing).
-- `x_quads.vert`: `pow(LIGHT_FALLOFF, 7 - max(sky * LIGHT_SUN, block))`, light from no direction (no face shading).
+- `x_quads.vert`: the brighter of the sky light's and the block light's brightness (as `cube_solid.vert`), light from no
+  direction (no face shading).
 - A plant's quad is 96 bytes instead of 48; the meshers' speed didn't change.
 
 ## Order of work

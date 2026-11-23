@@ -82,7 +82,7 @@ export class UIntExtWasmMesher extends UIntMesher {
 
     /**
      * @param {ChunkDataExt} chunkData
-     * @param {Uint8Array | null} [light] the light of its cells (Lighting.compute: bits 0..2 the sky darkness, 3..5
+     * @param {Uint8Array | null} [light] the light of its cells (Lighting.compute: bits 0..2 the sky darkness, 3..6
      *   the block light); none: full sky light
      * @param {Uint32Array} [destData] Optional pre-allocated array to store the result data.
      * @return {{data: Uint32Array, solidEnd: number, liquidEnd: number, xQuadEnd: number, cutoutEnd: number}}

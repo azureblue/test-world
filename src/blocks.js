@@ -18,7 +18,7 @@ export class Block {
      * @param {number[]} textureIds texture layers by face: up, front, left, back, right, down (the mesher's Direction)
      * @param {number[] | null} cutoutTextureIds a cube's textures with holes (alpha 0), by face, used instead with
      *   Settings.render.cutoutLeaves: its faces are alpha tested, and it doesn't hide the faces next to it
-     * @param {number} light the block light it gives, 0..7 (docs/proposals/lighting.md)
+     * @param {number} light the block light it gives, 0..15 (docs/proposals/lighting.md)
      */
     constructor(id, name, model, textureIds, cutoutTextureIds = null, light = 0) {
         this.#id = id;
@@ -120,9 +120,9 @@ function loadBlocks() {
         const textureIds = t === undefined ? FACES.map(() => 0) : byFace(t);
         const cutoutTextureIds = def.cutout === undefined ? null : byFace(def.cutout);
         const light = def.light ?? 0;
-        if (!Number.isInteger(light) || light < 0 || light > 7)
-            throw new Error(`blocks.json: block ${def.name}: light ${light}, 0..7`);
-        // the light pass takes a region without solid blocks for one without light (world/lighting.js)
+        if (!Number.isInteger(light) || light < 0 || light > 15)
+            throw new Error(`blocks.json: block ${def.name}: light ${light}, 0..15`);
+        // the light pass seeds an emitter's light in the open cells next to it: the emitter is a solid cube
         if (light > 0 && def.model !== "cube")
             throw new Error(`blocks.json: block ${def.name}: light on a ${def.model}, only cubes give light`);
         blocks[def.id] = new Block(def.id, def.name, def.model, textureIds, cutoutTextureIds, light);
@@ -137,7 +137,7 @@ function loadBlocks() {
 const BLOCKS = loadBlocks();
 Object.freeze(BLOCKS);
 
-/** the block light each block gives (0..7), by id: the light pass's emitters (world/lighting.js) */
+/** the block light each block gives (0..15), by id: the light pass's emitters (world/lighting.js) */
 export const BLOCK_LIGHT = new Uint8Array(MAX_BLOCK_ID);
 for (const block of BLOCKS)
     if (block !== undefined)

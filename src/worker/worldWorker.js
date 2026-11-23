@@ -9,7 +9,7 @@ import { Ticker } from "../ticker.js";
 import { perfDiff } from "../utils.js";
 import { BLOCK_LIGHT, MAX_BLOCK_ID } from "../blocks.js";
 import { pos3ToKey } from "../world/chunkEntry.js";
-import { LIGHT_MARGIN, Lighting } from "../world/lighting.js";
+import { BLOCK_LIGHT_MARGIN, LIGHT_MARGIN, Lighting } from "../world/lighting.js";
 import { SkyTops } from "../world/skyTops.js";
 import { WaterFlow } from "../world/waterFlow.js";
 import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse } from "./common.js";
@@ -122,7 +122,11 @@ class WorldState {
         if (lightKind(old) === lightKind(value)) {
             this.#changedAround(ix, iy, iz, iz, 1);
         } else {
-            this.#changedAround(ix, iy, iz, iz, LIGHT_MARGIN);
+            lighting?.onBlockChanged(ix, iy, iz, value);
+            // as far as the sky light, or the block light for an emitter placed or removed, or near emitters
+            const emitter = BLOCK_LIGHT[old & (MAX_BLOCK_ID - 1)] > 0 || BLOCK_LIGHT[value & (MAX_BLOCK_ID - 1)] > 0;
+            const margin = emitter ? BLOCK_LIGHT_MARGIN : lighting?.marginAt(ix, iy, iz) ?? LIGHT_MARGIN;
+            this.#changedAround(ix, iy, iz, iz, margin);
             const top = skyTops.onBlockChanged(ix, iy, iz, (value >>> 31) === 1);
             if (top !== null)
                 this.#changedAround(ix, iy, Math.min(top.from, top.to), Math.max(top.from, top.to), LIGHT_MARGIN);
