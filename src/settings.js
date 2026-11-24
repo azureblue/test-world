@@ -30,9 +30,9 @@ export const Settings = {
         cutoutLeaves: true
     },
 
-    // sky and block light, 8 levels (0..7) each (docs/proposals/lighting.md); for now only the cubes' faces
+    // sky and block light, 16 levels (0..15) each (docs/proposals/lighting.md)
     light: {
-        // the brightness of a light level l is falloff^(7 - l): 0.75 makes level 0 (a cave) 0.13 of full light
+        // sky light level l's brightness is falloff^(7 (15 - l) / 15): 0.75 makes level 0 (a cave) 0.13 of full light
         falloff: 0.75,
         // the sky light's strength, 0..1 (later: day and night)
         sun: 1,
