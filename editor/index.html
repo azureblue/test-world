@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="icon" href="../favicon.png" type="image/png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Texture editor</title>
+    <style>
+        :root {
+            --bg: #1e2126;
+            --panel: #272b31;
+            --line: #3a4048;
+            --text: #d8dde3;
+            --dim: #8b949e;
+            --accent: #5aa0f0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 220px 48px auto 1fr;
+            grid-template-rows: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font: 13px system-ui, sans-serif;
+        }
+
+        #lists,
+        #tools,
+        main {
+            border-right: 1px solid var(--line);
+            overflow: auto;
+        }
+
+        #lists {
+            background: var(--panel);
+            padding: 10px;
+        }
+
+        main {
+            padding: 12px;
+        }
+
+        h2 {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 14px 0 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--dim);
+        }
+
+        ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        li:hover {
+            background: var(--line);
+        }
+
+        li.selected {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        li canvas {
+            width: 16px;
+            height: 16px;
+            image-rendering: pixelated;
+            flex: none;
+        }
+
+        button,
+        select,
+        input[type=text] {
+            font: inherit;
+            color: var(--text);
+            background: var(--bg);
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            padding: 3px 8px;
+        }
+
+        h2 button {
+            padding: 0 6px;
+            font-size: 11px;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        button:hover:not(:disabled) {
+            border-color: var(--accent);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+        }
+
+        button.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            margin: 6px 0;
+        }
+
+        #tools {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 0;
+            background: var(--panel);
+        }
+
+        #tools button {
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            display: grid;
+            place-items: center;
+        }
+
+        #tools hr {
+            width: 28px;
+            border: none;
+            border-top: 1px solid var(--line);
+            margin: 4px 0;
+        }
+
+        #tools svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        #details {
+            min-height: 64px;
+            margin-bottom: 8px;
+        }
+
+        #details label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        #pixels {
+            display: block;
+            image-rendering: pixelated;
+            cursor: crosshair;
+            border: 1px solid var(--line);
+        }
+
+        .swatches {
+            display: grid;
+            gap: 2px;
+            width: max-content;
+        }
+
+        .swatches div {
+            width: 22px;
+            height: 22px;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .swatches div.current {
+            border-color: #fff;
+        }
+
+        #palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            max-width: 390px;
+        }
+
+        #palette div {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        #current {
+            width: 44px;
+            height: 44px;
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #color {
+            width: 0;
+            height: 0;
+            padding: 0;
+            border: none;
+            opacity: 0;
+        }
+
+        #previewPane {
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* pinned to the pane: its size comes from the pane, not the other way round (it's sized to how it shows) */
+        #preview {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        #previewBar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(30, 33, 38, 0.8);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        #status {
+            margin-top: 8px;
+            color: var(--dim);
+            max-width: 390px;
+        }
+
+        #status.error {
+            color: #f07070;
+        }
+    </style>
+</head>
+
+<body>
+    <aside id="lists">
+        <div class="row">
+            <button id="load" title="Open a texture editor file">Load</button>
+            <button id="save" title="Download everything as one file">Save</button>
+            <button id="import" title="Start again from the game's textures and blocks">From game</button>
+            <input type="file" id="file" accept=".json,application/json" hidden>
+        </div>
+        <h2>Images <button data-copy="image" title="Copy the selected image">Copy</button></h2>
+        <ul id="images"></ul>
+        <h2>Blocks <button data-copy="block" title="Copy the selected block and its images">Copy</button></h2>
+        <ul id="blocks"></ul>
+        <h2>Plants <button data-copy="plant" title="Copy the selected plant and its image">Copy</button></h2>
+        <ul id="plants"></ul>
+    </aside>
+
+    <nav id="tools">
+        <button data-tool="pencil" title="Pencil (B): left paints, right erases">
+            <svg viewBox="0 0 24 24"><path d="M4 20l4-1L19 8l-3-3L5 16z" /><path d="M14 7l3 3" /></svg>
+        </button>
+        <button data-tool="fill" title="Fill (G): left fills, right erases the area">
+            <svg viewBox="0 0 24 24"><path d="M5 11l7-7 7 7-7 7z" /><path d="M5 11h14" /><path d="M20 15c0 2-1.5 3-1.5 4a1.5 1.5 0 003 0c0-1-1.5-2-1.5-4z" /></svg>
+        </button>
+        <button data-tool="picker" title="Pick a colour (I)">
+            <svg viewBox="0 0 24 24"><path d="M14 4l6 6" /><path d="M17 7l-9 9-3 1 1-3 9-9" /><path d="M4 20l2-2" /></svg>
+        </button>
+        <hr>
+        <button id="undo" title="Undo (Ctrl+Z)">
+            <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 010 12h-3" /></svg>
+        </button>
+        <button id="redo" title="Redo (Ctrl+Y)">
+            <svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 000 12h3" /></svg>
+        </button>
+        <hr>
+        <button id="grid" class="active" title="Grid">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z" /><path d="M4 12h16M12 4v16" /></svg>
+        </button>
+    </nav>
+
+    <main>
+        <div id="details"></div>
+        <canvas id="pixels"></canvas>
+        <div class="row" style="align-items: flex-start; margin-top: 10px; gap: 12px">
+            <div>
+                <div id="current" title="The colour (click to choose)"></div>
+                <input type="color" id="color" value="#5a8a3c">
+            </div>
+            <div class="swatches" id="variations" title="Lighter and darker, the hue a little turned"></div>
+        </div>
+        <h2>Colours in the image</h2>
+        <div id="palette"></div>
+        <div id="status"></div>
+    </main>
+
+    <section id="previewPane">
+        <canvas id="preview"></canvas>
+        <div id="previewBar">
+            <span id="shown"></span>
+            <label><input type="checkbox" id="patch"> 3 × 3</label>
+        </div>
+    </section>
+</body>
+<script type="module" src="./editor.js"></script>
+
+</html>
