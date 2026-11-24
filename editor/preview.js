@@ -79,7 +79,7 @@ export class Preview {
 
     #yaw = -Math.PI / 3;
     #pitch = 0.45;
-    #distance = 6;
+    #distance = 3.5;
     #lastDrag = -Infinity;
     #lastFrame = performance.now();
 

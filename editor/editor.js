@@ -542,6 +542,7 @@ function renderColors() {
     const mask = target().key.endsWith("#mask");
     $("colors").hidden = mask;
     $("maskHint").hidden = !mask;
+    $("paintHint").hidden = mask;
     $("current").style.background = hex(color);
     $("color").value = hex(color);
     const variations = $("variations");
@@ -727,13 +728,15 @@ function initPixelInput() {
         const erase = e.button === 2;
         const [x, y] = at(e);
         const painted = target();
-        if (tool !== "picker")
+        // Ctrl: the picker, whatever the tool
+        const used = e.ctrlKey ? "picker" : tool;
+        if (used !== "picker")
             snapshot(painted);
-        if (apply(x, y, tool, erase))
+        if (apply(x, y, used, erase))
             afterPaint();
-        else if (tool !== "picker")
+        else if (used !== "picker")
             history.get(painted.key).undo.pop();
-        stroke = tool === "pencil" ? { erase, x, y } : null;
+        stroke = used === "pencil" ? { erase, x, y } : null;
         pixels.setPointerCapture(e.pointerId);
     });
     pixels.addEventListener("pointermove", (e) => {

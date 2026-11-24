@@ -19,7 +19,7 @@ itself.
 - **The selected one:** its name (editable: an image's users follow), Delete (an image only when nothing uses it). An
   image: its mask, on or off, and the base under it. A block: one image on all faces, or top, sides and bottom apart, its model
   (cube or liquid); the face edited and its image. A plant: its image. The edited image's mask (a block's face's, a plant's) is under them.
-- **Tools** (left strip): pencil (B), fill (G, the connected pixels of one colour), fill all (A, the whole image), pick a colour (I); the left button paints, the right one erases
+- **Tools** (left strip): pencil (B), fill (G, the connected pixels of one colour), fill all (A, the whole image), pick a colour (I, or Ctrl+click with any tool); the left button paints, the right one erases (the tip under the image says so)
   (transparent). Undo and redo (Ctrl+Z, Ctrl+Y), a stroke at a time, per image; the grid.
 - **Colours:** the current one (click it for the system picker); the main colour's variations, lighter and darker
   (rows) with the hue a little turned (columns); under them the image's own colours, most used first. Choosing a
