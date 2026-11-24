@@ -12,8 +12,8 @@ itself.
 - **Masks:** an image can have a mask, part of it (not in the list): it shows its pixels where the mask is white and
   its base image (another one) where it's black, blended between (the mask's red, as the game's `mask` op). Its image
   and mask buttons choose which is painted; on the mask the left button paints white, the right one black (no
-  colours). A new mask is all white; turned off,
-  the image keeps how it looks, as its pixels.
+  colours). A new mask is all white. Turned off, the mask is kept
+  but not used: the image shows its own pixels; turned on again, it's back as it was (saved with `"off": true`).
 - **Lists:** images, blocks, plants. Copy copies the selected one as `name_copy` (`NAME_COPY`); a block's or plant's
   images are copied with it, so the copy is edited apart.
 - **The selected one:** its name (editable: an image's users follow), Delete (an image only when nothing uses it). An
@@ -24,7 +24,8 @@ itself.
   set is edited and shown (in 3 × 3 the faces between cutout blocks are drawn, as in the game). Turned off, the images
   stay. A plant: its image. The edited image's mask (a block's face's, a plant's) is under them.
 - **Tools** (left strip): pencil (B), fill (G, the connected pixels of one colour), fill all (A, the whole image), pick a colour (I, or Ctrl+click with any tool); the left button paints, the right one erases
-  (transparent; the tip under the image says so). Undo and redo (Ctrl+Z, Ctrl+Y), a stroke at a time, per image; the grid.
+  (transparent; the tip under the image says so). Undo and redo (Ctrl+Z, Ctrl+Y), a stroke at a time, per image; the grid; save the edited image as a PNG (`name.png`, as it
+  looks: a masked one composed; while its mask is painted, the mask: `name_mask.png`).
 - **Colours:** the current one (click it for the system picker); the main colour's variations, lighter and darker
   (rows) with the hue a little turned (columns); under them the image's own colours, most used first. Choosing a
   variation keeps them where they are; the system picker, the image's colours and the picker choose a main colour,

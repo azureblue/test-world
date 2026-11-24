@@ -19,7 +19,8 @@ const FACE_PARTS = ["top", "sides", "sides", "sides", "sides", "bottom"];
  * textures: one image for every face, or {top, sides, bottom}, its model: a cube (none given) or a liquid; a cube can
  * have a cutout version too (cutout: textures with holes, as in src/blocks.json: the game's leaves with holes); a
  * plant's: its image.
- * @typedef {{mask: ImageData, base: string}} Mask
+ * A mask turned off is kept (off): the image shows its own pixels until it's turned on again.
+ * @typedef {{mask: ImageData, base: string, off?: boolean}} Mask
  * @typedef {string | {top: string, sides: string, bottom: string}} Textures
  * @type {{images: Map<string, ImageData>, masks: Map<string, Mask>, blocks: {name: string, model?: "liquid",
  *   textures: Textures, cutout?: Textures}[], plants: {name: string, image: string}[]}}
@@ -101,7 +102,8 @@ async function toFile() {
     const images = {};
     for (const [name, image] of doc.images) {
         const m = doc.masks.get(name);
-        images[name] = m === undefined ? await url(image) : { image: await url(image), mask: await url(m.mask), base: m.base };
+        images[name] = m === undefined ? await url(image)
+            : { image: await url(image), mask: await url(m.mask), base: m.base, ...(m.off ? { off: true } : {}) };
     }
     return JSON.stringify({ format: FORMAT, version: 1, tileSize: TEXTURE_SIZE, images, blocks: doc.blocks, plants: doc.plants }, null, 2);
 }
@@ -115,7 +117,7 @@ async function fromFile(text) {
     for (const [name, entry] of Object.entries(file.images)) {
         if (typeof entry === "object") {
             images.set(name, await pixelsOf(entry.image));
-            masks.set(name, { mask: await pixelsOf(entry.mask), base: entry.base });
+            masks.set(name, { mask: await pixelsOf(entry.mask), base: entry.base, off: entry.off === true });
         } else {
             images.set(name, await pixelsOf(entry));
         }
@@ -160,6 +162,12 @@ function mapTextures(t, map) {
     return typeof t === "string" ? map(t) : { top: map(t.top), sides: map(t.sides), bottom: map(t.bottom) };
 }
 
+/** whether an image has a mask, turned on */
+function hasMask(name) {
+    const m = doc.masks.get(name);
+    return m !== undefined && !m.off;
+}
+
 /** whether image depends on other: is it, or masked over it, also through other masked images */
 function dependsOn(image, other) {
     if (image === other)
@@ -175,7 +183,7 @@ function composeAll() {
         if (composed.has(name))
             return composed.get(name);
         const own = doc.images.get(name), m = doc.masks.get(name);
-        if (m === undefined) {
+        if (m === undefined || m.off) {
             composed.set(name, own);
             return own;
         }
@@ -212,7 +220,7 @@ function editedImage() {
 /** the pixels painted: the edited image's own, or its mask; key: its undo history's */
 function target() {
     const name = editedImage();
-    if (selection.layer === "mask" && doc.masks.has(name))
+    if (selection.layer === "mask" && hasMask(name))
         return { key: name + "#mask", image: doc.masks.get(name).mask };
     return { key: name, image: doc.images.get(name) };
 }
@@ -231,7 +239,7 @@ function copyImage(name, suffix = undefined) {
     doc.images.set(copy, copyOf(doc.images.get(name)));
     const m = doc.masks.get(name);
     if (m !== undefined)
-        doc.masks.set(copy, { mask: copyOf(m.mask), base: m.base });
+        doc.masks.set(copy, { mask: copyOf(m.mask), base: m.base, off: m.off });
     composeAll();
     return copy;
 }
@@ -314,7 +322,7 @@ function rename(newName) {
             if (p.image === name)
                 p.image = newName;
         doc.masks = new Map([...doc.masks].map(([n, m]) => [n === name ? newName : n,
-            { mask: m.mask, base: m.base === name ? newName : m.base }]));
+            { ...m, base: m.base === name ? newName : m.base }]));
         composeAll();
     } else {
         const list = kind === "block" ? doc.blocks : doc.plants;
@@ -361,7 +369,7 @@ function renderLists() {
     const item = (kind, name, imageName, note = "") => {
         const li = document.createElement("li");
         const label = document.createElement("span");
-        label.textContent = (kind === "image" && doc.masks.has(name) ? `${name} (mask)` : name) + note;
+        label.textContent = (kind === "image" && hasMask(name) ? `${name} (mask)` : name) + note;
         li.append(thumbnail(imageName), label);
         // a block's or plant's image is marked in the images too
         li.classList.toggle("selected", selection.kind === kind ? selection.name === name : kind === "image" && name === edited);
@@ -503,27 +511,39 @@ function row(...children) {
     return r;
 }
 
-/** an image's mask: on or off; on, which is painted (its pixels or its mask) and the base under it */
+/**
+ * an image's mask: on or off (kept: turned on again, it's back as it was); on, which is painted (its pixels or its
+ * mask) and the base under it
+ */
 function maskDetails(name) {
     const m = doc.masks.get(name);
-    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: m !== undefined });
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: hasMask(name) });
     box.onchange = () => {
-        if (box.checked) {
+        if (box.checked && m !== undefined && !dependsOn(m.base, name)) {
+            // the one turned off
+            m.off = false;
+            selection.layer = "mask";
+        } else if (box.checked) {
             const base = [...doc.images.keys()].find(n => !dependsOn(n, name));
             if (base === undefined) {
                 box.checked = false;
                 return status("no other image to put it over", true);
             }
-            // all white: its pixels everywhere, until the mask is painted
-            const own = doc.images.get(name);
-            const mask = new ImageData(own.width, own.height);
-            mask.data.fill(255);
-            doc.masks.set(name, { mask, base });
+            // a new one (or the old one over another base, if its base is over this image now); a new one all white:
+            // its pixels everywhere, until the mask is painted
+            if (m !== undefined) {
+                m.base = base;
+                m.off = false;
+            } else {
+                const own = doc.images.get(name);
+                const mask = new ImageData(own.width, own.height);
+                mask.data.fill(255);
+                doc.masks.set(name, { mask, base });
+            }
             selection.layer = "mask";
         } else {
-            // it keeps how it looks, as its pixels
-            doc.images.set(name, copyOf(composed.get(name)));
-            doc.masks.delete(name);
+            // kept, off: the image shows its own pixels
+            m.off = true;
             selection.layer = "image";
         }
         composeAll();
@@ -533,7 +553,7 @@ function maskDetails(name) {
     const label = document.createElement("label");
     label.append(box, ` ${name} has a mask`);
     const maskRow = row(label);
-    if (m !== undefined) {
+    if (hasMask(name)) {
         const group = document.createElement("span");
         group.className = "segmented";
         for (const [layer, title] of [["image", "Paint its pixels (where the mask is white)"], ["mask", "Paint the mask: white its pixels, black (or erased) the base"]]) {
@@ -850,6 +870,17 @@ function download(name, blob) {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+/** the edited image as a PNG: as it looks (masked, composed), or its mask while the mask is painted */
+async function savePng() {
+    const { key, image } = target();
+    const shown = key.endsWith("#mask") ? image : composed.get(key);
+    const canvas = new OffscreenCanvas(shown.width, shown.height);
+    canvas.getContext("2d").putImageData(shown, 0, 0);
+    const name = key.replace("#mask", "_mask") + ".png";
+    download(name, await canvas.convertToBlob({ type: "image/png" }));
+    status(`saved ${name}`);
+}
+
 function initControls() {
     initPixelInput();
     setTool("pencil");
@@ -883,6 +914,7 @@ function initControls() {
             renderColors();
         }, { passive: false });
     }
+    $("savePng").onclick = savePng;
     $("save").onclick = async () => {
         download("textures.json", new Blob([await toFile()], { type: "application/json" }));
         dirty = false;
