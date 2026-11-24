@@ -134,14 +134,15 @@ inline_always constexpr static bool is_bit_set(uint value, uint bit) {
 }
 
 // A cell's light, only in the mesher's input (docs/proposals/lighting.md), in bits the block values leave 0 (ids are
-// below MAX_BLOCK_ID): bits 11..13 the sky light's darkness (7 - sky light), bits 17..20 the block light (0..15); solid
-// cells 0. 0, data without light, is full sky light and no block light. Each field has 2 free bits above it, so the
-// lights of 4 cells add up without carrying into the next field: the sums in bits 11..15 (28 at most) and 17..22 (60).
-constexpr uint SKY_DARKNESS_SHIFT = 11;
+// below MAX_BLOCK_ID): bits 10..13 the sky light's darkness (15 - sky light), bits 17..20 the block light; solid cells
+// 0. 0, data without light, is full sky light and no block light. Each field has 2 free bits above it, so the lights
+// of 4 cells add up without carrying into the next field: the sums in bits 10..15 and 17..22 (60 at most).
+constexpr uint SKY_DARKNESS_SHIFT = 10;
 constexpr uint BLOCK_LIGHT_SHIFT = 17;
-constexpr uint LIGHT_BITS = 7u << SKY_DARKNESS_SHIFT | 15u << BLOCK_LIGHT_SHIFT;
+constexpr uint LIGHT_BITS = 15u << SKY_DARKNESS_SHIFT | 15u << BLOCK_LIGHT_SHIFT;
+static_assert(MAX_BLOCK_ID <= 1u << SKY_DARKNESS_SHIFT);
 // the sums' fields
-constexpr uint SKY_DARKNESS_SUM_BITS = 0x1fu << SKY_DARKNESS_SHIFT;
+constexpr uint SKY_DARKNESS_SUM_BITS = 0x3fu << SKY_DARKNESS_SHIFT;
 constexpr uint BLOCK_LIGHT_SUM_BITS = 0x3fu << BLOCK_LIGHT_SHIFT;
 static_assert(MAX_BLOCK_ID <= 1u << SKY_DARKNESS_SHIFT);
 

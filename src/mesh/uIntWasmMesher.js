@@ -56,7 +56,7 @@ function writeTextureTable(exports, mem, cutout) {
 }
 
 // the light of a cell in the mesher's input (LIGHT_BITS in mesh/cpp/common.hpp): the sky darkness, the block light
-const SKY_DARKNESS_SHIFT = 11;
+const SKY_DARKNESS_SHIFT = 10;
 const BLOCK_LIGHT_SHIFT = 17;
 
 export class UIntExtWasmMesher extends UIntMesher {
@@ -82,7 +82,7 @@ export class UIntExtWasmMesher extends UIntMesher {
 
     /**
      * @param {ChunkDataExt} chunkData
-     * @param {Uint8Array | null} [light] the light of its cells (Lighting.compute: bits 0..2 the sky darkness, 3..6
+     * @param {Uint8Array | null} [light] the light of its cells (Lighting.compute: bits 0..3 the sky darkness, 4..7
      *   the block light); none: full sky light
      * @param {Uint32Array} [destData] Optional pre-allocated array to store the result data.
      * @return {{data: Uint32Array, solidEnd: number, liquidEnd: number, xQuadEnd: number, cutoutEnd: number}}
@@ -95,7 +95,7 @@ export class UIntExtWasmMesher extends UIntMesher {
             for (let i = 0; i < CHUNK_EXT_DATA_SIZE; i++) {
                 const l = light[i];
                 if (l !== 0)
-                    data[i] |= (l & 7) << SKY_DARKNESS_SHIFT | (l >> 3) << BLOCK_LIGHT_SHIFT;
+                    data[i] |= (l & 15) << SKY_DARKNESS_SHIFT | (l >> 4) << BLOCK_LIGHT_SHIFT;
             }
         }
         const dataLength = this.#mesherWasmFunction(

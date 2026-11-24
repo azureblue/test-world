@@ -192,9 +192,9 @@ export class World {
         const size = CHUNK_SIZE + 2;
         const l = entry.light[(((iz & CHUNK_SIZE_MASK) + 1) * size + (iy & CHUNK_SIZE_MASK) + 1) * size + (ix & CHUNK_SIZE_MASK) + 1];
         const { falloff, sun } = Settings.light;
-        // block light 0..15 on Minecraft's lightmap curve, from sky light 0's darkness
-        const dark = Math.pow(falloff, 7), r = 1 - (l >> 3) / 15;
-        return Math.max(Math.pow(falloff, 7 - (7 - (l & 7)) * sun), dark + (1 - dark) * (1 - r) / (r * 3 + 1));
+        // sky light 0..15 from falloff ^ 7 to 1; block light 0..15 on the lightmap curve, from sky light 0's darkness
+        const dark = Math.pow(falloff, 7), r = 1 - (l >> 4) / 15;
+        return Math.max(Math.pow(falloff, (15 - (15 - (l & 15)) * sun) * 7 / 15), dark + (1 - dark) * (1 - r) / (r * 3 + 1));
     }
 }
 

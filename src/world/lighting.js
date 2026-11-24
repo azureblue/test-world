@@ -4,8 +4,9 @@ import { Vec3 } from "../geom.js";
 import { Resources } from "../utils.js";
 import { NO_TOP, SkyTops } from "./skyTops.js";
 
-/** sky light travels at most this far: a chunk's sky light depends on the blocks this close to it */
-export const LIGHT_MARGIN = 7;
+/** sky light travels at most this far (15 under the open sky, then 1 less per block): a chunk's sky light depends on
+ * the blocks this close to it */
+export const LIGHT_MARGIN = 15;
 /** block light travels at most this far (15 next to an emitter, then 1 less per block) */
 export const BLOCK_LIGHT_MARGIN = 15;
 const SIZE = CHUNK_SIZE + 2 * LIGHT_MARGIN;
@@ -73,8 +74,8 @@ export class Lighting {
 
     /**
      * @param {Vec3} chunkPos
-     * @returns {Uint8Array | null} the light of the mesher's input cells ((h * 34 + y) * 34 + x): bits 0..2 the sky
-     *   darkness (7 - sky light), 3..6 the block light; null: full sky light everywhere, no block light. Valid until
+     * @returns {Uint8Array | null} the light of the mesher's input cells ((h * 34 + y) * 34 + x): bits 0..3 the sky
+     *   darkness (15 - sky light), 4..7 the block light; null: full sky light everywhere, no block light. Valid until
      *   the next call.
      */
     compute(chunkPos) {

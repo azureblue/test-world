@@ -14,7 +14,11 @@ inline_always constexpr static T encode_value(V value) {
 
 class quad_encoder {
    public:
-    // a merged face (the main mesher): ao_shadows 2 bits per vertex, light 11 bits per vertex (encode_layer_light_bits)
+    // a vertex's position: x, y, z in 6 bits each (0..32), from bit 0
+    constexpr static uint POS_Y_SHIFT = 6;
+    constexpr static uint POS_Z_SHIFT = 12;
+
+    // a merged face (the main mesher): ao_shadows 2 bits per vertex, light 12 bits per vertex (encode_layer_light_bits)
     template <Direction DIR>
     inline_always static void encode_face(uint64* __restrict& out, uint vx_x, uint vx_y, uint vx_z, uint w, uint h, uint tex, uint ao_shadows, uint64 light) {
         uint64 v0, v1, v2, v3;
@@ -41,15 +45,15 @@ class quad_encoder {
         uint64 base_bits = encode_base_bits<DIR>(vx_x, vx_y, vx_z, tex_id);
 
         v0 = base_bits | encode_ao_bits(ao0) | encode_layer_light_bits(light);
-        v1 = base_bits + POS_OFFSET_W<DIR> * w | MERGE_BIT_W * w | encode_ao_bits(ao1) | encode_layer_light_bits(light >> 11);
-        v2 = base_bits + POS_OFFSET_W<DIR> * w + POS_OFFSET_H<DIR> * h | MERGE_BIT_W * w | MERGE_BIT_H * h | encode_ao_bits(ao2) | encode_layer_light_bits(light >> 22);
-        v3 = base_bits + POS_OFFSET_H<DIR> * h | MERGE_BIT_H * h | encode_ao_bits(ao3) | encode_layer_light_bits(light >> 33);
+        v1 = base_bits + POS_OFFSET_W<DIR> * w | MERGE_BIT_W * w | encode_ao_bits(ao1) | encode_layer_light_bits(light >> 12);
+        v2 = base_bits + POS_OFFSET_W<DIR> * w + POS_OFFSET_H<DIR> * h | MERGE_BIT_W * w | MERGE_BIT_H * h | encode_ao_bits(ao2) | encode_layer_light_bits(light >> 24);
+        v3 = base_bits + POS_OFFSET_H<DIR> * h | MERGE_BIT_H * h | encode_ao_bits(ao3) | encode_layer_light_bits(light >> 36);
 
         return (ao0 + ao2) > (ao1 + ao3);
     }
 
     inline_always static uint64 encode_pos_bits(uint x, uint y, uint z) {
-        return encode_value<uint64, 0>(x) | encode_value<uint64, 7>(y) | encode_value<uint64, 14>(z);
+        return encode_value<uint64, 0>(x) | encode_value<uint64, POS_Y_SHIFT>(y) | encode_value<uint64, POS_Z_SHIFT>(z);
     }
 
     template <Direction DIR>
@@ -59,7 +63,7 @@ class quad_encoder {
 
     template <Direction DIR>
     constexpr static uint64 pos_offset_bits =
-        encode_value<uint64, 0>(quad_encoding::VERTEX_OFFSETS[DIR][X]) | encode_value<uint64, 7>(quad_encoding::VERTEX_OFFSETS[DIR][Y]) | encode_value<uint64, 14>(quad_encoding::VERTEX_OFFSETS[DIR][Z]);
+        encode_value<uint64, 0>(quad_encoding::VERTEX_OFFSETS[DIR][X]) | encode_value<uint64, POS_Y_SHIFT>(quad_encoding::VERTEX_OFFSETS[DIR][Y]) | encode_value<uint64, POS_Z_SHIFT>(quad_encoding::VERTEX_OFFSETS[DIR][Z]);
 
     template <Direction DIR>
     inline_always static void encode_face_q(uint64* __restrict& out, const array_3d<CHUNK_SIZE_E>& data, uint e_x, uint e_y, uint e_z, uint tex) {
@@ -82,10 +86,10 @@ class quad_encoder {
     constexpr static uint64 MERGE_BIT_H = 1ull << 39;
 
     template <Direction DIR>
-    inline constexpr static uint64 POS_OFFSET_W = encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_W[DIR][0]) + encode_value<uint64, 7>(quad_encoding::MERGE_VECTOR_W[DIR][1]) + encode_value<uint64, 14>(quad_encoding::MERGE_VECTOR_W[DIR][2]);
+    inline constexpr static uint64 POS_OFFSET_W = encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_W[DIR][0]) + encode_value<uint64, POS_Y_SHIFT>(quad_encoding::MERGE_VECTOR_W[DIR][1]) + encode_value<uint64, POS_Z_SHIFT>(quad_encoding::MERGE_VECTOR_W[DIR][2]);
 
     template <Direction DIR>
-    inline constexpr static uint64 POS_OFFSET_H = encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_H[DIR][0]) + encode_value<uint64, 7>(quad_encoding::MERGE_VECTOR_H[DIR][1]) + encode_value<uint64, 14>(quad_encoding::MERGE_VECTOR_H[DIR][2]);
+    inline constexpr static uint64 POS_OFFSET_H = encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_H[DIR][0]) + encode_value<uint64, POS_Y_SHIFT>(quad_encoding::MERGE_VECTOR_H[DIR][1]) + encode_value<uint64, POS_Z_SHIFT>(quad_encoding::MERGE_VECTOR_H[DIR][2]);
 
     inline_always static uint64 encode_ao_bits(uint ao) {
         return encode_value<uint64, 59>(ao);
@@ -95,17 +99,17 @@ class quad_encoder {
         return encode_value<uint64, 51>(tex_id);
     }
 
-    // a vertex's light (corner_light in common.hpp: the sums of 4 cells, the sky darkness in bits 11..15, the block
-    // light in 17..22) to bits 21..25 and 26..31; without it (the main mesher) 0: full sky light
+    // a vertex's light (corner_light in common.hpp: the sums of 4 cells, the sky darkness in bits 10..15, the block
+    // light in 17..22) to bits 18..23 and 24..29; without it (the main mesher) 0: full sky light
     inline_always static uint64 encode_light_bits(uint light) {
-        return static_cast<uint64>((light & SKY_DARKNESS_SUM_BITS) << (21 - SKY_DARKNESS_SHIFT) |
-                                   (light & BLOCK_LIGHT_SUM_BITS) << (26 - BLOCK_LIGHT_SHIFT));
+        return static_cast<uint64>((light & SKY_DARKNESS_SUM_BITS) << (18 - SKY_DARKNESS_SHIFT) |
+                                   (light & BLOCK_LIGHT_SUM_BITS) << (24 - BLOCK_LIGHT_SHIFT));
     }
 
-    // a vertex's light from the main mesher's layers (the low 11 bits: corner_light's sums, the sky darkness in bits
-    // 0..4, the block light in 5..10) to the same vertex bits as encode_light_bits
+    // a vertex's light from the main mesher's layers (the low 12 bits: corner_light's sums, the sky darkness in bits
+    // 0..5, the block light in 6..11) to the same vertex bits as encode_light_bits
     inline_always static uint64 encode_layer_light_bits(uint64 light) {
-        return (light & 0x1f) << 21 | (light >> 5 & 0x3f) << 26;
+        return (light & 0x3f) << 18 | (light >> 6 & 0x3f) << 24;
     }
 
     inline_always static uint64 encode_dir_bits(Direction dir) {

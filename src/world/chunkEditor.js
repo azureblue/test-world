@@ -143,8 +143,8 @@ export class ChunkEditor {
 
     /**
      * The light of a changed cell for the quick mesh, until the world worker's update has the real one: 0 for a solid
-     * block (as the mesher expects); for an open cell, its brightest open neighbour's light, 1 less (none: dark). A
-     * chunk without light (null: full sky light, or all solid) gets its own, all 0: full sky light in its open cells.
+     * block (as the mesher expects); for an open cell, its brightest open neighbour's light, 1 less (none: dark). A chunk without light (null: full sky light, or all solid) gets
+     * its own, all 0: full sky light in its open cells.
      * @param {ChunkEntry} entry
      */
     #predictLight(entry, ex, ey, eh, value) {
@@ -161,13 +161,13 @@ export class ChunkEditor {
             if (x < 0 || x >= size || y < 0 || y >= size || h < 0 || h >= size || data.getExtVoxel(x, y, h) >>> 31)
                 return;
             const l = light[(h * size + y) * size + x];
-            sky = Math.max(sky, 7 - (l & 7));
-            block = Math.max(block, l >> 3);
+            sky = Math.max(sky, 15 - (l & 15));
+            block = Math.max(block, l >> 4);
         };
         from(ex - 1, ey, eh); from(ex + 1, ey, eh);
         from(ex, ey - 1, eh); from(ex, ey + 1, eh);
         from(ex, ey, eh - 1); from(ex, ey, eh + 1);
-        light[i] = (7 - Math.max(0, sky - 1)) | Math.max(0, block - 1) << 3;
+        light[i] = (15 - Math.max(0, sky - 1)) | Math.max(0, block - 1) << 4;
     }
 
     /**

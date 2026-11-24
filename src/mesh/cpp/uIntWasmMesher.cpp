@@ -11,7 +11,7 @@ constexpr uint layer_len = CHUNK_SIZE * CHUNK_SIZE;
 
 // A face in a layer, 32 bits: bits 0..7 the AO shadows (2 bits per vertex) or the water's level and bottom, 8..19 the
 // texture + 1 (0 is no face, so a face with texture 0 and no shadows is one), then the merge counters: 20..25 the
-// width, 26..31 the height (1..32 each). Its vertices' light (11 bits each, layer_vertex_light) is at the same place in
+// width, 26..31 the height (1..32 each). Its vertices' light (12 bits each, layer_vertex_light) is at the same place in
 // the light layers, 64 bits: written with every face and read only where there is one, so the scans over empty layers
 // don't touch it and it's never cleared. Faces merge when both match.
 constexpr uint LAYER_TEXTURE_SHIFT = 8;
@@ -48,10 +48,10 @@ static inline uint with_layer_height(uint face, uint height) {
     return (face & LAYER_FACE_WIDTH_BITS) | height << LAYER_HEIGHT_SHIFT;
 }
 
-// a vertex's light (corner_light) in 11 bits: the sums of the sky darkness in bits 0..4, of the block light in 5..10
+// a vertex's light (corner_light) in 12 bits: the sums of the sky darkness in bits 0..5, of the block light in 6..11
 // (whole: halved sums lost half-steps, and a flat stretch in a gradient shows as a band)
 static inline uint64 layer_vertex_light(uint light) {
-    return (light >> SKY_DARKNESS_SHIFT & 0x1f) | (light >> BLOCK_LIGHT_SHIFT & 0x3f) << 5;
+    return (light >> SKY_DARKNESS_SHIFT & 0x3f) | (light >> BLOCK_LIGHT_SHIFT & 0x3f) << 6;
 }
 
 // a face's data (the AO shadows, or the water's level and bottom) and its vertices' light
@@ -64,7 +64,7 @@ template <Direction DIR>
 static inline face_shading_t face_shading(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
     const ao_shadows::vertex_data v = ao_shadows::compute<DIR>(data, h, x, y);
     return {v.v0 | v.v1 << 2 | v.v2 << 4 | v.v3 << 6,
-            layer_vertex_light(v.l0) | layer_vertex_light(v.l1) << 11 | layer_vertex_light(v.l2) << 22 | layer_vertex_light(v.l3) << 33};
+            layer_vertex_light(v.l0) | layer_vertex_light(v.l1) << 12 | layer_vertex_light(v.l2) << 24 | layer_vertex_light(v.l3) << 36};
 }
 
 // a face into the layers: plane, then the layer's x and y

@@ -1,24 +1,24 @@
 #include "int.h"
 
-// The light of a chunk's cells (docs/proposals/lighting.md): sky light 0..7 and block light 0..15, each computed from
-// the chunk and a margin around it (its region) as far as it travels: MARGIN blocks for the sky light (compute),
+// The light of a chunk's cells (docs/proposals/lighting.md): sky light and block light, 0..15 each, computed from the
+// chunk and a margin around it (its region) as far as it travels: MARGIN blocks for the sky light (compute),
 // BLOCK_MARGIN for the block light (compute_block, only near emitters). The result is the light of the mesher's input:
 // the chunk with a 1 block border (src/world/lighting.js writes it in).
 //
-// - Sky light: 7 in the cells that see the sky straight up (from their column's sky_from up). Angled sky light under
-//   overhangs, in the cells that see the sky at 45°: from a sky lit cell diagonally above them (one block to a side),
-//   past the cell beside them or the one above them, passed on straight down, at most MAX_ANGLED_STEPS diagonal steps
-//   from the open sky (a 45° staircase would carry it down forever); by the gap (the open cells from the cell up to
-//   the block above): less directly under a block, full SHADOWLESS_GAP or more under it. Then spread, 1 less per
-//   block, 2 less for a step sideways into a cell under a block (a low gap darkens faster).
+// - Sky light: 15 in the cells that see the sky straight up (from their column's sky_from up), however deep. Then
+//   spread, 1 less per block (it reaches 15 blocks), a step sideways into a cell under a block twice that (a low gap
+//   darkens faster).
 // - Block light: the emitters' level (up to 15) in the open cells next to them (a lamp is solid; its faces are as
-//   bright as it), spread 1 less per block: twice as many levels as the sky's, so a lamp reaches about 15 blocks.
+//   bright as it), then spread, 1 less per block (a lamp reaches 15 blocks).
+// - The spread is in thirds of a level (units): a step to an edge neighbour (diagonal, past 2 open cells) costs 4/3
+//   of a step to a face neighbour (about sqrt 2), so light spreads round, not in diamonds. The output is the level,
+//   rounded up.
 // Solid cells stop both; their own light stays 0 (the mesher counts them as such).
 
 #define export_name(name) __attribute__((export_name(name)))
 #define inline_always __attribute__((always_inline)) inline
 
-constexpr uint MARGIN = 7;
+constexpr uint MARGIN = 15;
 constexpr uint CHUNK_SIZE = 32;
 // the region: the chunk and the margin around it, index (h * SIZE + y) * SIZE + x
 constexpr uint SIZE = CHUNK_SIZE + 2 * MARGIN;
@@ -30,43 +30,159 @@ constexpr uint OUT_VOLUME = OUT_SIZE * OUT_SIZE * OUT_SIZE;
 // the output's first cell in the region
 constexpr uint OUT_START = MARGIN - 1;
 
-constexpr uint MAX_LIGHT = 7;
+// light in units: a level is UNITS; the steps' costs (a face neighbour, an edge one), 1 level a block
+constexpr uint UNITS = 3;
+constexpr uint SKY_STEP = 3;
+constexpr uint SKY_DIAGONAL_STEP = 4;
+constexpr uint BLOCK_STEP = 3;
+constexpr uint BLOCK_DIAGONAL_STEP = 4;
+
+constexpr uint MAX_LIGHT = 15;
 constexpr uint MAX_BLOCK_LIGHT = 15;
 // the block light's region: the chunk and the margin its light can come from (15 next to an emitter, 1 at 15 blocks)
 constexpr uint BLOCK_MARGIN = MAX_BLOCK_LIGHT;
 constexpr uint BLOCK_SIZE = CHUNK_SIZE + 2 * BLOCK_MARGIN;
-constexpr uint BLOCK_PLANE = BLOCK_SIZE * BLOCK_SIZE;
-constexpr uint BLOCK_VOLUME = BLOCK_PLANE * BLOCK_SIZE;
 constexpr uint BLOCK_OUT_START = BLOCK_MARGIN - 1;
-constexpr uint ANGLED_SKY = 6;
-constexpr uint SHADOWLESS_GAP = 6;
-constexpr uint MAX_ANGLED_STEPS = 4;
+// A light spread over a region of size SZ (index (h * SZ + y) * SZ + x), in units, up to MAX_UNITS; a step to a face
+// neighbour costs STEP, to an edge neighbour DIAGONAL. The seeds are set first (seed), then spread, highest first, from
+// a list per light value: a step costs at least STEP, so a list gets no more cells while it's spread from; the lists
+// are a ring of RING (more than the dearest step), each emptied before its slot is the next value's.
+template <uint SZ, uint MAX_UNITS, uint STEP, uint DIAGONAL>
+struct light_field {
+    // the dearest step: diagonal, under a block
+    static constexpr uint RING = 2 * DIAGONAL + 1;
+    static constexpr uint PL = SZ * SZ;
+    static constexpr uint VOL = PL * SZ;
+    uint8 light[VOL];
+    uint lists[RING][VOL];
+    uint lengths[RING];
+    // the cells to spread from first, ordered by their light (seed_start: where each value's start)
+    uint seeds[VOL];
+    uint n_seeds;
+    uint seeds_by_light[VOL];
+    uint seed_start[MAX_UNITS + 2];
+
+    inline_always void seed(uint i, uint units) {
+        if (light[i] < units) {
+            if (light[i] == 0)
+                seeds[n_seeds++] = i;
+            light[i] = units;
+        }
+    }
+
+    inline_always void raise(uint j, uint units) {
+        if (light[j] < units) {
+            light[j] = units;
+            const uint slot = units % RING;
+            lists[slot][lengths[slot]++] = j;
+        }
+    }
+
+    // spreads the seeds' light through the open cells (bit 0 of cells: solid); steps sideways into a cell under a
+    // block cost twice as much with under_block
+    void spread(const uint8* cells, bool under_block) {
+        for (uint u = 0; u < MAX_UNITS + 2; u++)
+            seed_start[u] = 0;
+        for (uint s = 0; s < n_seeds; s++)
+            seed_start[light[seeds[s]] + 1]++;
+        for (uint u = 1; u < MAX_UNITS + 2; u++)
+            seed_start[u] += seed_start[u - 1];
+        for (uint s = 0; s < n_seeds; s++)
+            seeds_by_light[seed_start[light[seeds[s]]]++] = seeds[s];
+        // seed_start[u] is now where u + 1's seeds start
+        for (uint r = 0; r < RING; r++)
+            lengths[r] = 0;
+
+        for (uint level = MAX_UNITS; level > STEP; level--) {
+            const uint slot = level % RING;
+            for (uint s = level > 0 ? seed_start[level - 1] : 0; s < seed_start[level]; s++)
+                lists[slot][lengths[slot]++] = seeds_by_light[s];
+            for (uint q = 0; q < lengths[slot]; q++) {
+                const uint i = lists[slot][q];
+                if (light[i] == level)
+                    spread_from(cells, under_block, i, level);
+            }
+            lengths[slot] = 0;
+        }
+    }
+
+   private:
+    inline_always void spread_from(const uint8* cells, bool under_block, uint i, uint level) {
+        const uint x = i % SZ, y = i / SZ % SZ, h = i / PL;
+        const bool xm = x > 0, xp = x < SZ - 1, ym = y > 0, yp = y < SZ - 1, hm = h > 0, hp = h < SZ - 1;
+        auto open = [&](uint j) { return !(cells[j] & 1); };
+        auto reach = [&](uint j, uint cost) {
+            if (level > cost && open(j))
+                raise(j, level - cost);
+        };
+        // a step with a sideways part: dearer into a cell under a block (nothing above the region's top)
+        auto sideways = [&](uint j, uint cost, bool below_top) {
+            reach(j, under_block && below_top && (cells[j + PL] & 1) ? cost * 2 : cost);
+        };
+        // to an edge neighbour past both cells beside the way (no light through two blocks touching at an edge)
+        auto diagonal = [&](int a, int b, bool side, bool below_top) {
+            if (open(i + a) && open(i + b)) {
+                const uint j = i + a + b;
+                if (side)
+                    sideways(j, DIAGONAL, below_top);
+                else
+                    reach(j, DIAGONAL);
+            }
+        };
+        constexpr int X = 1, Y = SZ, H = PL;
+        if (xm)
+            sideways(i - X, STEP, hp);
+        if (xp)
+            sideways(i + X, STEP, hp);
+        if (ym)
+            sideways(i - Y, STEP, hp);
+        if (yp)
+            sideways(i + Y, STEP, hp);
+        if (hm)
+            reach(i - H, STEP);
+        if (hp)
+            reach(i + H, STEP);
+        if (xm && ym)
+            diagonal(-X, -Y, true, hp);
+        if (xp && ym)
+            diagonal(X, -Y, true, hp);
+        if (xm && yp)
+            diagonal(-X, Y, true, hp);
+        if (xp && yp)
+            diagonal(X, Y, true, hp);
+        if (xm && hm)
+            diagonal(-X, -H, true, true);
+        if (xp && hm)
+            diagonal(X, -H, true, true);
+        if (ym && hm)
+            diagonal(-Y, -H, true, true);
+        if (yp && hm)
+            diagonal(Y, -H, true, true);
+        // up and to a side: the cell above the target (2 up) may be past the region's top
+        const bool two_below_top = h + 2 < SZ;
+        if (xm && hp)
+            diagonal(-X, H, true, two_below_top);
+        if (xp && hp)
+            diagonal(X, H, true, two_below_top);
+        if (ym && hp)
+            diagonal(-Y, H, true, two_below_top);
+        if (yp && hp)
+            diagonal(Y, H, true, two_below_top);
+    }
+};
 
 // input, per region cell: bit 0 solid (stops light)
 static uint8 cells[VOLUME];
 // input, per block light region cell: bit 0 solid, bits 1..4 the block light it gives
-static uint8 block_cells[BLOCK_VOLUME];
+static uint8 block_cells[BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE];
 // input, per region column (y * SIZE + x): the lowest h of the cells that see the sky straight up (SIZE: none)
 static uint8 sky_from[PLANE];
-// output, per cell of the mesher's input ((h * OUT_SIZE + y) * OUT_SIZE + x): bits 0..2 the sky darkness (7 - sky
-// light), bits 3..6 the block light; 0 for solid cells
+// output, per cell of the mesher's input ((h * OUT_SIZE + y) * OUT_SIZE + x): bits 0..3 the sky darkness (15 - sky
+// light), bits 4..7 the block light; 0 for solid cells
 static uint8 out[OUT_VOLUME];
 
-static uint8 sky[VOLUME];
-static uint8 block[BLOCK_VOLUME];
-// the block light's spread, a level at a time: the cells at this level, the ones at the next; the emitters
-static uint block_level[BLOCK_VOLUME];
-static uint block_next[BLOCK_VOLUME];
-static uint emitters[BLOCK_VOLUME];
-// the open cells from a cell up to the block above it, itself included (up to 255)
-static uint8 gap[VOLUME];
-// the diagonal steps angled sky light took to a cell from the open sky
-static uint8 angled_steps[VOLUME];
-
-// the cells to spread from, by their light: a cell's light only grows, so it's in each list at most once
-static uint queue[MAX_LIGHT + 1][VOLUME];
-static uint queue_length[MAX_LIGHT + 1];
-
+static light_field<SIZE, MAX_LIGHT * UNITS, SKY_STEP, SKY_DIAGONAL_STEP> sky;
+static light_field<BLOCK_SIZE, MAX_BLOCK_LIGHT * UNITS, BLOCK_STEP, BLOCK_DIAGONAL_STEP> block;
 extern "C" export_name("cells") uint8* get_cells() {
     return cells;
 }
@@ -95,22 +211,6 @@ inline_always static bool is_solid(uint i) {
     return cells[i] & 1;
 }
 
-inline_always static uint angled_sky(uint g) {
-    return g >= SHADOWLESS_GAP ? MAX_LIGHT : (4 + g < ANGLED_SKY ? 4 + g : ANGLED_SKY);
-}
-
-// sky lit enough to pass angled light on: at least the angled light directly under a block
-inline_always static bool sky_lit(uint i) {
-    return sky[i] >= angled_sky(1);
-}
-
-inline_always static void raise(uint8* light, uint i, uint level) {
-    if (light[i] < level) {
-        light[i] = level;
-        queue[level][queue_length[level]++] = i;
-    }
-}
-
 // whether a column beside (x, y) doesn't see the sky straight up at height h
 inline_always static bool covered_beside(uint x, uint y, uint h) {
     const uint c = y * SIZE + x;
@@ -119,97 +219,35 @@ inline_always static bool covered_beside(uint x, uint y, uint h) {
 }
 
 static void seed_sky() {
-    for (uint h = SIZE; h-- > 0;) {
+    sky.n_seeds = 0;
+    for (uint h = 0; h < SIZE; h++) {
         for (uint y = 0; y < SIZE; y++) {
             for (uint x = 0; x < SIZE; x++) {
                 const uint i = (h * SIZE + y) * SIZE + x;
-                sky[i] = 0;
-                if (is_solid(i)) {
-                    gap[i] = 0;
+                sky.light[i] = 0;
+                if (is_solid(i) || h < sky_from[y * SIZE + x])
                     continue;
-                }
-                const uint above = i + PLANE;
-                const bool top = h == SIZE - 1;
-                gap[i] = top || is_solid(above) ? 1 : (gap[above] < 255 ? gap[above] + 1 : 255);
-                if (h >= sky_from[y * SIZE + x]) {
-                    // open sky: spread from it only where a column beside is covered at this height (all its other
-                    // neighbours are open sky too, or solid)
-                    sky[i] = MAX_LIGHT;
-                    if (covered_beside(x, y, h))
-                        queue[MAX_LIGHT][queue_length[MAX_LIGHT]++] = i;
-                    continue;
-                }
-                if (top)
-                    continue;
-                // angled light straight from above (the same steps), or diagonally from above past the cell beside
-                // this one or the one above it (one step more; the open sky's: the first); the fewest steps
-                const bool above_open = !is_solid(above);
-                uint steps = above_open && sky_lit(above) ? angled_steps[above] : MAX_ANGLED_STEPS + 1;
-                auto from_side = [&](int d) {
-                    const uint j = above + d;
-                    if (sky_lit(j) && (!is_solid(i + d) || above_open)) {
-                        const uint s = sky[j] == MAX_LIGHT ? 1 : angled_steps[j] + 1;
-                        steps = s < steps ? s : steps;
-                    }
-                };
-                if (x > 0)
-                    from_side(-1);
-                if (x < SIZE - 1)
-                    from_side(1);
-                if (y > 0)
-                    from_side(-static_cast<int>(SIZE));
-                if (y < SIZE - 1)
-                    from_side(SIZE);
-                if (steps <= MAX_ANGLED_STEPS) {
-                    angled_steps[i] = steps;
-                    raise(sky, i, angled_sky(gap[i]));
-                }
+                // open sky: spread from it only where a column beside is covered at this height (its other neighbours
+                // are open sky too, or solid; a diagonal one is reached as well from the face neighbours between)
+                if (covered_beside(x, y, h))
+                    sky.seed(i, MAX_LIGHT * UNITS);
+                else
+                    sky.light[i] = MAX_LIGHT * UNITS;
             }
         }
     }
 }
 
-// spreads the queued light, highest first; sideways steps into a cell under a block cost under_block_cost
-static void spread(uint8* light, uint under_block_cost) {
-    for (uint level = MAX_LIGHT; level > 1; level--) {
-        // a step costs 1 or 2: it only adds to lower lists, never to this one
-        for (uint q = 0; q < queue_length[level]; q++) {
-            const uint i = queue[level][q];
-            if (light[i] != level)
-                continue;
-            const uint x = i % SIZE, y = i / SIZE % SIZE, h = i / PLANE;
-            auto reach = [&](uint j, uint cost) {
-                if (level > cost && !is_solid(j))
-                    raise(light, j, level - cost);
-            };
-            auto side = [&](uint j) { reach(j, h < SIZE - 1 && is_solid(j + PLANE) ? under_block_cost : 1); };
-            if (x > 0)
-                side(i - 1);
-            if (x < SIZE - 1)
-                side(i + 1);
-            if (y > 0)
-                side(i - SIZE);
-            if (y < SIZE - 1)
-                side(i + SIZE);
-            if (h > 0)
-                reach(i - PLANE, 1);
-            if (h < SIZE - 1)
-                reach(i + PLANE, 1);
-        }
-    }
-}
-
-static void clear_queues() {
-    for (uint level = 0; level <= MAX_LIGHT; level++)
-        queue_length[level] = 0;
+// a light in units to its level, rounded up
+inline_always static uint level_of(uint units) {
+    return (units + UNITS - 1) / UNITS;
 }
 
 // Computes the sky light from cells and sky_from into out (no block light). Returns whether there is any light that
 // isn't full sky light.
 extern "C" export_name("compute") uint compute() {
-    clear_queues();
     seed_sky();
-    spread(sky, 2);
+    sky.spread(cells, true);
 
     uint any = 0;
     for (uint h = 0; h < OUT_SIZE; h++) {
@@ -217,7 +255,7 @@ extern "C" export_name("compute") uint compute() {
             uint i = ((h + OUT_START) * SIZE + y + OUT_START) * SIZE + OUT_START;
             uint o = (h * OUT_SIZE + y) * OUT_SIZE;
             for (uint x = 0; x < OUT_SIZE; x++, i++, o++) {
-                const uint light = is_solid(i) ? 0 : MAX_LIGHT - sky[i];
+                const uint light = is_solid(i) ? 0 : MAX_LIGHT - level_of(sky.light[i]);
                 out[o] = light;
                 any |= light;
             }
@@ -229,57 +267,43 @@ extern "C" export_name("compute") uint compute() {
 // Adds the block light from block_cells to out: to the sky light compute wrote (with_sky), or to full sky light.
 // Returns whether out has any light that isn't full sky light.
 extern "C" export_name("compute_block") uint compute_block(uint with_sky) {
-    uint n_emitters = 0;
-    for (uint i = 0; i < BLOCK_VOLUME; i++) {
-        block[i] = 0;
-        if (block_cells[i] >> 1)
-            emitters[n_emitters++] = i;
-    }
-    // a level at a time, the brightest first: the emitters' neighbours at this level, then the cells reached from the
-    // previous one; each cell's light is final when it's set (the levels only go down), so it's in one list
-    uint n_level = 0;
-    for (uint level = MAX_BLOCK_LIGHT; level > 0; level--) {
-        auto reach = [&](uint j, uint* list, uint& n, uint to) {
-            if (!(block_cells[j] & 1) && block[j] < to) {
-                block[j] = to;
-                list[n++] = j;
-            }
+    constexpr uint B = BLOCK_SIZE, BP = B * B, BV = BP * B;
+    block.n_seeds = 0;
+    for (uint i = 0; i < BV; i++)
+        block.light[i] = 0;
+    // the emitters' level in the open cells next to them
+    for (uint i = 0; i < BV; i++) {
+        const uint emits = block_cells[i] >> 1;
+        if (emits == 0)
+            continue;
+        const uint x = i % B, y = i / B % B, h = i / BP;
+        auto seed = [&](uint j) {
+            if (!(block_cells[j] & 1))
+                block.seed(j, emits * UNITS);
         };
-        auto around = [&](uint i, uint* list, uint& n, uint to) {
-            const uint x = i % BLOCK_SIZE, y = i / BLOCK_SIZE % BLOCK_SIZE, h = i / BLOCK_PLANE;
-            if (x > 0)
-                reach(i - 1, list, n, to);
-            if (x < BLOCK_SIZE - 1)
-                reach(i + 1, list, n, to);
-            if (y > 0)
-                reach(i - BLOCK_SIZE, list, n, to);
-            if (y < BLOCK_SIZE - 1)
-                reach(i + BLOCK_SIZE, list, n, to);
-            if (h > 0)
-                reach(i - BLOCK_PLANE, list, n, to);
-            if (h < BLOCK_SIZE - 1)
-                reach(i + BLOCK_PLANE, list, n, to);
-        };
-        for (uint e = 0; e < n_emitters; e++)
-            if ((block_cells[emitters[e]] >> 1) == level)
-                around(emitters[e], block_level, n_level, level);
-        uint n_next = 0;
-        if (level > 1)
-            for (uint q = 0; q < n_level; q++)
-                around(block_level[q], block_next, n_next, level - 1);
-        for (uint q = 0; q < n_next; q++)
-            block_level[q] = block_next[q];
-        n_level = n_next;
+        if (x > 0)
+            seed(i - 1);
+        if (x < B - 1)
+            seed(i + 1);
+        if (y > 0)
+            seed(i - B);
+        if (y < B - 1)
+            seed(i + B);
+        if (h > 0)
+            seed(i - BP);
+        if (h < B - 1)
+            seed(i + BP);
     }
+    block.spread(block_cells, false);
 
     uint any = 0;
     for (uint h = 0; h < OUT_SIZE; h++) {
         for (uint y = 0; y < OUT_SIZE; y++) {
-            uint i = ((h + BLOCK_OUT_START) * BLOCK_SIZE + y + BLOCK_OUT_START) * BLOCK_SIZE + BLOCK_OUT_START;
+            uint i = ((h + BLOCK_OUT_START) * B + y + BLOCK_OUT_START) * B + BLOCK_OUT_START;
             uint o = (h * OUT_SIZE + y) * OUT_SIZE;
             for (uint x = 0; x < OUT_SIZE; x++, i++, o++) {
                 // solid cells stay 0, as in compute
-                const uint light = (with_sky ? out[o] : 0) | block[i] << 3;
+                const uint light = (with_sky ? out[o] : 0) | level_of(block.light[i]) << 4;
                 out[o] = light;
                 any |= light;
             }

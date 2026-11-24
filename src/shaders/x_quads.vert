@@ -13,9 +13,9 @@
 #define b_1111_1111_1111 4095u
 
 // a_in.x: position, texture coordinates (h, w), texture; a_in.y: the light of the plant's cell, as in the mesher's input:
-//   d sky darkness (7 - sky light), b block light
+//   d sky darkness (15 - sky light), b block light
 //  ttttTTTThwzzzzzzzyyyyyyyxxxxxxx
-//            bbbb   ddd
+//            bbbb  dddd
 //10987654321098765432109876543210
 layout (location = 0) in uvec2 a_in;
 // Camera block: identical in every vertex shader, see README.md
@@ -49,9 +49,9 @@ void main() {
     uint tex_idx = (a_in.x >> 23) & b_1111_1111;
 
     // LIGHT_FALLOFF, LIGHT_SUN: Settings.light (WorldRenderer), as in cube_solid.vert
-    float sky = 7.0f - float(a_in.y >> 11 & b111);
+    float sky = 15.0f - float(a_in.y >> 10 & b1111);
     float block = float(a_in.y >> 17 & b1111);
-    v_light = max(pow(LIGHT_FALLOFF, 7.0f - sky * LIGHT_SUN), block_brightness(block));
+    v_light = max(pow(LIGHT_FALLOFF, (15.0f - sky * LIGHT_SUN) * (7.0f / 15.0f)), block_brightness(block));
 
     vec3 pos = vec3(float(x), float(y), float(z)) + m_translation;
 
