@@ -27,11 +27,14 @@ const OUTPUT_SIZE_BYTES_CUTOUT = OUTPUT_SIZE_BYTES_SOLID * 2;
 
 const BUFFERS_BYTES = INPUT_SIZE_BYTES + OUTPUT_SIZE_BYTES_SOLID * 2 + OUTPUT_SIZE_BYTES_CUTOFF_X + SORT_SCRATCH_BYTES +
     OUTPUT_SIZE_BYTES_CUTOUT;
+// the light of the input's cells, a byte each (Lighting.compute), after the buffers (and the output's header): the
+// mesher puts it into the cells (apply_light in mesh/cpp/common.hpp)
+const LIGHT_BYTES = CHUNK_SIZE_EXTENDED ** 3;
 
 const STACK_BYTES = 512 * 1024;
 const STATIC_BYTES = 128 * 1024;
 
-const TOTAL_BYTES = BUFFERS_BYTES + STACK_BYTES + STATIC_BYTES;
+const TOTAL_BYTES = BUFFERS_BYTES + HEADER_SIZE_IN_BYTES + LIGHT_BYTES + STACK_BYTES + STATIC_BYTES;
 const INITIAL_PAGES = WASM.bytesToPages(TOTAL_BYTES);
 
 /**
@@ -55,10 +58,6 @@ function writeTextureTable(exports, mem, cutout) {
     new Uint8Array(mem.buffer, base + table.byteLength, MAX_TEXTURES).set(cutoutTextures);
 }
 
-// the light of a cell in the mesher's input (LIGHT_BITS in mesh/cpp/common.hpp): the sky darkness, the block light
-const SKY_DARKNESS_SHIFT = 10;
-const BLOCK_LIGHT_SHIFT = 17;
-
 export class UIntExtWasmMesher extends UIntMesher {
 
     #mesherWasmFunction;
@@ -66,6 +65,7 @@ export class UIntExtWasmMesher extends UIntMesher {
     #byteOutputOffset;
     #byteHeaderOffset;
     #byteOutputDataOffset;
+    #byteLightOffset;
 
     /** @type {WebAssembly.Memory} */
     #mem;
@@ -77,6 +77,7 @@ export class UIntExtWasmMesher extends UIntMesher {
         this.#byteOutputOffset = this.#heapBase + CHUNK_EXT_DATA_SIZE_IN_BYTES;
         this.#byteHeaderOffset = this.#byteOutputOffset;
         this.#byteOutputDataOffset = this.#byteOutputOffset + HEADER_SIZE_IN_BYTES;
+        this.#byteLightOffset = this.#heapBase + BUFFERS_BYTES + HEADER_SIZE_IN_BYTES;
         this.#mem = mem;
     }
 
@@ -90,17 +91,12 @@ export class UIntExtWasmMesher extends UIntMesher {
     mesh(chunkData, light = null, destData = null) {
         const rawData = chunkData.rawData();
         copyData(rawData, this.#mem.buffer, 0, this.#heapBase);
-        if (light !== null) {
-            const data = new Uint32Array(this.#mem.buffer, this.#heapBase, CHUNK_EXT_DATA_SIZE);
-            for (let i = 0; i < CHUNK_EXT_DATA_SIZE; i++) {
-                const l = light[i];
-                if (l !== 0)
-                    data[i] |= (l & 15) << SKY_DARKNESS_SHIFT | (l >> 4) << BLOCK_LIGHT_SHIFT;
-            }
-        }
+        if (light !== null)
+            new Uint8Array(this.#mem.buffer, this.#byteLightOffset, LIGHT_BYTES).set(light);
         const dataLength = this.#mesherWasmFunction(
             this.#heapBase,
             this.#byteOutputOffset,
+            light !== null ? this.#byteLightOffset : 0
         )
         const header = new Uint32Array(this.#mem.buffer, this.#byteHeaderOffset, HEADER_SIZE_IN_UINT32);
         const solidEnd = header[0];

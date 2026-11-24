@@ -146,6 +146,15 @@ constexpr uint SKY_DARKNESS_SUM_BITS = 0x3fu << SKY_DARKNESS_SHIFT;
 constexpr uint BLOCK_LIGHT_SUM_BITS = 0x3fu << BLOCK_LIGHT_SHIFT;
 static_assert(MAX_BLOCK_ID <= 1u << SKY_DARKNESS_SHIFT);
 
+// the light of the input's cells (Lighting.compute: a byte per cell, bits 0..3 the sky darkness, 4..7 the block light)
+// into their LIGHT_BITS; a plain loop, vectorized
+inline void apply_light(uint* __restrict data, const uint8* __restrict light) {
+    for (uint i = 0; i < CHUNK_SIZE_E * CHUNK_SIZE_E * CHUNK_SIZE_E; i++) {
+        const uint l = light[i];
+        data[i] |= (l & 15) << SKY_DARKNESS_SHIFT | (l >> 4) << BLOCK_LIGHT_SHIFT;
+    }
+}
+
 // A vertex's light: the sum of the face's front cell and the 3 cells around the vertex (sides a, b, diagonal c), still
 // in LIGHT_BITS' fields. Solid cells add 0: the shader divides by the open cells, which the vertex's AO tells. With
 // both sides solid the diagonal is behind a wall corner (its light would leak through): left out, the front alone.

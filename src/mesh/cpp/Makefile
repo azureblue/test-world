@@ -1,10 +1,10 @@
 all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../light.wasm
 
-headers := int.h blocks.hpp common.hpp quad_encode.hpp
+headers := int.h blocks.hpp common.hpp quad_encode.hpp row_faces.hpp
 
 ../uIntWasmMesher.wasm: uIntWasmMesher.cpp $(headers)
 	clang --target=wasm32 \
-	-O3 \
+	-O3 -msimd128 \
 	-std=c++20 \
 	-ffreestanding -fno-builtin \
 	-fno-exceptions -fno-rtti \
