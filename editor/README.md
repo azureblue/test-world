@@ -6,7 +6,7 @@ itself.
 
 - **Start:** the game's textures, each one an image as the game composes it (`src/blockTextures.js`: a texture made
   from another one with ops is an image of its own here, but one made by a mask stays masked: `dirt_grass_side` is
-  `grass_side`'s pixels with `grass_side_mask` over `dirt`), its cube and liquid blocks (water) and its plants
+  `grass_side`'s pixels with `grass_side_mask` over `dirt`), its cube and liquid blocks (water; leaves with their cutout versions) and its plants
   (x_quads). From game
   starts again from them.
 - **Masks:** an image can have a mask, part of it (not in the list): it shows its pixels where the mask is white and
@@ -18,9 +18,13 @@ itself.
   images are copied with it, so the copy is edited apart.
 - **The selected one:** its name (editable: an image's users follow), Delete (an image only when nothing uses it). An
   image: its mask, on or off, and the base under it. A block: one image on all faces, or top, sides and bottom apart, its model
-  (cube or liquid); the face edited and its image. A plant: its image. The edited image's mask (a block's face's, a plant's) is under them.
-- **Tools** (left strip): pencil (B), fill (G, the connected pixels of one colour), fill all (A, the whole image), pick a colour (I, or Ctrl+click with any tool); the left button paints, the right one erases (the tip under the image says so)
-  (transparent). Undo and redo (Ctrl+Z, Ctrl+Y), a stroke at a time, per image; the grid.
+  (cube or liquid); the face edited and its image. A cube can have a cutout version: textures with holes (transparent
+  pixels), which the game uses instead when it draws leaves with holes (`Settings.render.cutoutLeaves`). Turned on, it
+  starts as copies of the block's images (`name_cutout`) to paint the holes into; normal and cutout choose which texture
+  set is edited and shown (in 3 × 3 the faces between cutout blocks are drawn, as in the game). Turned off, the images
+  stay. A plant: its image. The edited image's mask (a block's face's, a plant's) is under them.
+- **Tools** (left strip): pencil (B), fill (G, the connected pixels of one colour), fill all (A, the whole image), pick a colour (I, or Ctrl+click with any tool); the left button paints, the right one erases
+  (transparent; the tip under the image says so). Undo and redo (Ctrl+Z, Ctrl+Y), a stroke at a time, per image; the grid.
 - **Colours:** the current one (click it for the system picker); the main colour's variations, lighter and darker
   (rows) with the hue a little turned (columns); under them the image's own colours, most used first. Choosing a
   variation keeps them where they are; the system picker, the image's colours and the picker choose a main colour,
@@ -42,4 +46,4 @@ itself.
   ```
 
   A block's `textures` is one image's name or `{top, sides, bottom}`, as in `src/blocks.json`; a liquid one has
-  `"model": "liquid"`.
+  `"model": "liquid"`; a cube with a cutout version has `cutout`, given the same way (as in `src/blocks.json`).

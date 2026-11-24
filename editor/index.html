@@ -18,6 +18,15 @@
 
         * {
             box-sizing: border-box;
+            /* thin and dark scroll bars (the lists, the editing column) */
+            scrollbar-width: thin;
+            scrollbar-color: var(--line) transparent;
+        }
+
+        /* a little brighter over the panel scrolled */
+        #lists:hover,
+        main:hover {
+            scrollbar-color: var(--dim) transparent;
         }
 
         body {

@@ -54,8 +54,9 @@ void main() {
 /**
  * What the preview shows: the block on the ground's middle, its face textures (layers) by face (up, front, left,
  * back, right, down) (a liquid: 7/8 high, see-through, drawn last); a plant's (x_quads) is its front one; an image alone ("panel"): its front one, one quad upright
- * through the block's middle. A patch: 3 x 3 of it.
- * @typedef {{model: string, layers: number[], patch: boolean}} PreviewObject
+ * through the block's middle. A patch: 3 x 3 of it. Cutout: a cube's faces between the blocks of a patch are drawn (its
+ * textures have holes).
+ * @typedef {{model: string, layers: number[], patch: boolean, cutout?: boolean}} PreviewObject
  */
 
 export class Preview {
@@ -164,8 +165,8 @@ export class Preview {
                 } else {
                     for (let f = 0; f < 6; f++) {
                         const [nx, ny, nz] = FACE_NORMALS[f];
-                        // hidden between blocks of a patch, and the bottom on the ground
-                        const neighbour = nz === -1 || (o.patch && nz === 0 && Math.abs(x + nx) <= 1 && Math.abs(y + ny) <= 1);
+                        // hidden between blocks of a patch (not cutout ones), and the bottom on the ground
+                        const neighbour = nz === -1 || (o.patch && !o.cutout && nz === 0 && Math.abs(x + nx) <= 1 && Math.abs(y + ny) <= 1);
                         if (neighbour)
                             continue;
                         if (o.model === "liquid")

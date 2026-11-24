@@ -16,21 +16,24 @@ const FACE_PARTS = ["top", "sides", "sides", "sides", "sides", "bottom"];
 /**
  * The document. An image's own pixels; a masked one also has its mask and a base image: it shows its pixels where
  * the mask is white, the base's where it's black, blended between (the mask's red, as the game's mask op). A block's
- * textures: one image for every face, or {top, sides, bottom}, its model: a cube (none given) or a liquid; a plant's:
- * its image.
+ * textures: one image for every face, or {top, sides, bottom}, its model: a cube (none given) or a liquid; a cube can
+ * have a cutout version too (cutout: textures with holes, as in src/blocks.json: the game's leaves with holes); a
+ * plant's: its image.
  * @typedef {{mask: ImageData, base: string}} Mask
+ * @typedef {string | {top: string, sides: string, bottom: string}} Textures
  * @type {{images: Map<string, ImageData>, masks: Map<string, Mask>, blocks: {name: string, model?: "liquid",
- *   textures: string | {top: string, sides: string, bottom: string}}[], plants: {name: string, image: string}[]}}
+ *   textures: Textures, cutout?: Textures}[], plants: {name: string, image: string}[]}}
  */
 let doc = { images: new Map(), masks: new Map(), blocks: [], plants: [] };
 /** what every image looks like: a masked one composed (composeAll), the others their own pixels */
 let composed = new Map();
 /**
- * what's selected: an image, a block (and the face part edited) or a plant; and of the image edited, whether its
- * pixels or its mask are painted
- * @type {{kind: "image" | "block" | "plant", name: string, part: "top" | "sides" | "bottom", layer: "image" | "mask"}}
+ * what's selected: an image, a block (its texture set: the textures or the cutout ones, and the face part edited) or
+ * a plant; and of the image edited, whether its pixels or its mask are painted
+ * @type {{kind: "image" | "block" | "plant", name: string, set: "textures" | "cutout", part: "top" | "sides" | "bottom",
+ *   layer: "image" | "mask"}}
  */
-let selection = { kind: "image", name: "", part: "sides", layer: "image" };
+let selection = { kind: "image", name: "", set: "textures", part: "sides", layer: "image" };
 /** by what's edited (target().key) */
 /** @type {Map<string, {undo: Uint8ClampedArray[], redo: Uint8ClampedArray[]}>} */
 const history = new Map();
@@ -67,7 +70,9 @@ async function fromGame() {
         }
     }
     const blocks = definitions.blocks.filter(b => b.model === "cube" || b.model === "liquid").map(b =>
-        b.model === "liquid" ? { name: b.name, model: "liquid", textures: structuredClone(b.textures) } : { name: b.name, textures: structuredClone(b.textures) });
+        b.model === "liquid" ? { name: b.name, model: "liquid", textures: structuredClone(b.textures) }
+            : b.cutout !== undefined ? { name: b.name, textures: structuredClone(b.textures), cutout: structuredClone(b.cutout) }
+            : { name: b.name, textures: structuredClone(b.textures) });
     const plants = definitions.blocks.filter(b => b.model === "x_quads").map(b => ({ name: b.name, image: b.textures }));
     return { images, masks, blocks, plants };
 }
@@ -139,10 +144,20 @@ function setDocument(d) {
         select("image", doc.images.keys().next().value);
 }
 
-/** a block's image for each part */
-function parts(block) {
-    const t = block.textures;
+/** a block's image for each part, of its textures or its cutout ones */
+function parts(block, set = "textures") {
+    const t = block[set];
     return typeof t === "string" ? { top: t, sides: t, bottom: t } : t;
+}
+
+/** the images a block uses (both texture sets) */
+function blockImages(block) {
+    return [...Object.values(parts(block)), ...(block.cutout !== undefined ? Object.values(parts(block, "cutout")) : [])];
+}
+
+/** textures with every image replaced by map(image) */
+function mapTextures(t, map) {
+    return typeof t === "string" ? map(t) : { top: map(t.top), sides: map(t.sides), bottom: map(t.bottom) };
 }
 
 /** whether image depends on other: is it, or masked over it, also through other masked images */
@@ -191,7 +206,7 @@ function editedImage() {
     if (selection.kind === "image")
         return selection.name;
     const item = findItem(selection.kind, selection.name);
-    return selection.kind === "block" ? parts(item)[selection.part] : item.image;
+    return selection.kind === "block" ? parts(item, selection.set)[selection.part] : item.image;
 }
 
 /** the pixels painted: the edited image's own, or its mask; key: its undo history's */
@@ -202,9 +217,8 @@ function target() {
     return { key: name, image: doc.images.get(name) };
 }
 
-/** a name not taken yet: name_copy, name_copy2, ... (_COPY for upper case names) */
-function copyName(name, taken) {
-    const suffix = name === name.toUpperCase() ? "_COPY" : "_copy";
+/** a name not taken yet: name_copy, name_copy2, ... (_COPY for upper case names; or another suffix) */
+function copyName(name, taken, suffix = name === name.toUpperCase() ? "_COPY" : "_copy") {
     for (let n = 1; ; n++) {
         const candidate = name + suffix + (n > 1 ? n : "");
         if (!taken(candidate))
@@ -212,8 +226,8 @@ function copyName(name, taken) {
     }
 }
 
-function copyImage(name) {
-    const copy = copyName(name, n => doc.images.has(n));
+function copyImage(name, suffix = undefined) {
+    const copy = copyName(name, n => doc.images.has(n), suffix);
     doc.images.set(copy, copyOf(doc.images.get(name)));
     const m = doc.masks.get(name);
     if (m !== undefined)
@@ -233,11 +247,11 @@ function copySelected(kind) {
             return;
         const name = copyName(item.name, n => list.some(i => i.name === n));
         if (kind === "block") {
-            const p = parts(item);
-            const copies = new Map([...new Set(Object.values(p))].map(image => [image, copyImage(image)]));
-            const textures = typeof item.textures === "string" ? copies.get(item.textures)
-                : { top: copies.get(p.top), sides: copies.get(p.sides), bottom: copies.get(p.bottom) };
-            list.push(item.model === "liquid" ? { name, model: "liquid", textures } : { name, textures });
+            const copies = new Map([...new Set(blockImages(item))].map(image => [image, copyImage(image)]));
+            const copy = { ...structuredClone(item), name, textures: mapTextures(item.textures, i => copies.get(i)) };
+            if (item.cutout !== undefined)
+                copy.cutout = mapTextures(item.cutout, i => copies.get(i));
+            list.push(copy);
         } else {
             list.push({ name, image: copyImage(item.image) });
         }
@@ -249,7 +263,7 @@ function copySelected(kind) {
 function deleteSelected() {
     const { kind, name } = selection;
     if (kind === "image") {
-        const users = [...doc.blocks.filter(b => Object.values(parts(b)).includes(name)), ...doc.plants.filter(p => p.image === name),
+        const users = [...doc.blocks.filter(b => blockImages(b).includes(name)), ...doc.plants.filter(p => p.image === name),
             ...[...doc.masks].filter(([, m]) => m.base === name).map(([n]) => ({ name: n }))];
         if (users.length > 0) {
             status(`${name} is used by ${users.map(u => u.name).join(", ")}`, true);
@@ -290,13 +304,11 @@ function rename(newName) {
                 history.set(newName + suffix, history.get(name + suffix));
                 history.delete(name + suffix);
             }
+        const renamed = (image) => image === name ? newName : image;
         for (const b of doc.blocks) {
-            if (typeof b.textures === "string")
-                b.textures = b.textures === name ? newName : b.textures;
-            else
-                for (const part of ["top", "sides", "bottom"])
-                    if (b.textures[part] === name)
-                        b.textures[part] = newName;
+            b.textures = mapTextures(b.textures, renamed);
+            if (b.cutout !== undefined)
+                b.cutout = mapTextures(b.cutout, renamed);
         }
         for (const p of doc.plants)
             if (p.image === name)
@@ -320,7 +332,7 @@ function rename(newName) {
 // ---- selection and the views
 
 function select(kind, name, part = "sides") {
-    selection = { kind, name, part, layer: "image" };
+    selection = { kind, name, set: "textures", part, layer: "image" };
     status("");
     renderAll();
 }
@@ -357,7 +369,8 @@ function renderLists() {
         return li;
     };
     $("images").replaceChildren(...[...doc.images.keys()].map(n => item("image", n, n)));
-    $("blocks").replaceChildren(...doc.blocks.map(b => item("block", b.name, parts(b).sides, b.model === "liquid" ? " (liquid)" : "")));
+    $("blocks").replaceChildren(...doc.blocks.map(b => item("block", b.name, parts(b).sides,
+        b.model === "liquid" ? " (liquid)" : b.cutout !== undefined ? " (cutout)" : "")));
     $("plants").replaceChildren(...doc.plants.map(p => item("plant", p.name, p.image)));
 }
 
@@ -379,12 +392,14 @@ function renderDetails() {
     const rows = [row(Object.assign(document.createElement("b"), { textContent: kind }), nameInput, del)];
     if (kind === "block") {
         const block = findItem(kind, name);
-        const same = typeof block.textures === "string";
+        // the texture set edited: the textures or the cutout ones
+        const set = selection.set;
+        const same = typeof block[set] === "string";
         const sameBox = Object.assign(document.createElement("input"), { type: "checkbox", checked: same });
         sameBox.onchange = () => {
-            const p = parts(block);
+            const p = parts(block, set);
             // all faces take the one edited
-            block.textures = sameBox.checked ? p[selection.part] : { top: p.top, sides: p.sides, bottom: p.bottom };
+            block[set] = sameBox.checked ? p[selection.part] : { top: p.top, sides: p.sides, bottom: p.bottom };
             selection.part = "sides";
             changed();
             renderAll();
@@ -396,14 +411,19 @@ function renderDetails() {
         model.append(new Option("cube", "cube"), new Option("liquid", "liquid"));
         model.value = block.model ?? "cube";
         model.onchange = () => {
-            if (model.value === "liquid")
+            if (model.value === "liquid") {
+                // a liquid has no cutout version (its images stay)
                 block.model = "liquid";
-            else
+                delete block.cutout;
+                selection.set = "textures";
+            } else {
                 delete block.model;
+            }
             changed();
             renderAll();
         };
-        rows.push(row(sameLabel, " model ", model));
+        rows.push(row(" model ", model, ...(block.model === "liquid" ? [] : cutoutDetails(block))));
+        rows.push(row(sameLabel));
         // the face edited, and its image
         const faces = row();
         if (!same) {
@@ -417,11 +437,11 @@ function renderDetails() {
             }
             faces.append(group);
         }
-        const choose = imageSelect(parts(block)[selection.part], (image) => {
+        const choose = imageSelect(parts(block, set)[selection.part], (image) => {
             if (same)
-                block.textures = image;
+                block[set] = image;
             else
-                block.textures[selection.part] = image;
+                block[set][selection.part] = image;
             changed();
             renderAll();
         });
@@ -437,6 +457,42 @@ function renderDetails() {
         rows.push(...maskDetails(plant.image));
     }
     $("details").replaceChildren(...rows);
+}
+
+/**
+ * a cube's cutout version (leaves with holes: the game uses it with Settings.render.cutoutLeaves): on or off; on,
+ * which texture set is edited and shown. A new one: copies of the block's images (name_cutout), to paint holes into
+ */
+function cutoutDetails(block) {
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: block.cutout !== undefined });
+    box.onchange = () => {
+        if (box.checked) {
+            const copies = new Map([...new Set(Object.values(parts(block)))].map(image => [image, copyImage(image, "_cutout")]));
+            block.cutout = mapTextures(block.textures, i => copies.get(i));
+            selection.set = "cutout";
+        } else {
+            // its images stay
+            delete block.cutout;
+            selection.set = "textures";
+        }
+        selection.layer = "image";
+        changed();
+        renderAll();
+    };
+    const label = document.createElement("label");
+    label.title = "Textures with holes (transparent pixels), used instead when the game draws leaves with holes";
+    label.append(box, " cutout version");
+    if (block.cutout === undefined)
+        return [label];
+    const group = document.createElement("span");
+    group.className = "segmented";
+    for (const [set, text, title] of [["textures", "normal", "Edit and show its textures"], ["cutout", "cutout", "Edit and show its cutout textures"]]) {
+        const b = Object.assign(document.createElement("button"), { textContent: text, title });
+        b.classList.toggle("active", selection.set === set);
+        b.onclick = () => { selection.set = set; selection.layer = "image"; renderAll(); };
+        group.append(b);
+    }
+    return [label, group];
 }
 
 /** a row of the details */
@@ -621,8 +677,9 @@ function updatePreview() {
     let object;
     if (selection.kind === "block") {
         const block = findItem("block", selection.name);
-        const p = parts(block);
-        object = { model: block.model ?? "cube", layers: FACE_PARTS.map(part => layer(p[part])) };
+        const p = parts(block, selection.set);
+        // cutout: the faces between the blocks of a patch drawn, as in the game
+        object = { model: block.model ?? "cube", layers: FACE_PARTS.map(part => layer(p[part])), cutout: selection.set === "cutout" };
     } else if (selection.kind === "plant") {
         object = { model: "x_quads", layers: [0, layer(findItem("plant", selection.name).image)] };
     } else {
