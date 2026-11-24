@@ -14,6 +14,9 @@ const FACES = [
 ];
 /** the neighbour each face looks at */
 const FACE_NORMALS = [[0, 0, 1], [0, -1, 0], [-1, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, -1]];
+/** a liquid's top (the game's water surface level: 7 of 8) and how much it hides behind it (Settings.water.opacity) */
+const LIQUID_TOP = 7 / 8;
+const LIQUID_OPACITY = 0.76;
 /** the ground's half size: (2 GROUND + 1)^2 blocks */
 const GROUND = 5;
 /** seconds without dragging before it starts circling, and its speed (radians a second) */
@@ -36,6 +39,8 @@ void main() {
 const FRAGMENT_SHADER = `#version 300 es
 precision mediump float;
 uniform mediump sampler2DArray u_textures;
+// 1, or a liquid's opacity
+uniform float u_alpha;
 in vec3 v_tex;
 in float v_shade;
 out vec4 color_out;
@@ -43,12 +48,13 @@ void main() {
     vec4 tex = texture(u_textures, v_tex);
     if (tex.a < 0.5)
         discard;
-    color_out = vec4(tex.rgb * v_shade, 1.0);
+    color_out = vec4(tex.rgb * v_shade, u_alpha);
 }`;
 
 /**
  * What the preview shows: the block on the ground's middle, its face textures (layers) by face (up, front, left,
- * back, right, down); a plant's (x_quads) is its front one. A patch: 3 x 3 of it.
+ * back, right, down) (a liquid: 7/8 high, see-through, drawn last); a plant's (x_quads) is its front one; an image alone ("panel"): its front one, one quad upright
+ * through the block's middle. A patch: 3 x 3 of it.
  * @typedef {{model: string, layers: number[], patch: boolean}} PreviewObject
  */
 
@@ -57,6 +63,9 @@ export class Preview {
     #canvas;
     #program;
     #viewProjection;
+    #alpha;
+    /** the vertices: the opaque ones, then this many see-through ones (a liquid's) */
+    #translucentCount = 0;
     #vao;
     #buffer;
     #vertexCount = 0;
@@ -80,6 +89,7 @@ export class Preview {
         const gl = this.#gl = canvas.getContext("webgl2", { antialias: true });
         this.#program = program(gl, VERTEX_SHADER, FRAGMENT_SHADER);
         this.#viewProjection = gl.getUniformLocation(this.#program, "u_view_projection");
+        this.#alpha = gl.getUniformLocation(this.#program, "u_alpha");
         this.#vao = gl.createVertexArray();
         this.#buffer = gl.createBuffer();
         gl.bindVertexArray(this.#vao);
@@ -143,17 +153,24 @@ export class Preview {
                         cubeFace(v, x, y, -1, f, f === 0 ? up : f === 5 ? down : side);
                 }
         const o = this.#object;
+        const liquid = [];
         if (o !== null) {
             const spots = o.patch ? [-1, 0, 1].flatMap(x => [-1, 0, 1].map(y => [x, y])) : [[0, 0]];
             for (const [x, y] of spots) {
                 if (o.model === "x_quads") {
                     xQuads(v, x, y, 0, o.layers[1]);
+                } else if (o.model === "panel") {
+                    panel(v, x, y, 0, o.layers[1]);
                 } else {
                     for (let f = 0; f < 6; f++) {
                         const [nx, ny, nz] = FACE_NORMALS[f];
                         // hidden between blocks of a patch, and the bottom on the ground
                         const neighbour = nz === -1 || (o.patch && nz === 0 && Math.abs(x + nx) <= 1 && Math.abs(y + ny) <= 1);
-                        if (!neighbour)
+                        if (neighbour)
+                            continue;
+                        if (o.model === "liquid")
+                            cubeFace(liquid, x, y, 0, f, o.layers[f], LIQUID_TOP, 1);
+                        else
                             cubeFace(v, x, y, 0, f, o.layers[f]);
                     }
                 }
@@ -161,8 +178,9 @@ export class Preview {
         }
         const gl = this.#gl;
         gl.bindBuffer(gl.ARRAY_BUFFER, this.#buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([...v, ...liquid]), gl.STATIC_DRAW);
         this.#vertexCount = v.length / 7;
+        this.#translucentCount = liquid.length / 7;
     }
 
     #initControls() {
@@ -212,7 +230,7 @@ export class Preview {
             return;
         gl.enable(gl.DEPTH_TEST);
         gl.useProgram(this.#program);
-        const target = [0.5, 0.5, this.#object?.model === "x_quads" ? 0.4 : 0.5];
+        const target = [0.5, 0.5, this.#object?.model === "cube" ? 0.5 : 0.4];
         const eye = [
             target[0] + Math.cos(this.#yaw) * Math.cos(this.#pitch) * this.#distance,
             target[1] + Math.sin(this.#yaw) * Math.cos(this.#pitch) * this.#distance,
@@ -221,17 +239,38 @@ export class Preview {
         gl.uniformMatrix4fv(this.#viewProjection, false, matrix);
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.#texture);
         gl.bindVertexArray(this.#vao);
+        gl.uniform1f(this.#alpha, 1);
         gl.drawArrays(gl.TRIANGLES, 0, this.#vertexCount);
+        if (this.#translucentCount > 0) {
+            // over what's drawn, not hiding what's behind it; only the faces turned to the camera (the faces are
+            // counter-clockwise from outside): a liquid's box is convex, so they don't overlap, and the far ones
+            // don't blend over the near ones in whatever order they come
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.depthMask(false);
+            gl.enable(gl.CULL_FACE);
+            gl.uniform1f(this.#alpha, LIQUID_OPACITY);
+            gl.drawArrays(gl.TRIANGLES, this.#vertexCount, this.#translucentCount);
+            gl.disable(gl.CULL_FACE);
+            gl.depthMask(true);
+            gl.disable(gl.BLEND);
+        }
         gl.bindVertexArray(null);
     }
 }
 
-/** a cube face of the block at (x, y, z) as 2 triangles; the texture's v up the face (rows from the top: flipped) */
-function cubeFace(v, x, y, z, face, layer) {
+/**
+ * a cube face of the block at (x, y, z) as 2 triangles; the texture's v up the face (rows from the top: flipped); a
+ * block height high (a liquid's lower top; the sides show the texture's bottom part), shaded (default: the face's)
+ */
+function cubeFace(v, x, y, z, face, layer, height = 1, shade = FACE_SHADE[face]) {
     const c = FACES[face];
     const uv = [[0, 1], [1, 1], [1, 0], [0, 0]];
-    for (const k of [0, 1, 2, 0, 2, 3])
-        v.push(x + c[k][0], y + c[k][1], z + c[k][2], uv[k][0], uv[k][1], layer, FACE_SHADE[face]);
+    for (const k of [0, 1, 2, 0, 2, 3]) {
+        const top = c[k][2] === 1;
+        const u = uv[k][0], tv = face === 0 || face === 5 || !top ? uv[k][1] : 1 - height;
+        v.push(x + c[k][0], y + c[k][1], z + (top ? height : 0), u, tv, layer, shade);
+    }
 }
 
 /** a plant: 2 quads across the block's diagonals, unshaded like the game's (both sides: no culling) */
@@ -242,6 +281,14 @@ function xQuads(v, x, y, z, layer) {
         for (const k of [0, 1, 2, 0, 2, 3])
             v.push(x + c[k][0], y + c[k][1], z + c[k][2], uv[k][0], uv[k][1], layer, 1);
     }
+}
+
+/** an image upright through the block's middle, facing -y (both sides: no culling), unshaded */
+function panel(v, x, y, z, layer) {
+    const c = [[0, 0.5, 0], [1, 0.5, 0], [1, 0.5, 1], [0, 0.5, 1]];
+    const uv = [[0, 1], [1, 1], [1, 0], [0, 0]];
+    for (const k of [0, 1, 2, 0, 2, 3])
+        v.push(x + c[k][0], y + c[k][1], z + c[k][2], uv[k][0], uv[k][1], layer, 1);
 }
 
 function program(gl, vertexSource, fragmentSource) {

@@ -25,7 +25,8 @@
             height: 100vh;
             overflow: hidden;
             display: grid;
-            grid-template-columns: 220px 48px auto 1fr;
+            /* the editing column fixed: its rows wrap, the view beside it doesn't move */
+            grid-template-columns: 220px 48px 420px 1fr;
             grid-template-rows: 100vh;
             background: var(--bg);
             color: var(--text);
@@ -166,8 +167,33 @@
         }
 
         #details {
-            min-height: 64px;
+            min-height: 140px;
             margin-bottom: 8px;
+        }
+
+        #details select {
+            max-width: 220px;
+        }
+
+        /* a choice of one: buttons side by side */
+        .segmented {
+            display: inline-flex;
+        }
+
+        .segmented button {
+            border-radius: 0;
+        }
+
+        .segmented button + button {
+            border-left: none;
+        }
+
+        .segmented button:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+
+        .segmented button:last-child {
+            border-radius: 0 4px 4px 0;
         }
 
         #details label {
@@ -257,6 +283,22 @@
             border-radius: 4px;
         }
 
+        #variationControls input[type=number] {
+            width: 44px;
+            font: inherit;
+            color: var(--text);
+            background: var(--bg);
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            padding: 2px 4px;
+        }
+
+        #maskHint {
+            margin-top: 10px;
+            color: var(--dim);
+            max-width: 390px;
+        }
+
         #status {
             margin-top: 8px;
             color: var(--dim);
@@ -292,6 +334,9 @@
         <button data-tool="fill" title="Fill (G): left fills, right erases the area">
             <svg viewBox="0 0 24 24"><path d="M5 11l7-7 7 7-7 7z" /><path d="M5 11h14" /><path d="M20 15c0 2-1.5 3-1.5 4a1.5 1.5 0 003 0c0-1-1.5-2-1.5-4z" /></svg>
         </button>
+        <button data-tool="fillAll" title="Fill the whole image (A); right erases it all">
+            <svg viewBox="0 0 24 24"><path d="M5 11l7-7 7 7-7 7z" /><path d="M5 11h14" /><circle cx="18" cy="16" r="1" /><circle cx="21" cy="19" r="1" /><circle cx="18" cy="21" r="1" /></svg>
+        </button>
         <button data-tool="picker" title="Pick a colour (I)">
             <svg viewBox="0 0 24 24"><path d="M14 4l6 6" /><path d="M17 7l-9 9-3 1 1-3 9-9" /><path d="M4 20l2-2" /></svg>
         </button>
@@ -311,6 +356,9 @@
     <main>
         <div id="details"></div>
         <canvas id="pixels"></canvas>
+        <div id="maskHint" hidden>Painting the mask: left button white (the image shows), right button black (the base
+            shows).</div>
+        <div id="colors">
         <div class="row" style="align-items: flex-start; margin-top: 10px; gap: 12px">
             <div>
                 <div id="current" title="The colour (click to choose)"></div>
@@ -318,8 +366,16 @@
             </div>
             <div class="swatches" id="variations" title="Lighter and darker, the hue a little turned"></div>
         </div>
+        <div class="row" id="variationControls">
+            <label title="Rows (the wheel changes it)">rows <input type="number" id="rows" min="1" max="9" step="1" value="5"></label>
+            <label title="Columns (the wheel changes it)">cols <input type="number" id="cols" min="1" max="11" step="1" value="5"></label>
+            <label title="Degrees the hue turns a column (the wheel changes it)">hue° <input type="number" id="hueStep" min="0" max="60" step="1" value="2"></label>
+            <label title="Percent lighter or darker a row is (the wheel changes it)">light% <input type="number" id="lightStep" min="0" max="25" step="0.5" value="2"></label>
+            <label title="Every new pixel painted takes a colour of the grid at random"><input type="checkbox" id="random"> random</label>
+        </div>
         <h2>Colours in the image</h2>
         <div id="palette"></div>
+        </div>
         <div id="status"></div>
     </main>
 
