@@ -24,7 +24,8 @@ const UNLOADED = BLOCK_IDS.ROCK >>> 0;
 /**
  * Flowing water with levels (the block height, 1/8 of a block, see blocks.js), like Minecraft's:
  *
- * - Source water (generated, placed) never drains. Its level is 7/8 under air (the surface) and full under water.
+ * - Source water (generated, placed) never drains. Its level is 7/8 under air or a plant (the surface) and full under
+ *   anything else (water, a block), so water under a ceiling or a placed block touches it.
  * - Flowing water (the flowing bit) is what a cell gets from its neighbours, worked out again whenever they change:
  *   - under water (falling): full;
  *   - beside water that spreads sideways: the highest level they give, a source or a falling column 6/8, flowing
@@ -36,10 +37,16 @@ const UNLOADED = BLOCK_IDS.ROCK >>> 0;
  *   lake fills up for good. A hole dug next to a lake gets a curtain of falling water along the lake and flowing
  *   water on its floor, as in Minecraft.
  * - Pressure (not in Minecraft): a covered cell (a block or a source above it) next to a full source (one under the
- *   surface) becomes a full source itself, so a tunnel or a cave dug under a lake fills up all the way, not just 6
- *   blocks deep with air above the flowing water. It goes on cell by cell, the new sources being full and covered
- *   too; it can't rise above the surface (surface sources are 7/8, not full) nor fill anything open to the sky (a
- *   hole beside a lake keeps its curtain). Like any source, the water stays when the tunnel is sealed off later.
+ *   surface), resting on solid ground, a source or water lying on solid ground, becomes a full source itself, so a
+ *   tunnel dug under a lake fills up all the way, not just 6 blocks deep with air above the flowing water. It goes on
+ *   cell by cell, the new sources being full and covered too; it can't rise above the surface (surface sources are
+ *   7/8, not full) nor fill anything open to the sky (a hole beside a lake keeps its curtain), nor spread along a
+ *   ceiling over air: a tunnel coming out in a cave's wall pours into it as a waterfall, it doesn't flood the cave.
+ *   Like any source, the water stays when the tunnel is sealed off later.
+ *   Also from above: a cell under a full source becomes a full source, so a shaft dug down through the floor of a lake
+ *   fills with sources (not falling water, which doesn't spread sideways before it lands and gives tunnels from the
+ *   shaft only flowing 6/8 water), and tunnels from it fill by the rule above. Under a lake only the 7/8 surface deep
+ *   (a beach) a shaft keeps falling water, as in Minecraft.
  * Plants don't stop water: it flows into their cells and they stay in it ({@link flooded}).
  *
  * Generated water stays still until a block changes next to it: a change wakes the cells whose water can depend on
@@ -165,9 +172,7 @@ export class WaterFlow {
         const below = this.#read(ix, iy, iz - 1, ix, iy, iz);
         let next;
         if (isSource(cell)) {
-            // the level follows what's above: full under water, the surface under air or a plant, kept under a block
-            const level = isLiquid(above) ? BLOCK_HEIGHT_FULL : canFlood(above) ? WATER_SURFACE_LEVEL : blockHeight(cell);
-            next = flooded(cell, level);
+            next = flooded(cell, this.#sourceLevel(ix, iy, iz, cell, above));
         } else {
             next = this.#flowingState(ix, iy, iz, cell, above, below);
         }
@@ -199,17 +204,40 @@ export class WaterFlow {
                 continue;
             level = Math.max(level, isFalling(side) ? SPREAD_LEVEL : blockHeight(side) - 1);
         }
+        // under a full source (below the surface): under water pressure from above
+        if (isSource(above) && blockHeight(above) === BLOCK_HEIGHT_FULL)
+            return flooded(cell, BLOCK_HEIGHT_FULL);
         // covered: a block or a source above; a block above that isn't loaded only reads as solid (the cell waits for it),
         // and a source is for good, so it doesn't count
-        if (pressure && (isSource(above) || isSolid(above) && this.#blocks.isLoaded(ix, iy, iz + 1)))
+        const covered = isSource(above) || isSolid(above) && this.#blocks.isLoaded(ix, iy, iz + 1);
+        // resting, so pressure doesn't spread along a cave's ceiling over the air (a hanging layer of sources, the water
+        // below filling the whole cave): on solid ground (a tunnel's floor), on a source (a tunnel's top row once its
+        // bottom row is sources), or on water lying on solid ground (a tunnel's top row while its bottom row is still
+        // flowing water on the floor: without it neither row fills, the top one not resting, the bottom one not
+        // covered). Not on any water: water spreads beside a source into the air too, so under a cave's ceiling there
+        // is water below that only hangs or falls. It reads two blocks down; a change there that matters (the floor
+        // dug out) changes the water between, which wakes this cell. Without this, such a cave floods completely.
+        const resting = isSolid(below) || isSource(below) || isLiquid(below) && isSolid(this.#read(ix, iy, iz - 2, ix, iy, iz));
+        if (pressure && covered && resting)
             return flooded(cell, BLOCK_HEIGHT_FULL);
         if (sources >= 2 && (isSolid(below) || isSource(below)))
-            return flooded(cell, isLiquid(above) ? BLOCK_HEIGHT_FULL : WATER_SURFACE_LEVEL);
+            return flooded(cell, this.#sourceLevel(ix, iy, iz, cell, above));
         if (isLiquid(above))
             return flooded(cell, BLOCK_HEIGHT_FULL, true);
         if (level >= 1)
             return flooded(cell, level, true);
         return isLiquid(cell) ? drained(cell) : cell;
+    }
+
+    /**
+     * A source's level from what's above it: the surface (7/8) under air or a plant, full under anything else (water,
+     * a block). A block above that isn't loaded only reads as solid (the cell waits for it): the level stays.
+     * @returns {number}
+     */
+    #sourceLevel(ix, iy, iz, cell, above) {
+        if (canFlood(above))
+            return WATER_SURFACE_LEVEL;
+        return isLiquid(above) || this.#blocks.isLoaded(ix, iy, iz + 1) ? BLOCK_HEIGHT_FULL : blockHeight(cell);
     }
 
     /**

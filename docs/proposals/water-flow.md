@@ -7,8 +7,7 @@ worker `src/worker/worldWorker.js`, `Settings.water.flow`). Further ideas under 
 
 - The block value has a height field, bits 24..26, in 1/8 of a block (0 meaning full), for water levels and later
   slabs (`blockHeight` / `withHeight` in `src/blocks.js`, `block_height` in `src/mesh/cpp/blocks.hpp`).
-- The generator makes the sea's top cell 7/8 (`WATER_SURFACE_LEVEL`) and the water below it full. So water under a
-  block placed at the surface stays 7/8 with its surface visible, and water under a block deep down stays full.
+- The generator makes the sea's top cell 7/8 (`WATER_SURFACE_LEVEL`) and the water below it full.
 - The mesher draws water from the level: the top face at the level (hidden only for full water under water or a
   solid block), the bottom face unless below is solid or full water, side faces from the height the neighbour covers
   up to the level (a strip next to lower water, nothing next to a solid block or water at least as high). The face
@@ -22,8 +21,11 @@ worker `src/worker/worldWorker.js`, `Settings.water.flow`). Further ideas under 
 
 ## Done: flow with levels (like Minecraft's)
 
-- **Source and flowing water.** Generated and placed water is a source: it never drains, its level is 7/8 under air
-  and full under water (a block above keeps it). Flowing water has the flowing bit (block bit 27).
+- **Source and flowing water.** Generated and placed water is a source: it never drains. Its level depends only on
+  what's above it: 7/8 under air or a plant (an open surface), full under anything else (water, a block), so water
+  under a ceiling or a block placed on a lake touches it. (Minecraft leaves a gap under a block; here the rules that
+  made sources used to disagree: 7/8 or full under the same ceiling, depending on how the water got there.) Flowing
+  water has the flowing bit (block bit 27).
 - **Flowing water is computed from the neighbours**, again whenever they change (`#flowingState`):
   - under water (falling): full;
   - beside water that spreads sideways: the highest level they give. A source or a falling column gives 6/8,
@@ -36,9 +38,18 @@ worker `src/worker/worldWorker.js`, `Settings.water.flow`). Further ideas under 
   up to the surface, was tried and dropped: it only worked next to deep water, not at beaches, which made it hard to
   predict.)
 - **Pressure** (not in Minecraft): a covered cell (a block or a source above it) next to a full source (one under
-  the surface) becomes a full source, so a tunnel or cave dug under a lake fills up all the way instead of staying
-  dry beyond 6 blocks. It spreads cell by cell; it can't rise above the surface (surface sources are 7/8, not full)
-  nor fill anything open to the sky, so the curtain above stays. The water stays when the tunnel is sealed later.
+  the surface), resting on solid ground, a source or water lying on solid ground, becomes a full source, so a tunnel
+  dug under a lake fills up all the way instead of staying dry beyond 6 blocks. It spreads cell by cell; it can't
+  rise above the surface (surface sources are 7/8, not full) nor fill anything open to the sky, so the curtain
+  above stays. The water stays when the tunnel is sealed later. Resting matters for caves: a tunnel coming out in
+  a cave's wall level with its ceiling used to spread pressure along the ceiling over the air, a hanging layer of
+  sources, and flood the whole cave; now it pours in as a waterfall with flowing water on the floor. (Resting on
+  water lying on solid ground, not on any water: a tunnel's bottom row, flowing water on the floor, holds up its
+  top row; water spreading from a source into the air under a cave's ceiling doesn't.)
+  Pressure also comes from above: a cell under a full source becomes a full source, so a shaft dug down through a
+  lake's floor fills with sources and tunnels from it fill as well. (With falling water there, a cell beside the
+  shaft stayed dry and tunnels from its bottom got flowing 6/8 water under the rock.) Under a lake only the 7/8
+  surface deep, a shaft keeps falling water, as in Minecraft.
 - **Waking:** a change wakes the cell, the cells above, below and beside it, and beside the cell above (whether water
   there spreads depends on what it rests on). Woken cells are updated `interval` seconds later (rounded to ticks); at
   most `maxUpdatesPerTick` per tick, the rest in order in the next tick.
