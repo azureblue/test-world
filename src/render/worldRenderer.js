@@ -1,16 +1,17 @@
 import { opaqueTextureTable } from "../blocks.js";
 import { TEXTURE_SIZE } from "../blockTextures.js";
 import { Camera, FrustumCuller } from "../camera.js";
-import { CHUNK_SIZE } from "../chunk/chunk.js";
+import { Chunk, CHUNK_SIZE } from "../chunk/chunk.js";
 import { Fog } from "../fog.js";
-import { mat4, Projection } from "../geom.js";
+import { FVec3, mat4, Projection } from "../geom.js";
 import { Program, withDefines } from "../gl.js";
 import { UIntMeshDrawer, UIntMeshHandler } from "../mesh/uIntMesh.js";
-import { rgb, Settings } from "../settings.js";
+import { Settings } from "../settings.js";
 import { TextureArray } from "../textures.js";
 import { GenericBuffer, Resources, writeVoxelWireframe } from "../utils.js";
 import { PARTICLE_FLOATS, PARTICLE_INSTANCE, Particles } from "../world/particles.js";
 import { World } from "../world/world.js";
+import { SkyRenderer } from "./skyRenderer.js";
 
 /**
  * Reads back the overdraw view and counts fragment shader invocations per covered pixel
@@ -45,24 +46,6 @@ class OverdrawStats {
         this.avg = covered === 0 ? 0 : sum / covered;
         this.max = max;
     }
-}
-
-/**
- * @returns {number[]} towards the sun (Settings.sky), unit length; the azimuth like the camera's yaw (0 along +x,
- *   growing clockwise seen from above)
- */
-function sunDirection() {
-    const rad = Math.PI / 180;
-    const elevation = Settings.sky.sunElevation * rad, azimuth = Settings.sky.sunAzimuth * rad;
-    return [Math.cos(elevation) * Math.cos(azimuth), -Math.cos(elevation) * Math.sin(azimuth), Math.sin(elevation)];
-}
-
-/**
- * The exponent k for which cos(angle)^k is 10% at the given angle: a highlight that size around a direction.
- * @param {number} degrees
- */
-function tenPercentExponent(degrees) {
-    return Math.log(0.1) / Math.log(Math.cos(degrees * Math.PI / 180));
 }
 
 /**
@@ -136,6 +119,13 @@ export class WorldRenderer {
     #visibleChunks = new GenericBuffer(2000);
     #overdraw = Settings.debug.overdraw;
     #overdrawStats;
+    /** whether the cutout pass uses alpha to coverage (create)
+     * @type {boolean} */
+    #alphaToCoverage;
+    /** chunks with their centre farther draw their leaves opaque (Settings.render.cutoutDistance), squared
+     * @type {number} */
+    #cutoutDistanceSq = Settings.render.cutoutDistance ** 2;
+    /** @type {SkyRenderer} */
     #sky;
     /** the particles' vertex array and instance buffer (room for Settings.particles.max), the camera vectors */
     #particles;
@@ -152,10 +142,14 @@ export class WorldRenderer {
             withDefines(await Resources.loadText(`shaders/${frag}`), defines));
         const cubeFrag = Settings.debug.overdraw ? "overdraw.frag" : "cube_solid.frag";
         const light = { LIGHT_FALLOFF: Settings.light.falloff, LIGHT_SUN: Settings.light.sun };
+        // alpha to coverage (Settings.render.alphaToCoverage) only with MSAA (the context got it: with one sample per
+        // pixel it's no better than the discard), not in the overdraw view (additive blending, no alpha)
+        const alphaToCoverage = Settings.render.alphaToCoverage && gl.getContextAttributes().antialias && !Settings.debug.overdraw;
         const programs = {
             cubeSolid: await program("cube_solid.vert", cubeFrag, light),
             // the cube program with the alpha test (cube_solid.frag, CUTOUT), for the cutout faces
-            cubeCutout: await program("cube_solid.vert", cubeFrag, { ...light, CUTOUT: true }),
+            // with MSAA its alpha decides the samples covered (alpha to coverage) instead of the discard
+            cubeCutout: await program("cube_solid.vert", cubeFrag, { ...light, CUTOUT: true, ALPHA_TO_COVERAGE: alphaToCoverage || undefined }),
             // the cube program with the cutout faces' opaque textures, for the far leaves (Settings.render.cutoutDistance)
             cubeCutoutFar: await program("cube_solid.vert", cubeFrag, { ...light, OPAQUE_CUTOUT: true }),
             xQuads: await program("x_quads.vert", "x_quads.frag", light),
@@ -165,11 +159,18 @@ export class WorldRenderer {
             particles: await program("particles.vert", "particles.frag"),
             sky: await program("sky.vert", "sky.frag")
         };
-        return new WorldRenderer(gl, programs, textures, camera);
+        return new WorldRenderer(gl, programs, textures, camera, alphaToCoverage);
     }
 
-    /** use {@link WorldRenderer.create} */
-    constructor(gl, programs, textures, camera) {
+    /**
+     * Use {@link WorldRenderer.create}.
+     * @param {WebGL2RenderingContext} gl
+     * @param {Record<string, Program>} programs the shader programs by name (create)
+     * @param {import("../blockTextures.js").Pixels[]} textures the block textures by layer (loadBlockTextures)
+     * @param {Camera} camera
+     * @param {boolean} alphaToCoverage whether the cutout program is its alpha to coverage variant
+     */
+    constructor(gl, programs, textures, camera, alphaToCoverage) {
         this.#gl = gl;
         this.#camera = camera;
         this.#programs = programs;
@@ -235,37 +236,7 @@ export class WorldRenderer {
         // the camera counts as in water, otherwise the clipped surface leaves the lower part of the view without water
         this.#nearPlaneReach = cameraSettings.near * Math.hypot(1, Math.tan(fieldOfView / 2), Math.tan(fieldOfView / 2) * aspect);
 
-        // the sky: the colours don't change, the view vectors are set per frame (scaled to the screen's edges)
-        const sky = programs.sky;
-        sky.use();
-        gl.uniform3fv(sky.getUniformLocation("sky_zenith"), rgb(Settings.sky.zenithColor));
-        gl.uniform3fv(sky.getUniformLocation("sky_horizon"), rgb(Settings.sky.horizonColor));
-        gl.uniform1f(sky.getUniformLocation("sky_height"), Settings.sky.gradientHeight);
-        const s = Settings.sky, rad = Math.PI / 180;
-        const sunDir = sunDirection();
-        gl.uniform3fv(sky.getUniformLocation("sun_dir"), sunDir);
-        gl.uniform3fv(sky.getUniformLocation("sun_color"), rgb(s.sunColor));
-        // the sun's pixels: two axes across it (one horizontal, unless the sun is straight up), scaled to the pixel size
-        const cell = Math.tan(s.sunSize * rad) / s.sunPixels;
-        let u = [-sunDir[1], sunDir[0], 0];
-        let length = Math.hypot(...u);
-        if (length < 1e-6) {
-            u = [1, 0, 0];
-            length = 1;
-        }
-        u = u.map(c => c / length);
-        const v = [sunDir[1] * u[2] - sunDir[2] * u[1], sunDir[2] * u[0] - sunDir[0] * u[2], sunDir[0] * u[1] - sunDir[1] * u[0]];
-        gl.uniform3fv(sky.getUniformLocation("sun_u"), u.map(c => c / cell));
-        gl.uniform3fv(sky.getUniformLocation("sun_v"), v.map(c => c / cell));
-        gl.uniform1f(sky.getUniformLocation("sun_radius"), s.sunPixels);
-        gl.uniform2f(sky.getUniformLocation("sun_glow"), s.sunGlow, tenPercentExponent(s.sunGlowSize));
-        this.#sky = {
-            forward: sky.getUniformLocation("sky_forward"),
-            right: sky.getUniformLocation("sky_right"),
-            up: sky.getUniformLocation("sky_up"),
-            scaleX: Math.tan(fieldOfView / 2) * aspect,
-            scaleY: Math.tan(fieldOfView / 2)
-        };
+        this.#sky = new SkyRenderer(gl, programs.sky, fieldOfView, aspect);
 
         this.#locations.waterColor = water.getUniformLocation("water_color");
         // null without FRESNEL: setting it does nothing
@@ -277,6 +248,7 @@ export class WorldRenderer {
             xQuads.getUniformLocation("m_translation"), this.#locations.waterTranslation,
             programs.cubeCutout.getUniformLocation("m_translation"));
         this.#overdrawStats = this.#overdraw ? new OverdrawStats() : null;
+        this.#alphaToCoverage = alphaToCoverage;
         const cutoutFar = programs.cubeCutoutFar;
         cutoutFar.use();
         gl.uniform4uiv(cutoutFar.getUniformLocation("u_opaque_texture"), opaqueTextureTable());
@@ -342,22 +314,12 @@ export class WorldRenderer {
     }
 
     /**
-     * The sky, after the opaque blocks: on the far plane with depth test LEQUAL, so only the pixels they left empty run
-     * its fragment shader. Under water there's no sky to see; the clear colour (the water fog) stays.
+     * Whether a chunk's leaves are drawn with their holes: its centre within the cutout distance of the camera.
+     * @param {Chunk} chunk
+     * @param {FVec3} camPos
      */
-    #drawSky() {
-        const gl = this.#gl;
-        const sky = this.#sky;
-        const { direction, right, up } = this.#camera;
-        this.#programs.sky.use();
-        gl.uniform3f(sky.forward, direction.x, direction.y, direction.z);
-        gl.uniform3f(sky.right, right.x * sky.scaleX, right.y * sky.scaleX, right.z * sky.scaleX);
-        gl.uniform3f(sky.up, up.x * sky.scaleY, up.y * sky.scaleY, up.z * sky.scaleY);
-        gl.depthFunc(gl.LEQUAL);
-        gl.depthMask(false);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-        gl.depthMask(true);
-        gl.depthFunc(gl.LESS);
+    #isNear(chunk, camPos) {
+        return chunk.worldCenterPosition.dist2(camPos) <= this.#cutoutDistanceSq;
     }
 
     /**
@@ -415,14 +377,9 @@ export class WorldRenderer {
             chunksDrawn++;
             visibleChunks.put(chunk);
         });
-        const cutoutDistanceSq = Settings.render.cutoutDistance ** 2;
-        const isNear = chunk => {
-            const t = chunk.mesh.modelTranslation, half = CHUNK_SIZE / 2;
-            return (t.x + half - camPos.x) ** 2 + (t.y + half - camPos.y) ** 2 + (t.z + half - camPos.z) ** 2 <= cutoutDistanceSq;
-        };
         let farChunks = 0;
         for (const chunk of visibleChunks)
-            if (!isNear(chunk))
+            if (!this.#isNear(chunk, camPos))
                 farChunks++;
         // the far leaves opaque, without the discard, before the opaque blocks: what's under the canopy (the ground,
         // the trunks, the faces between the leaves) is then hidden before shading; the far program only when there are
@@ -430,7 +387,7 @@ export class WorldRenderer {
         if (farChunks > 0) {
             cubeCutoutFar.use();
             for (const chunk of visibleChunks)
-                if (!isNear(chunk))
+                if (!this.#isNear(chunk, camPos))
                     meshDrawer.drawCutout(chunk.mesh, this.#locations.cutoutFarTranslation);
             cubeSolid.use();
         }
@@ -439,9 +396,14 @@ export class WorldRenderer {
         // the near leaves after all opaque blocks, so they hide most of it before its fragment shader (with its
         // discard) runs
         cubeCutout.use();
+        const alphaToCoverage = this.#alphaToCoverage;
+        if (alphaToCoverage)
+            gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
         for (const chunk of visibleChunks)
-            if (isNear(chunk))
+            if (this.#isNear(chunk, camPos))
                 meshDrawer.drawCutout(chunk.mesh);
+        if (alphaToCoverage)
+            gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
         gl.bindVertexArray(null);
         if (overdraw) {
             gl.disable(gl.BLEND);
@@ -454,8 +416,9 @@ export class WorldRenderer {
         if (particles !== null)
             this.#drawParticles(particles);
 
+        // under water there's no sky to see: the clear colour (the water fog) stays
         if (!inWater)
-            this.#drawSky();
+            this.#sky.draw(this.#camera);
 
         if (highlight !== null) {
             gl.useProgram(blockHighlight.program);

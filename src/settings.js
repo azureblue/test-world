@@ -28,6 +28,9 @@ export const Settings = {
         // multisampled edges (MSAA, WebGL's default); off like Minecraft is much cheaper on integrated GPUs, most in
         // leaves (every hole's edge is multisampled)
         antialias: true,
+        // with antialias: the cutout leaves' alpha decides the samples covered instead of the alpha test (meant for
+        // softer far leaves; with the nearest filtered textures hardly visible, no faster)
+        alphaToCoverage: false,
         // leaves with holes (their "cutout" textures in blocks.json): drawn in their own alpha tested pass, the
         // faces behind and between them too; off: opaque leaves (fewer faces, no alpha test)
         cutoutLeaves: true,

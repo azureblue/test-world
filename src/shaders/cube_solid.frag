@@ -24,7 +24,7 @@ const float AMBIENT_FACE_CONTRAST = 0.3f;
 void main() {
 
     vec4 tex = texture(u_array_sampler, v_tex_coord);
-#ifdef CUTOUT
+#if defined(CUTOUT) && !defined(ALPHA_TO_COVERAGE)
     // the cutout pass (leaves with holes): only this variant discards, the opaque blocks keep early depth testing
     if (tex.a < 0.5)
         discard;
@@ -39,5 +39,10 @@ void main() {
     float fog_t = clamp(fading * fog_scale + fog_bias, 0.0, 1.0);
     float fog = fog_min + fog_range * fog_t * fog_t * (3.0 - 2.0 * fog_t);
     color_out = mix(tex_shadowed, vec4(fog_color, 1.0), fog);
+#ifdef ALPHA_TO_COVERAGE
+    // the cutout pass with MSAA: the alpha is the share of the pixel's samples covered (the mipmaps' averaged alpha
+    // gives the holes' edges in between values), instead of the discard
+    color_out.a = tex.a;
+#endif
     // color_out.a = alpha;
 }
