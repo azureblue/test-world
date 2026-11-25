@@ -15,7 +15,7 @@ import { WorldClient } from "./worldClient.js";
 const logger = new Logger("ChunkEditor");
 
 // unoptimized but fast mesher for predicted edits; the optimized mesh comes from the world worker
-const editMesher = await UIntExtWasmMesher.createFastMesher({ cutout: Settings.render.cutoutLeaves });
+const editMesher = await UIntExtWasmMesher.createFastMesher({ cutout: Settings.render.cutoutLeaves, cutoutBuried: Settings.render.cutoutBuriedLeaves });
 
 /**
  * The client's own block edits. The world worker owns the world, so an edit is sent there, and predicted here until

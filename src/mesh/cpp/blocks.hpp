@@ -15,7 +15,8 @@ struct block_table_t {
     uint cutout_flag;
     // by block id, then face (Direction: up, front, left, back, right, down)
     uint faces[MAX_BLOCK_ID][6];
-    // the same with the opaque textures: a cutout block covered on all sides is drawn with them (see is_buried)
+    // the same with the opaque textures: a cutout block covered on all sides is drawn with them (see is_buried); with
+    // Settings.render.cutoutBuriedLeaves the table has the cutout ones here too
     uint opaque_faces[MAX_BLOCK_ID][6];
     // 1: a cutout texture: its faces go to the cutout output, drawn alpha tested
     uint8 cutout_textures[MAX_TEXTURES];

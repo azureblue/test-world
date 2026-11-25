@@ -44,11 +44,12 @@ const INITIAL_PAGES = WASM.bytesToPages(TOTAL_BYTES);
  * @param {WebAssembly.Exports} exports
  * @param {WebAssembly.Memory} mem
  * @param {boolean} cutout whether blocks with cutout textures use them (meshTextureTable)
+ * @param {boolean} cutoutBuried the buried ones too (meshTextureTable)
  */
-function writeTextureTable(exports, mem, cutout) {
+function writeTextureTable(exports, mem, cutout, cutoutBuried) {
     if (exports.max_block_id() !== MAX_BLOCK_ID)
         throw new Error(`mesher: MAX_BLOCK_ID ${exports.max_block_id()}, blocks.js has ${MAX_BLOCK_ID}`);
-    const { waterTexture, cutoutFlag, faces, opaqueFaces, cutoutTextures } = meshTextureTable(cutout);
+    const { waterTexture, cutoutFlag, faces, opaqueFaces, cutoutTextures } = meshTextureTable(cutout, cutoutBuried);
     const base = exports.block_table();
     const table = new Uint32Array(mem.buffer, base, 2 + faces.length + opaqueFaces.length);
     table[0] = waterTexture;
@@ -118,21 +119,23 @@ export class UIntExtWasmMesher extends UIntMesher {
 
     /**
      * The main mesher: merged faces, solid faces sorted front-to-back.
-     * @param {{cutout?: boolean}} [options] cutout: blocks with cutout textures use them (Settings.render.cutoutLeaves)
+     * @param {{cutout?: boolean, cutoutBuried?: boolean}} [options] cutout: blocks with cutout textures use them
+     *   (Settings.render.cutoutLeaves); cutoutBuried: the ones covered on all sides too, not their opaque textures
+     *   (Settings.render.cutoutBuriedLeaves)
      */
-    static async createMesher({ cutout = false } = {}) {
-        return UIntExtWasmMesher.#create("./mesh/uIntWasmMesher.wasm", cutout);
+    static async createMesher({ cutout = false, cutoutBuried = false } = {}) {
+        return UIntExtWasmMesher.#create("./mesh/uIntWasmMesher.wasm", cutout, cutoutBuried);
     }
 
     /**
      * The fast, unoptimized mesher: a quad per face.
-     * @param {{cutout?: boolean}} [options] see {@link UIntExtWasmMesher.createMesher}
+     * @param {{cutout?: boolean, cutoutBuried?: boolean}} [options] see {@link UIntExtWasmMesher.createMesher}
      */
-    static async createFastMesher({ cutout = false } = {}) {
-        return UIntExtWasmMesher.#create("./mesh/uIntWasmMesherQ.wasm", cutout);
+    static async createFastMesher({ cutout = false, cutoutBuried = false } = {}) {
+        return UIntExtWasmMesher.#create("./mesh/uIntWasmMesherQ.wasm", cutout, cutoutBuried);
     }
 
-    static async #create(path, cutout) {
+    static async #create(path, cutout, cutoutBuried) {
         const mem = new WebAssembly.Memory({
             initial: INITIAL_PAGES,
             maximum: INITIAL_PAGES,
@@ -142,7 +145,7 @@ export class UIntExtWasmMesher extends UIntMesher {
                 memory: mem
             }
         });
-        writeTextureTable(result.instance.exports, mem, cutout);
+        writeTextureTable(result.instance.exports, mem, cutout, cutoutBuried);
         const heapBase = WASM.alignUp(result.instance.exports.__heap_base.value, 16);
         return new UIntExtWasmMesher(result.instance.exports.create_mesh, heapBase, mem);
     }

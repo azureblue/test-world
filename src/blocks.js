@@ -158,11 +158,13 @@ if (definitions.textures.length > MAX_TEXTURES)
  * with cutout the cutout blocks (their cutout textures instead, faces next to them not hidden) and textures (faces
  * drawn alpha tested, apart from the opaque ones).
  * @param {boolean} cutout whether blocks with cutout textures use them (Settings.render.cutoutLeaves)
+ * @param {boolean} [cutoutBuried] with cutout: the cutout blocks covered on all sides use them too (their opaqueFaces
+ *   are the cutout textures; Settings.render.cutoutBuriedLeaves)
  * @returns {{waterTexture: number, cutoutFlag: number, faces: Uint32Array, opaqueFaces: Uint32Array, cutoutTextures: Uint8Array}}
  *   faces: MAX_BLOCK_ID * 6, by id then face; opaqueFaces: the same with the opaque textures (cutout blocks covered on
  *   all sides use them); cutoutFlag: the cutout bit of block values with cutout, else 0; cutoutTextures: 1 by layer
  */
-export function meshTextureTable(cutout) {
+export function meshTextureTable(cutout, cutoutBuried = false) {
     const faces = new Uint32Array(MAX_BLOCK_ID * 6), opaqueFaces = new Uint32Array(MAX_BLOCK_ID * 6);
     const cutoutBlocks = new Uint8Array(MAX_BLOCK_ID), cutoutTextures = new Uint8Array(MAX_TEXTURES);
     for (const block of BLOCKS) {
@@ -170,7 +172,7 @@ export function meshTextureTable(cutout) {
             continue;
         const ids = cutout && block.cutoutTextureIds !== null ? block.cutoutTextureIds : block.textureIds;
         faces.set(ids, block.id * 6);
-        opaqueFaces.set(block.textureIds, block.id * 6);
+        opaqueFaces.set(cutoutBuried ? ids : block.textureIds, block.id * 6);
         if (ids !== block.textureIds) {
             cutoutBlocks[block.id] = 1;
             for (const id of ids)

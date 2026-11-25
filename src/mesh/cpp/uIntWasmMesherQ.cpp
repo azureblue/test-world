@@ -48,11 +48,13 @@ inline_always static void encode_special(face_buffers& buffers, const array_3d<C
 }
 
 // a cube's visible faces: faces has bit d set for the face in direction d (Direction: up, front, left, back, right, down)
-inline_always static void encode_cube(face_buffers& buffers, const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y, uint faces, bool cutout, bool buried) {
+inline_always static void encode_cube(face_buffers& buffers, const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y, uint faces, bool buried) {
     const uint block_id = decode_block_id(data.get_hxy(h, x, y));
     const uint(&block_textures)[6] = buried ? block_table.opaque_faces[block_id] : block_table.faces[block_id];
-    // cutout blocks (leaves with holes) to their own output, drawn alpha tested; buried ones are opaque
-    auto& face_buffer = cutout && !buried ? buffers.mesh_cutout_cur : buffers.mesh_solid_cur;
+    // faces with cutout textures (leaves with holes) to their own output, drawn alpha tested, as in the main mesher;
+    // buried ones get the opaque textures, unless the table gives them the cutout ones too (a block's faces are all
+    // cutout or none)
+    auto& face_buffer = block_table.cutout_textures[block_textures[0]] ? buffers.mesh_cutout_cur : buffers.mesh_solid_cur;
     if (is_bit_set(faces, Direction::Up))
         quad_encoder::encode_face_q<Direction::Up>(face_buffer, data, x, y, h, block_textures[Direction::Up]);
     if (is_bit_set(faces, Direction::Down))
@@ -91,7 +93,7 @@ extern "C"
                 const uint faces = has(f.up, x) << Direction::Up | has(f.front, x) << Direction::Front |
                                    has(f.left, x) << Direction::Left | has(f.back, x) << Direction::Back |
                                    has(f.right, x) << Direction::Right | has(f.down, x) << Direction::Down;
-                encode_cube(buffers, data, h, x, y, faces, has(f.cutout, x), has(f.buried, x));
+                encode_cube(buffers, data, h, x, y, faces, has(f.buried, x));
             }
         }
     }

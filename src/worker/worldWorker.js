@@ -26,7 +26,7 @@ const logger = new Logger("world worker " + workerId);
 const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator, Settings.world.seed);
 
 const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory());
-const meshOptions = { cutout: Settings.render.cutoutLeaves };
+const meshOptions = { cutout: Settings.render.cutoutLeaves, cutoutBuried: Settings.render.cutoutBuriedLeaves };
 const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
 const skyTops = new SkyTops(chunkDataLoader, generator);
 const lighting = Settings.light.enabled ? await Lighting.create(chunkDataLoader, skyTops) : null;

@@ -25,15 +25,21 @@ export const Settings = {
     },
 
     render: {
-        // multisampled edges (MSAA, WebGL's default); off like Minecraft is much cheaper on integrated GPUs, most in
-        // leaves (every hole's edge is multisampled)
-        antialias: true,
+        // MSAA, samples per pixel (the GPU's highest count up to it; 0 or 1: off): smoother edges; it costs memory
+        // bandwidth, on integrated GPUs a lot, most over leaves (their many edges); 2 costs about half of 4
+        antialias: 4,
+        // temporary, to compare: the browser's own MSAA (its sample count, 4 in Chrome) instead of the renderer's
+        // multisampled framebuffer; antialias is then ignored
+        browserMsaa: false,
         // with antialias: the cutout leaves' alpha decides the samples covered instead of the alpha test (meant for
         // softer far leaves; with the nearest filtered textures hardly visible, no faster)
         alphaToCoverage: false,
         // leaves with holes (their "cutout" textures in blocks.json): drawn in their own alpha tested pass, the
         // faces behind and between them too; off: opaque leaves (fewer faces, no alpha test)
         cutoutLeaves: true,
+        // with cutoutLeaves: the leaves covered on all sides (inside a canopy) are cutout too; off: they're opaque, so
+        // looking through the outer leaves ends at the canopy's core (fewer layers per pixel)
+        cutoutBuriedLeaves: false,
         // blocks: chunks whose centre is farther from the camera draw their leaves opaque (no alpha test, the ones
         // behind hidden before shading; a chunk's leaves switch as it crosses it); Infinity: never, e.g. 48 to use it
         cutoutDistance: Infinity

@@ -12,8 +12,10 @@ while Minecraft worlds are only 256 blocks tall.
 ## Done
 
 - Blending only for the water pass; the canvas is created with `alpha: false`.
-- MSAA setting (`Settings.render.antialias`, on by default like WebGL's default). With it a dense forest of cutout
-  leaves ran at about 45 fps on the integrated GPU, without it at 60: `?render.antialias=false`.
+- MSAA setting (`Settings.render.antialias`, samples per pixel, default 4 like the browser's). With 4 samples a dense
+  forest of cutout leaves ran at about 45 fps on the integrated GPU, without MSAA at 60. The renderer draws into its
+  own multisampled framebuffer (`render/multisampleTarget.js`, resolved to the canvas with `blitFramebuffer`), so the
+  count is ours: `?render.antialias=2` halves the samples, `0` turns it off. The canvas then has no depth buffer.
 - Far leaves opaque (`Settings.render.cutoutDistance`): chunks farther than this draw their cutout faces with the
   opaque textures and no discard, so hidden leaf layers fail the early depth test. They're drawn before the opaque
   blocks: drawn after them, the ground and trunks under the canopy were shaded and then covered (drawing them first

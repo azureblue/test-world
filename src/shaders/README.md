@@ -95,13 +95,15 @@ next to them, so what's behind a hole is there (the faces between two leaves bot
 drawn right after the opaque blocks with the `CUTOUT` variant of the cube program (`cube_solid.vert` /
 `cube_solid.frag`), which discards texels with alpha below 0.5: only this pass discards, so the opaque blocks keep
 early depth testing, and drawn after them it's mostly hidden before its fragment shader runs. The sky comes after it
-and fills the holes with nothing behind them. The mipmaps average the alpha, so far away the holes close (less
-shimmer); the colour under the holes is the texture's average (`TextureArray`), so far leaves don't darken.
+and fills the holes with nothing behind them. A cutout block covered on all six sides (inside a canopy) is meshed with
+its opaque textures, so looking through the outer leaves ends at the canopy's core; `Settings.render.cutoutBuriedLeaves`
+makes those cutout too. The mipmaps average the alpha, so far away the holes close (less shimmer); the colour under the
+holes is the texture's average (`TextureArray`), so far leaves don't darken.
 
-With MSAA (`Settings.render.antialias`, when the context got it) and `Settings.render.alphaToCoverage` the cutout pass
-uses alpha to coverage instead of the discard (`ALPHA_TO_COVERAGE`): the texel's alpha is the share of the pixel's
-samples the leaf covers. Close up the alpha is 0 or 1 (nearest filtering), as with the discard; in the mipmaps it's
-averaged, so far leaves cover part of a pixel instead of all or nothing.
+With MSAA (`Settings.render.antialias` samples, `MultisampleTarget`) and `Settings.render.alphaToCoverage` the cutout
+pass uses alpha to coverage instead of the discard (`ALPHA_TO_COVERAGE`): the texel's alpha is the share of the
+pixel's samples the leaf covers. Close up the alpha is 0 or 1 (nearest filtering), as with the discard; in the
+mipmaps it's averaged, so far leaves cover part of a pixel instead of all or nothing.
 
 Chunks farther than `Settings.render.cutoutDistance` draw their cutout faces with the `OPAQUE_CUTOUT` variant instead:
 no discard, and the vertex shader swaps each cutout texture for the block's opaque one (`u_opaque_texture`,

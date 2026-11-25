@@ -11,6 +11,7 @@ import { TextureArray } from "../textures.js";
 import { GenericBuffer, Resources, writeVoxelWireframe } from "../utils.js";
 import { PARTICLE_FLOATS, PARTICLE_INSTANCE, Particles } from "../world/particles.js";
 import { World } from "../world/world.js";
+import { MultisampleTarget } from "./multisampleTarget.js";
 import { SkyRenderer } from "./skyRenderer.js";
 
 /**
@@ -119,6 +120,9 @@ export class WorldRenderer {
     #visibleChunks = new GenericBuffer(2000);
     #overdraw = Settings.debug.overdraw;
     #overdrawStats;
+    /** the frames are drawn into it and resolved to the canvas; null: drawn into the canvas (create)
+     * @type {MultisampleTarget | null} */
+    #msaa;
     /** whether the cutout pass uses alpha to coverage (create)
      * @type {boolean} */
     #alphaToCoverage;
@@ -129,6 +133,15 @@ export class WorldRenderer {
     #sky;
     /** the particles' vertex array and instance buffer (room for Settings.particles.max), the camera vectors */
     #particles;
+
+    /**
+     * Whether the frames are drawn into a multisampled framebuffer of the renderer's (Settings.render.antialias
+     * samples, WebGL 2 has at least 4), not into the canvas: then the canvas needs no depth buffer. Not in the
+     * overdraw view: it reads the pixels back, a multisampled framebuffer can't be read.
+     */
+    static get multisampled() {
+        return Settings.render.antialias >= 2 && !Settings.debug.overdraw && !Settings.render.browserMsaa;
+    }
 
     /**
      * @param {WebGL2RenderingContext} gl
@@ -142,9 +155,10 @@ export class WorldRenderer {
             withDefines(await Resources.loadText(`shaders/${frag}`), defines));
         const cubeFrag = Settings.debug.overdraw ? "overdraw.frag" : "cube_solid.frag";
         const light = { LIGHT_FALLOFF: Settings.light.falloff, LIGHT_SUN: Settings.light.sun };
-        // alpha to coverage (Settings.render.alphaToCoverage) only with MSAA (the context got it: with one sample per
-        // pixel it's no better than the discard), not in the overdraw view (additive blending, no alpha)
-        const alphaToCoverage = Settings.render.alphaToCoverage && gl.getContextAttributes().antialias && !Settings.debug.overdraw;
+        const msaa = WorldRenderer.multisampled ? MultisampleTarget.create(gl, Settings.render.antialias) : null;
+        // alpha to coverage (Settings.render.alphaToCoverage) only with MSAA: with one sample per pixel it's no better
+        // than the discard
+        const alphaToCoverage = Settings.render.alphaToCoverage && msaa !== null;
         const programs = {
             cubeSolid: await program("cube_solid.vert", cubeFrag, light),
             // the cube program with the alpha test (cube_solid.frag, CUTOUT), for the cutout faces
@@ -159,7 +173,7 @@ export class WorldRenderer {
             particles: await program("particles.vert", "particles.frag"),
             sky: await program("sky.vert", "sky.frag")
         };
-        return new WorldRenderer(gl, programs, textures, camera, alphaToCoverage);
+        return new WorldRenderer(gl, programs, textures, camera, msaa, alphaToCoverage);
     }
 
     /**
@@ -168,9 +182,10 @@ export class WorldRenderer {
      * @param {Record<string, Program>} programs the shader programs by name (create)
      * @param {import("../blockTextures.js").Pixels[]} textures the block textures by layer (loadBlockTextures)
      * @param {Camera} camera
+     * @param {MultisampleTarget | null} msaa the frames are drawn into it, null: into the canvas
      * @param {boolean} alphaToCoverage whether the cutout program is its alpha to coverage variant
      */
-    constructor(gl, programs, textures, camera, alphaToCoverage) {
+    constructor(gl, programs, textures, camera, msaa, alphaToCoverage) {
         this.#gl = gl;
         this.#camera = camera;
         this.#programs = programs;
@@ -248,6 +263,7 @@ export class WorldRenderer {
             xQuads.getUniformLocation("m_translation"), this.#locations.waterTranslation,
             programs.cubeCutout.getUniformLocation("m_translation"));
         this.#overdrawStats = this.#overdraw ? new OverdrawStats() : null;
+        this.#msaa = msaa;
         this.#alphaToCoverage = alphaToCoverage;
         const cutoutFar = programs.cubeCutoutFar;
         cutoutFar.use();
@@ -348,6 +364,7 @@ export class WorldRenderer {
             gl.clearColor(clearColor[0], clearColor[1], clearColor[2], 1);
         }
 
+        this.#msaa?.bind();
         cubeSolid.use();
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.bindBuffer(gl.UNIFORM_BUFFER, this.#cameraBuffer);
@@ -463,6 +480,7 @@ export class WorldRenderer {
         gl.depthFunc(gl.LESS);
         gl.depthMask(true);
         gl.cullFace(gl.BACK);
+        this.#msaa?.resolve();
         return { chunksInRange, chunksDrawn, inWater };
     }
 }

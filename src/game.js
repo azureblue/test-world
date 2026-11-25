@@ -71,8 +71,11 @@ export class Game {
             powerPreference: "high-performance",
             desynchronized: false,
             alpha: false,
-            // WebGL's default is on (multisampling): several times the depth and colour work and a resolve per frame
-            antialias: Settings.render.antialias
+            // no multisampling of its own (WebGL's default is on, the browser's sample count): the renderer draws into
+            // its own multisampled framebuffer (Settings.render.antialias samples), and then the canvas needs no depth;
+            // Settings.render.browserMsaa (temporary) compares with the browser's
+            antialias: Settings.render.browserMsaa,
+            depth: !WorldRenderer.multisampled
         });
 
         const cameraSettings = Settings.camera;
