@@ -183,6 +183,19 @@ export function meshTextureTable(cutout) {
     return { waterTexture: BLOCKS[BLOCK_IDS.WATER & ID_MASK].textureIds[0], cutoutFlag: cutout ? 1 << CUTOUT_BIT : 0, faces, opaqueFaces, cutoutTextures };
 }
 
+/**
+ * The opaque texture of every texture layer: a cutout block's cutout texture to its opaque one, every other layer to
+ * itself. The far leaves are drawn with them (WorldRenderer).
+ * @returns {Uint32Array} MAX_TEXTURES layers
+ */
+export function opaqueTextureTable() {
+    const table = new Uint32Array(MAX_TEXTURES).map((_, i) => i);
+    for (const block of BLOCKS)
+        if (block !== undefined && block.cutoutTextureIds !== null)
+            block.cutoutTextureIds.forEach((id, face) => table[id] = block.textureIds[face]);
+    return table;
+}
+
 export function isSolid(block) {
     return (block >>> SOLID_CUBE_BIT & 1) !== 0;
 }

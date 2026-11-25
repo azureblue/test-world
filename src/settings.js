@@ -25,9 +25,15 @@ export const Settings = {
     },
 
     render: {
+        // multisampled edges (MSAA, WebGL's default); off like Minecraft is much cheaper on integrated GPUs, most in
+        // leaves (every hole's edge is multisampled)
+        antialias: true,
         // leaves with holes (their "cutout" textures in blocks.json): drawn in their own alpha tested pass, the
         // faces behind and between them too; off: opaque leaves (fewer faces, no alpha test)
-        cutoutLeaves: true
+        cutoutLeaves: true,
+        // blocks: chunks whose centre is farther from the camera draw their leaves opaque (no alpha test, the ones
+        // behind hidden before shading; a chunk's leaves switch as it crosses it); Infinity: never, e.g. 48 to use it
+        cutoutDistance: Infinity
     },
 
     // sky and block light, 16 levels (0..15) each (docs/proposals/lighting.md)

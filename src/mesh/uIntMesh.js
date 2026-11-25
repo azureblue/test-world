@@ -329,14 +329,16 @@ export class UIntMeshDrawer {
     /**
      * The cutout cube faces (leaves with holes), with the cutout program.
      * @param {UIntMesh} mesh
+     * @param {WebGLUniformLocation} [uTranslation] the translation uniform of the program in use, when it's not the
+     *   cutout program (the far leaves, drawn opaque)
      */
-    drawCutout(mesh) {
+    drawCutout(mesh, uTranslation = this.#uCutoutTranslation) {
         if (mesh.cutoutLen === 0)
             return;
         const gl = this.#gl;
         gl.bindVertexArray(mesh.vaCutout);
         const modelTranslation = mesh.modelTranslation;
-        gl.uniform3f(this.#uCutoutTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
+        gl.uniform3f(uTranslation, modelTranslation.x, modelTranslation.y, modelTranslation.z);
         gl.drawArrays(gl.TRIANGLES, 0, mesh.cutoutLen);
         this.stats.cutoutDraws++;
         this.stats.cutoutTris += mesh.cutoutLen / 3;

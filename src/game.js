@@ -70,7 +70,9 @@ export class Game {
         const gl = canvas.getContext("webgl2", {
             powerPreference: "high-performance",
             desynchronized: false,
-            alpha: false
+            alpha: false,
+            // WebGL's default is on (multisampling): several times the depth and colour work and a resolve per frame
+            antialias: Settings.render.antialias
         });
 
         const cameraSettings = Settings.camera;

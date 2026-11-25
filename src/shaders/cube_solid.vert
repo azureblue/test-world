@@ -13,6 +13,10 @@ layout (std140) uniform Camera {
     highp vec3 cam_pos;
 };
 uniform vec3 m_translation;
+#ifdef OPAQUE_CUTOUT
+// the far cutout faces: drawn with the opaque texture of their layer (opaqueTextureTable in blocks.js), 4 per vector
+uniform uvec4 u_opaque_texture[64];
+#endif
 
 const float[4] shadow_values = float[4](0.0f, 0.3f, 0.4f, 0.5f);
 
@@ -55,6 +59,9 @@ void main() {
     uint normal_idx = (a_in_aux_bits >> 16) & 0x7u;
     uint tex_idx = (a_in_aux_bits >> 19) & 0xFFu;
     uint shadow = (a_in_aux_bits >> 27) & 0x3u;
+#ifdef OPAQUE_CUTOUT
+    tex_idx = u_opaque_texture[tex_idx >> 2][tex_idx & 3u];
+#endif
 
     float m_x = float(a_in_aux_bits & 0x7Fu);
     float m_y = float(a_in_aux_bits >> 7 & 0x7Fu);

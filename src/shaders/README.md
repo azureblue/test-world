@@ -97,3 +97,8 @@ drawn right after the opaque blocks with the `CUTOUT` variant of the cube progra
 early depth testing, and drawn after them it's mostly hidden before its fragment shader runs. The sky comes after it
 and fills the holes with nothing behind them. The mipmaps average the alpha, so far away the holes close (less
 shimmer); the colour under the holes is the texture's average (`TextureArray`), so far leaves don't darken.
+
+Chunks farther than `Settings.render.cutoutDistance` draw their cutout faces with the `OPAQUE_CUTOUT` variant instead:
+no discard, and the vertex shader swaps each cutout texture for the block's opaque one (`u_opaque_texture`,
+`opaqueTextureTable` in `blocks.js`). Without the discard, the leaves behind the front ones fail the early depth test,
+so a dense forest seen from above costs about one leaf layer per pixel instead of every layer seen through the holes.

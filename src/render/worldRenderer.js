@@ -1,3 +1,4 @@
+import { opaqueTextureTable } from "../blocks.js";
 import { TEXTURE_SIZE } from "../blockTextures.js";
 import { Camera, FrustumCuller } from "../camera.js";
 import { CHUNK_SIZE } from "../chunk/chunk.js";
@@ -155,6 +156,8 @@ export class WorldRenderer {
             cubeSolid: await program("cube_solid.vert", cubeFrag, light),
             // the cube program with the alpha test (cube_solid.frag, CUTOUT), for the cutout faces
             cubeCutout: await program("cube_solid.vert", cubeFrag, { ...light, CUTOUT: true }),
+            // the cube program with the cutout faces' opaque textures, for the far leaves (Settings.render.cutoutDistance)
+            cubeCutoutFar: await program("cube_solid.vert", cubeFrag, { ...light, OPAQUE_CUTOUT: true }),
             xQuads: await program("x_quads.vert", "x_quads.frag", light),
             water: await program("water.vert", "water.frag", waterDefines()),
             waterDepth: await program("water_depth.vert", "water_depth.frag"),
@@ -274,6 +277,10 @@ export class WorldRenderer {
             xQuads.getUniformLocation("m_translation"), this.#locations.waterTranslation,
             programs.cubeCutout.getUniformLocation("m_translation"));
         this.#overdrawStats = this.#overdraw ? new OverdrawStats() : null;
+        const cutoutFar = programs.cubeCutoutFar;
+        cutoutFar.use();
+        gl.uniform4uiv(cutoutFar.getUniformLocation("u_opaque_texture"), opaqueTextureTable());
+        this.#locations.cutoutFarTranslation = cutoutFar.getUniformLocation("m_translation");
 
         // the particles: their array uploaded as it is (Particles.data), per instance the fields the shader takes
         // (position and size, texture patch, light; particles.vert); the corners come from gl_VertexID, so no vertex
@@ -363,7 +370,7 @@ export class WorldRenderer {
      */
     render(world, highlight, sampleOverdraw, particles = null) {
         const gl = this.#gl;
-        const { cubeSolid, cubeCutout, xQuads, water, waterDepth, blockHighlight } = this.#programs;
+        const { cubeSolid, cubeCutout, cubeCutoutFar, xQuads, water, waterDepth, blockHighlight } = this.#programs;
         const camera = this.#camera;
         const overdraw = this.#overdraw;
         const meshDrawer = this.#meshDrawer;
@@ -406,13 +413,35 @@ export class WorldRenderer {
             if (!this.#frustumCuller.shouldDraw(chunk))
                 return;
             chunksDrawn++;
-            meshDrawer.draw(chunk.mesh);
             visibleChunks.put(chunk);
         });
-        // after all opaque blocks, so they hide most of it before its fragment shader (with its discard) runs
+        const cutoutDistanceSq = Settings.render.cutoutDistance ** 2;
+        const isNear = chunk => {
+            const t = chunk.mesh.modelTranslation, half = CHUNK_SIZE / 2;
+            return (t.x + half - camPos.x) ** 2 + (t.y + half - camPos.y) ** 2 + (t.z + half - camPos.z) ** 2 <= cutoutDistanceSq;
+        };
+        let farChunks = 0;
+        for (const chunk of visibleChunks)
+            if (!isNear(chunk))
+                farChunks++;
+        // the far leaves opaque, without the discard, before the opaque blocks: what's under the canopy (the ground,
+        // the trunks, the faces between the leaves) is then hidden before shading; the far program only when there are
+        // far chunks (none with the default distance)
+        if (farChunks > 0) {
+            cubeCutoutFar.use();
+            for (const chunk of visibleChunks)
+                if (!isNear(chunk))
+                    meshDrawer.drawCutout(chunk.mesh, this.#locations.cutoutFarTranslation);
+            cubeSolid.use();
+        }
+        for (const chunk of visibleChunks)
+            meshDrawer.draw(chunk.mesh);
+        // the near leaves after all opaque blocks, so they hide most of it before its fragment shader (with its
+        // discard) runs
         cubeCutout.use();
         for (const chunk of visibleChunks)
-            meshDrawer.drawCutout(chunk.mesh);
+            if (isNear(chunk))
+                meshDrawer.drawCutout(chunk.mesh);
         gl.bindVertexArray(null);
         if (overdraw) {
             gl.disable(gl.BLEND);

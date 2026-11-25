@@ -1,7 +1,7 @@
 # Rendering performance
 
-Status: partly done. Goal: run well on integrated graphics, at least as well as Minecraft in the browser
-(Eaglercraft) at the same view distance.
+Status: partly done. Goal: run well on integrated graphics, at least as well as Minecraft compiled for
+WebAssembly in the browser at the same view distance.
 
 ## Comparing fairly
 
@@ -12,6 +12,13 @@ while Minecraft worlds are only 256 blocks tall.
 ## Done
 
 - Blending only for the water pass; the canvas is created with `alpha: false`.
+- MSAA setting (`Settings.render.antialias`, on by default like WebGL's default). With it a dense forest of cutout
+  leaves ran at about 45 fps on the integrated GPU, without it at 60: `?render.antialias=false`.
+- Far leaves opaque (`Settings.render.cutoutDistance`): chunks farther than this draw their cutout faces with the
+  opaque textures and no discard, so hidden leaf layers fail the early depth test. They're drawn before the opaque
+  blocks: drawn after them, the ground and trunks under the canopy were shaded and then covered (drawing them first
+  raised fps noticeably over a forest). Off by default (`Infinity`: no extra program switch);
+  `?render.cutoutDistance=48` turns it on.
 - Empty passes are skipped per chunk (no VAO bind, uniform or draw call for empty solid, water or x-quad parts).
 - Fixed a GPU memory leak: water buffers and VAOs were not deleted when a chunk was unloaded.
 - Draw call and triangle counters per pass in the stats line.
@@ -31,7 +38,7 @@ That scene runs at the 60 fps vsync cap, so it doesn't show where the limit is.
 1. **Frame timing in the stats line.** CPU ms per frame, GPU ms via `EXT_disjoint_timer_query_webgl2`
    (Chrome; Firefox usually hides it), and the worst frame in the last second. Needed to find the real
    bottleneck, because fps is capped at 60.
-2. **Find the scene where Eaglercraft is better.** Same distance in blocks, ideally on the integrated GPU
+2. **Find the scene where Minecraft (WebAssembly) is better.** Same distance in blocks, ideally on the integrated GPU
    machine. Check whether the difference is average frame time or stutter while moving.
 3. **Stutter while moving (suspected).** Crossing a chunk border runs `#updateChunksInRange` over all ~2100
    positions; up to 10 chunk uploads per frame create 3 buffers and 3 VAOs each. Spread this work over frames
