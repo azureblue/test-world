@@ -37,6 +37,11 @@ export class World {
         return this.#chunks.loadedInRange;
     }
 
+    /** the quick mesher's time per chunk (edits), ms, a moving average */
+    get quickMeshTime() {
+        return this.#editor.quickMeshTime;
+    }
+
     /** chunk messages received from the world worker so far */
     get chunkMessages() {
         return this.#chunks.messagesReceived;

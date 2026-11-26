@@ -25,26 +25,51 @@ function drawStatsLine(d) {
         `| particles ${d.particles}`;
 }
 
+/** the levels of stats, see StatsOverlay */
+const LEVELS = 3;
+
 /**
- * The debug numbers at the top of the screen (Settings.debug.showStats), updated every statsInterval frames: a line
- * of the camera, player and world, and a line of the draws (Settings.debug.showDrawStats).
+ * The debug numbers at the top of the screen (Settings.debug.showStats), updated every statsInterval frames, in levels
+ * (Settings.debug.statsLevel, the next one by Settings.controls.stats, after the last the first):
+ * 0. a line: fps, the camera's position, the block looked at;
+ * 1. the line longer: also the direction, the player (its mode, speed) and where it is (block, chunk, the block there);
+ * 2. also a line under it of the draws, the chunks drawn, the overdraw, the quick mesher's time.
  */
 export class StatsOverlay {
     #element;
     // updating text nodes' data in place avoids replacing the DOM children on every stats update
     #text = document.createTextNode("");
     #drawText = document.createTextNode("");
+    #drawLine = document.createElement("div");
+    #level = 0;
     #pos = new Position();
 
     /** @param {HTMLElement} element */
     constructor(element) {
         this.#element = element;
-        if (Settings.debug.showDrawStats)
-            element.replaceChildren(this.#text, document.createElement("br"), this.#drawText);
-        else
-            element.replaceChildren(this.#text);
+        const line = document.createElement("div");
+        line.append(this.#text);
+        this.#drawLine.className = "stats-line";
+        this.#drawLine.append(this.#drawText);
+        element.replaceChildren(line, this.#drawLine);
+        this.level = Settings.debug.statsLevel;
         if (!Settings.debug.showStats)
             element.style.display = "none";
+    }
+
+    get level() {
+        return this.#level;
+    }
+
+    /** @param {number} value 0..2, see the class */
+    set level(value) {
+        this.#level = Math.min(Math.max(Math.trunc(value) || 0, 0), LEVELS - 1);
+        this.#drawLine.hidden = this.#level < 2;
+    }
+
+    /** the next level of stats, after the last the first */
+    nextLevel() {
+        this.level = (this.#level + 1) % LEVELS;
     }
 
     /**
@@ -61,26 +86,33 @@ export class StatsOverlay {
     update(frameNumber, { camera, player, world, renderer, frame: frameStats, fps, target }) {
         if (!Settings.debug.showStats || frameNumber % Settings.debug.statsInterval !== 0)
             return;
-        const pos = this.#pos;
         const camPos = camera.position, camDir = camera.direction;
+        const looking = target === null ? "" : ` looking at ${getBlockById(target.block).name}`;
+        const position = `fps ${fps} pos ${camPos.x.toFixed(1)}x ${camPos.y.toFixed(1)}y ${camPos.z.toFixed(1)}z`;
+        if (this.#level === 0) {
+            this.#text.data = position + looking;
+            return;
+        }
+        const pos = this.#pos;
         pos.set(camPos.x, camPos.y, camPos.z);
-        const block = world.blockAt(pos.ix, pos.iy, pos.iz);
-        const overdraw = renderer.overdrawStats;
-        this.#text.data =
-            `pos ${camPos.x.toFixed(1)}x ${camPos.y.toFixed(1)}y ${camPos.z.toFixed(1)}z ` +
-            `dir ${camDir.x.toFixed(1)}x ${camDir.y.toFixed(1)}y ${camDir.z.toFixed(1)}z ` +
+        const status = player.mode === "fly" ? (player.noclip ? " noclip" : "")
+            : player.inWater ? " swimming" : player.onGround ? " ground" : " air";
+        this.#text.data = position +
+            ` dir ${camDir.x.toFixed(1)}x ${camDir.y.toFixed(1)}y ${camDir.z.toFixed(1)}z ` +
             `cam ${camera.pitch.toFixed(1)}p ${camera.yaw.toFixed(1)}y ` +
-            `fps ${fps} ` +
-            `${player.mode}${player.mode === "fly" && player.noclip ? " noclip" : ""}` +
-            `${player.mode === "walk" ? (player.inWater ? " swimming" : player.onGround ? " ground" : " air") : ""} ` +
-            `chunks ${frameStats.chunksDrawn}/${frameStats.chunksInRange}/${world.chunksInView} ` +
-            (overdraw ? `overdraw avg:${overdraw.avg.toFixed(2)} max:${overdraw.max} ` : "") +
+            `${player.mode}${status} ` +
+            `speed ${Math.hypot(player.vx, player.vy).toFixed(1)} up ${player.vz.toFixed(1)} ` +
             `block x:${pos.ix} y:${pos.iy} z:${pos.iz} ` +
             `chunk x:${pos.cx} y:${pos.cy} z:${pos.cz} ` +
             `local x:${pos.bx} y:${pos.by} z:${pos.bz} ` +
-            `${getBlockById(block).name} ` +
-            `${target === null ? "" : "looking at " + getBlockById(target.block).name + " at " + target.x + " " + target.y + " " + target.z}`;
-        if (Settings.debug.showDrawStats)
-            this.#drawText.data = drawStatsLine(renderer.drawStats);
+            `in ${getBlockById(world.blockAt(pos.ix, pos.iy, pos.iz)).name}` + looking;
+        if (this.#level < 2)
+            return;
+        const overdraw = renderer.overdrawStats;
+        this.#drawText.data =
+            `chunks ${frameStats.chunksDrawn}/${frameStats.chunksInRange}/${world.chunksInView} ` +
+            (overdraw ? `overdraw avg:${overdraw.avg.toFixed(2)} max:${overdraw.max} ` : "") +
+            `quick mesh ${world.quickMeshTime.toFixed(2)} ms | ` +
+            drawStatsLine(renderer.drawStats);
     }
 }

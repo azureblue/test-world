@@ -6,7 +6,7 @@ import { Logger } from "../logging.js";
 import { MeshHandler } from "../mesh/mesh.js";
 import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
 import { Settings } from "../settings.js";
-import { perfDiff } from "../utils.js";
+import { MovingAverage, perfDiff } from "../utils.js";
 import { ChunkResponse } from "../worker/common.js";
 import { ChunkEntry } from "./chunkEntry.js";
 import { ChunkManager } from "./chunkManager.js";
@@ -37,6 +37,8 @@ export class ChunkEditor {
     /** loaded chunks whose data changed since the last update, get a quick mesh in it
      * @type {Set<ChunkEntry>} */
     #quickMeshQueue = new Set();
+    /** the quick mesher's time per chunk, ms, over the last quick meshes */
+    #meshTime = new MovingAverage(50);
 
     /**
      * @param {ChunkManager} chunks
@@ -47,6 +49,11 @@ export class ChunkEditor {
         this.#chunks = chunks;
         this.#worldClient = worldClient;
         this.#meshHandler = meshHandler;
+    }
+
+    /** the quick mesher's time per chunk, ms: the moving average of the last 50 (0 before the first) */
+    get quickMeshTime() {
+        return this.#meshTime.average();
     }
 
     /**
@@ -201,7 +208,9 @@ export class ChunkEditor {
      * @param {ChunkEntry} entry
      */
     #replaceMesh(entry) {
+        const start = performance.now();
         const meshData = editMesher.createMesh(entry.position, /** @type {ChunkDataExt} */ (entry.chunk.data), entry.light);
+        this.#meshTime.add(performance.now() - start);
         const oldMesh = entry.chunk.mesh;
         entry.chunk.mesh = meshData.isEmpty() ? null : this.#meshHandler.upload(meshData);
         if (oldMesh)

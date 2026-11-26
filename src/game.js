@@ -183,6 +183,7 @@ export class Game {
                 (this.paused = !this.paused),
             [controls.toggleFly]: (pressed) => pressed && this.player.toggleFly(),
             [controls.toggleNoclip]: (pressed) => pressed && this.player.toggleNoclip(),
+            [controls.stats]: (pressed) => pressed && this.#stats.nextLevel(),
             // 1..9, 0 select a slot of the bar
             ...Object.fromEntries(Array.from({ length: this.itemBar.size },
                 (_, i) => [String((i + 1) % 10), (pressed) => pressed && this.itemBar.select(i)]))

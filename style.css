@@ -21,6 +21,10 @@ body {
     will-change: transform;
 }
 
+.stats-line[hidden] {
+    display: none;
+}
+
 .crosshair-line {
     position: absolute;
     background-color: white;

@@ -179,7 +179,9 @@ export const Settings = {
         toggleNoclip: "n",
         pause: "p",
         // the inventory: blocks dragged onto the item bar
-        inventory: "e"
+        inventory: "e",
+        // the next level of stats (debug.statsLevel)
+        stats: "Tab"
     },
 
     interaction: {
@@ -289,11 +291,13 @@ export const Settings = {
         overdraw: false,
         // the overdraw view is read back every this many frames
         overdrawSampleInterval: 30,
-        // the stats line is updated every this many frames
+        // the stats are updated every this many frames
         statsInterval: 5,
         showStats: true,
-        // a second stats line: draw calls and triangles per pass (chunk meshes) and their sums
-        showDrawStats: true
+        // the stats shown at the start (controls.stats: the next level): 0 fps, the position, the block looked at; 1 also
+        // the direction, the player and where it is; 2 also a line of the draws (calls and triangles per pass, the quick
+        // mesher's time)
+        statsLevel: 0
     }
 };
 
