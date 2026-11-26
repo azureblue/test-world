@@ -1,4 +1,4 @@
-import { BLOCK_HEIGHT_FULL, blockHeight, flooded, isFlowing, isLiquid, isXQuads, removed, WATER_SURFACE_LEVEL, withHeight } from "./blocks.js";
+import { BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, flooded, isFlowing, isLiquid, isXQuads, removed, WATER_SURFACE_LEVEL, withHeight } from "./blocks.js";
 import { ItemBar } from "./itemBar.js";
 import { Player } from "./player.js";
 import { Settings } from "./settings.js";
@@ -62,6 +62,8 @@ export class BlockInteraction {
         if (intoPlayer && !player.canStepOnto(pz))
             return;
         const placed = this.#itemBar.block;
+        if (placed === BLOCK_IDS.EMPTY)
+            return; // an empty slot
         const cell = world.blockAt(px, py, pz);
         let block = placed;
         if (isLiquid(placed)) {

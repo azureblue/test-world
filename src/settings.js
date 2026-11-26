@@ -177,15 +177,18 @@ export const Settings = {
         sprint: "Control",
         toggleFly: "f",
         toggleNoclip: "n",
-        pause: "p"
+        pause: "p",
+        // the inventory: blocks dragged onto the item bar
+        inventory: "e"
     },
 
     interaction: {
         // how far blocks can be selected, in blocks
         reach: 5,
-        // the blocks in the bar at the bottom (keys of BLOCK_IDS); the selected one (mouse wheel, 1..9) is placed with the
-        // right mouse button
-        itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0", "SPRUCE_TRUNK", "SPRUCE_LEAVES", "LAMP"]
+        // the blocks in the bar at the bottom at the start (keys of BLOCK_IDS, 10 slots, the ones not given empty; a
+        // saved world keeps its own); the selected one (mouse wheel, 1..9, 0) is placed with the right mouse button;
+        // changed from the inventory (controls.inventory)
+        itemBar: ["DIRT_GRASS", "DIRT", "ROCK", "SAND", "GRAVEL", "TREE_TRUNK", "TREE_LEAVES", "WATER", "GRASS_SHORT_0", "LAMP"]
     },
 
     // fragments of broken blocks (world/particles.js): small squares of the block's texture, facing the camera

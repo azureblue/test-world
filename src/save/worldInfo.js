@@ -11,6 +11,7 @@ import { FORMAT_VERSION, upgrade } from "./format.js";
  * @property {"walk" | "fly"} mode
  * @property {boolean} noclip
  * @property {number} slot the item bar's selected slot
+ * @property {string[]} [items] the item bar's blocks by slot ("" empty); not in records saved before it was
  */
 
 /**

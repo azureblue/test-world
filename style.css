@@ -56,6 +56,29 @@ body {
     pointer-events: none;
 }
 
+/* the inventory open: over it (.menu-screen), to drag blocks onto it */
+.item-bar.editable {
+    pointer-events: auto;
+    z-index: 11;
+}
+
+.item-bar-label.editable {
+    z-index: 11;
+}
+
+/* the slot or block under the mouse */
+.item-bar.editable .item-bar-slot:hover,
+.inventory-grid .item-bar-slot:hover {
+    border-color: rgba(255, 255, 255, 0.7);
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* the slot a drag drops onto */
+.item-bar-slot.drop-target {
+    border-color: #ffd34d;
+    background-color: rgba(255, 211, 77, 0.3);
+}
+
 .item-bar-slot {
     position: relative;
     width: 52px;
@@ -251,4 +274,33 @@ body {
 .world-empty {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.65);
+}
+
+/* the inventory (controls.inventory): every block, above the item bar */
+.inventory {
+    align-items: flex-end;
+    padding-bottom: 116px;
+    box-sizing: border-box;
+}
+
+.inventory-panel {
+    width: auto;
+    padding: 10px 12px;
+    font-size: 11px;
+}
+
+.inventory-panel h2 {
+    margin: 0 0 8px;
+    font-size: 12px;
+}
+
+.inventory-panel p {
+    margin: 8px 0 0;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 52px);
+    gap: 4px;
 }

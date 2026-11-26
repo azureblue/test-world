@@ -3,6 +3,7 @@ import { Camera } from "./camera.js";
 import { FVec3 } from "./geom.js";
 import { KeyboardInput, MouseInput } from "./input.js";
 import { BlockInteraction } from "./interaction.js";
+import { Inventory } from "./inventory.js";
 import { ItemBar } from "./itemBar.js";
 import { GameMenu } from "./menu/gameMenu.js";
 import { FPSCounter } from "./perf.js";
@@ -49,6 +50,8 @@ export class Game {
     #openWorld = null;
     /** @type {GameMenu} */
     #menu;
+    /** @type {Inventory} */
+    #inventory;
 
     #keyboard;
     #mouse;
@@ -104,6 +107,7 @@ export class Game {
         this.player = new Player(this.world, cameraSettings.startPosition);
         this.ticker = new Ticker(Settings.simulation.tickRate, Settings.simulation.maxTicksPerFrame);
         this.itemBar = new ItemBar(container, Settings.interaction.itemBar, textures, TEXTURE_SIZE);
+        this.#inventory = new Inventory(container, this.itemBar, textures, TEXTURE_SIZE);
         this.interaction = new BlockInteraction(this.world, this.player, this.itemBar, this.particles);
         this.#stats = new StatsOverlay(document.getElementById("stats"));
         this.#menu = new GameMenu(container, this.#openWorld?.info.name ?? null, {
@@ -117,7 +121,7 @@ export class Game {
         this.#restorePlayer();
         // Esc releases the mouse (the browser does): the menu, the game paused
         document.addEventListener("pointerlockchange", () => {
-            if (document.pointerLockElement === null && !this.#menu.visible) {
+            if (document.pointerLockElement === null && !this.#menu.visible && !this.#inventory.visible) {
                 this.paused = true;
                 this.#menu.show();
             }
@@ -141,6 +145,8 @@ export class Game {
         player.noclip = state.noclip;
         camera.setAngles(state.yaw, state.pitch);
         camera.update();
+        if (state.items !== undefined)
+            this.itemBar.names = state.items;
         if (state.slot < this.itemBar.size)
             this.itemBar.select(state.slot);
     }
@@ -161,7 +167,7 @@ export class Game {
         const player = this.player, camera = this.camera;
         info.player = {
             x: player.x, y: player.y, z: player.z, yaw: camera.yaw, pitch: camera.pitch,
-            mode: player.mode, noclip: player.noclip, slot: this.itemBar.selected
+            mode: player.mode, noclip: player.noclip, slot: this.itemBar.selected, items: this.itemBar.names
         };
         info.lastPlayed = Date.now();
         await store.putWorld(info);
@@ -172,12 +178,33 @@ export class Game {
         this.#mouse = new MouseInput(canvas, true);
         this.#keyboard = new KeyboardInput(document.body,
             [controls.forward, controls.back, controls.left, controls.right, controls.jump, controls.down, controls.sprint], {
-            // not while the menu is open: it unpauses with its own button
-            [controls.pause]: (pressed) => pressed && !this.#menu.visible && (this.paused = !this.paused),
+            // not while the menu or the inventory is open: they unpause when they close
+            [controls.pause]: (pressed) => pressed && !this.#menu.visible && !this.#inventory.visible &&
+                (this.paused = !this.paused),
             [controls.toggleFly]: (pressed) => pressed && this.player.toggleFly(),
             [controls.toggleNoclip]: (pressed) => pressed && this.player.toggleNoclip(),
-            // 1..9 select a slot of the bar
-            ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i + 1), (pressed) => pressed && this.itemBar.select(i)]))
+            // 1..9, 0 select a slot of the bar
+            ...Object.fromEntries(Array.from({ length: this.itemBar.size },
+                (_, i) => [String((i + 1) % 10), (pressed) => pressed && this.itemBar.select(i)]))
+        });
+        // the inventory: opened by its key (the mouse released, the keys and the mouse ignored by the game, which goes
+        // on), closed by it or Esc; not through KeyboardInput, which ignores keys meanwhile
+        document.addEventListener("keydown", (e) => {
+            const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            if (e.repeat || !(key === controls.inventory || key === "Escape" && this.#inventory.visible))
+                return;
+            const open = !this.#inventory.visible;
+            if (open && this.paused)
+                return;
+            if (open)
+                this.#inventory.show();
+            else
+                this.#inventory.hide();
+            this.#mouse.pause = this.#keyboard.pause = open;
+            if (open)
+                document.exitPointerLock();
+            else
+                canvas.requestPointerLock();
         });
         this.#keyboard.pauseKey = controls.pause;
         this.#mouse.onWheel((direction) => this.paused || this.itemBar.scroll(direction));
