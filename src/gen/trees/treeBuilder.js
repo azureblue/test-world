@@ -9,6 +9,7 @@ export const SPECIES = Object.freeze({
     OAK: "oak",
     BIG_OAK: "bigOak",
     BIRCH: "birch",
+    TALL_BIRCH: "tallBirch",
     SPRUCE: "spruce",
     PINE: "pine",
     ACACIA: "acacia",
@@ -16,11 +17,12 @@ export const SPECIES = Object.freeze({
 
 const OAK = Object.freeze({ trunk: BLOCK_IDS.TREE_TRUNK, leaves: BLOCK_IDS.TREE_LEAVES });
 const SPRUCE = Object.freeze({ trunk: BLOCK_IDS.SPRUCE_TRUNK, leaves: BLOCK_IDS.SPRUCE_LEAVES });
+const BIRCH = Object.freeze({ trunk: BLOCK_IDS.BIRCH_TRUNK, leaves: BLOCK_IDS.BIRCH_LEAVES });
 
 /** the blocks each species is made of, unless generate is given others */
 export const SPECIES_MATERIALS = Object.freeze({
-    [SPECIES.OAK]: OAK, [SPECIES.BIG_OAK]: OAK, [SPECIES.BIRCH]: OAK, [SPECIES.SPRUCE]: SPRUCE,
-    [SPECIES.PINE]: SPRUCE, [SPECIES.ACACIA]: OAK
+    [SPECIES.OAK]: OAK, [SPECIES.BIG_OAK]: OAK, [SPECIES.BIRCH]: BIRCH, [SPECIES.TALL_BIRCH]: BIRCH,
+    [SPECIES.SPRUCE]: SPRUCE, [SPECIES.PINE]: SPRUCE, [SPECIES.ACACIA]: OAK
 });
 
 // the grid a tree is built in: (2R + 1)² columns around the trunk, HEIGHT cells up from its base
@@ -92,12 +94,18 @@ class Grid {
                 }
     }
 
-    /** a flat disc of leaves, one cell high */
-    disc(h, x, y, r) {
-        const ir = Math.ceil(r);
+    /**
+     * A flat disc of leaves, one cell high; with a prng also its fringe: the cells out of it in its square (up to
+     * round(r) out on each axis: the corners of a 5 wide one), each with the chance given, where the cell below has no
+     * leaves (a fringe over the layer below's edge would make a flat side).
+     */
+    disc(h, x, y, r, prng = null, fringe = 0) {
+        const ir = Math.ceil(r), square = Math.round(r);
         for (let dy = -ir; dy <= ir; dy++)
             for (let dx = -ir; dx <= ir; dx++)
-                if (dx * dx + dy * dy <= (r + 0.3) * (r + 0.3))
+                if (dx * dx + dy * dy <= (r + 0.3) * (r + 0.3) ||
+                    prng !== null && Math.abs(dx) <= square && Math.abs(dy) <= square &&
+                    this.get(h - 1, x + dx, y + dy) !== LEAF && prng.nextRand() < fringe)
                     this.leaf(h, x + dx, y + dy);
     }
 
@@ -160,21 +168,32 @@ function directions(prng, n) {
 }
 
 /**
+ * Discs of leaves from h t, the trunk up into the top one: a small, triangular crown, rounded. From the top: a plus, a
+ * 3 × 3, 1 or 2 layers 5 wide; with a chance a 3 × 3 under them. The wide ones' corners at random (Grid.disc's
+ * fringe; a second one's only where the one below has none): they differ, the crown isn't symmetric. The oak's and
+ * the birches'.
+ * @param {number} wide the 5 wide layers, 1 or 2
+ * @param {number} bottom the chance of the 3 × 3 under them
+ */
+function discCrown(g, prng, t, wide, bottom) {
+    // [radius, the fringe's chance], from the bottom
+    const layers = [...Array(wide).fill([2.1, 0.5]), [1.5, 0], [1, 0]];
+    if (prng.nextRand() < bottom)
+        layers.unshift([1.5, 0]);
+    g.trunk(0, 0, 0, t + layers.length - 1);
+    for (const [i, [r, fringe]] of layers.entries())
+        g.disc(t + i, 0, 0, r, prng, fringe);
+}
+
+/**
  * The species' shapes: each a fixed plan, the prng only varying sizes a little and the limbs' directions, so a species
  * looks like itself every time. h, x, y are from the tree's base (its lowest trunk cell).
  * @type {Object<string, (g: Grid, prng: Mulberry32) => void>}
  */
 const SHAPES = {
-    /**
-     * A short trunk; discs of leaves narrowing up from a wide bottom to a small top: a small, triangular crown,
-     * rounded. Smaller trees have fewer layers.
-     */
+    /** a short trunk under a crown of discs (discCrown) */
     [SPECIES.OAK](g, prng) {
-        const t = prng.nextRandInt(2, 3), small = prng.nextRand() < 0.5;
-        const layers = small ? [1.6, 2.1, 1.5, 1] : [1.8, 2.4, 2, 1.5, 1];
-        g.trunk(0, 0, 0, t + layers.length - 1);
-        for (const [i, r] of layers.entries())
-            g.disc(t + i, 0, 0, r);
+        discCrown(g, prng, prng.nextRandInt(2, 3), 2, 0.25);
     },
 
     /** a short trunk; 3..4 branches out and up, a clump of leaves on each, one over the top: a broad, clumpy dome */
@@ -188,16 +207,14 @@ const SHAPES = {
         g.blob(prng, t + 4, 0, 0, 2.3, 2);
     },
 
-    /** a tall, thin trunk; small clumps up its top half, a little off it: a narrow, ragged oval */
+    /** the oak's shape */
     [SPECIES.BIRCH](g, prng) {
-        const t = prng.nextRandInt(6, 8);
-        g.trunk(0, 0, 0, t);
-        const n = 3, a0 = prng.nextRand() * Math.PI * 2;
-        for (let i = 0; i < n; i++) {
-            const h = Math.round(t * 0.5 + (t * 0.5) * i / (n - 1));
-            const a = a0 + i * 2.4, off = i === n - 1 ? 0 : 1;
-            g.blob(prng, h, Math.round(Math.cos(a) * off), Math.round(Math.sin(a) * off), i === n - 1 ? 1.3 : 1.7, 1.5);
-        }
+        discCrown(g, prng, prng.nextRandInt(2, 3), 2, 0.25);
+    },
+
+    /** a trunk 3 cells longer than the oak's, a smaller crown: one layer 5 wide, the 3 × 3 under it rarer */
+    [SPECIES.TALL_BIRCH](g, prng) {
+        discCrown(g, prng, prng.nextRandInt(5, 6), 1, 0.25);
     },
 
     /** the trunk to the top; tiers every 2 cells, each a disc and a narrower one on it, shrinking up to a tip */
