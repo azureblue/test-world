@@ -2,7 +2,7 @@ import { Vec3 } from "../geom.js";
 import { Logger } from "../logging.js";
 import { settingsParams } from "../settings.js";
 import { Resources } from "../utils.js";
-import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse, MessageTransportData } from "../worker/common.js";
+import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse, MessageTransportData, WorldSave, WorldSaved } from "../worker/common.js";
 import { WorkerClient } from "../worker/worker.js";
 import { ChunkEntry } from "./chunkEntry.js";
 
@@ -21,6 +21,10 @@ export class WorldClient {
     #initialMessageQueue = [];
     #nextRequestId = 1;
     #nextEditSeq = 1;
+    #nextSaveSeq = 1;
+    /** saves asked for and not answered: seq -> what waits for the answer
+     * @type {Map<number, {resolve: (chunks: number) => void, reject: (err: Error) => void}>} */
+    #saves = new Map();
 
     /**
      * @param {(response: ChunkResponse) => void} onChunk
@@ -36,7 +40,12 @@ export class WorldClient {
         this.#workerClient.connect("world").then((messagePort) => {
             logger.info(() => "connected to world worker");
             this.#port = messagePort;
-            this.#port.onmessage = (message) => onChunk(ChunkResponse.from(message.data));
+            this.#port.onmessage = (message) => {
+                if (WorldSaved.isType(message.data))
+                    this.#onSaved(WorldSaved.from(message.data));
+                else
+                    onChunk(ChunkResponse.from(message.data));
+            };
             for (const message of this.#initialMessageQueue)
                 message.post(this.#port);
             this.#initialMessageQueue = [];
@@ -80,6 +89,29 @@ export class WorldClient {
      */
     setCenter(chunkPos, rangeSq) {
         this.#post(ChunkLoadCenter.toMessage(new ChunkLoadCenter(chunkPos, rangeSq)));
+    }
+
+    /**
+     * Asks the worker to save the world's changed chunks now (a saved world; for one that isn't, it answers at once).
+     * The edits sent before are in it.
+     * @returns {Promise<number>} the chunks written
+     */
+    save() {
+        const seq = this.#nextSaveSeq++;
+        return new Promise((resolve, reject) => {
+            this.#saves.set(seq, { resolve, reject });
+            this.#post(WorldSave.toMessage(new WorldSave(seq)));
+        });
+    }
+
+    /** @param {WorldSaved} saved */
+    #onSaved(saved) {
+        const waiting = this.#saves.get(saved.seq);
+        this.#saves.delete(saved.seq);
+        if (saved.error === null)
+            waiting?.resolve(saved.chunks);
+        else
+            waiting?.reject(new Error(saved.error));
     }
 
     /** @param {MessageTransportData} message */

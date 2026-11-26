@@ -155,6 +155,15 @@ export class World {
     }
 
     /**
+     * Saves the changed chunks of a saved world now (the world worker also does every Settings.world.saveInterval, if
+     * it's above 0); the edits made before are in it.
+     * @returns {Promise<number>} the chunks written
+     */
+    save() {
+        return this.#chunks.worldClient.save();
+    }
+
+    /**
      * Whether the chunk holding a block is loaded (blockAt returns EMPTY for blocks of chunks that aren't).
      */
     isLoaded(ix, iy, iz) {

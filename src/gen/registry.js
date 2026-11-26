@@ -2,6 +2,7 @@ import { ChunkGenerator } from "../chunk/chunk.js";
 import { ClimateGenerator } from "./collection/climate.js";
 import { FlatGenerator } from "./collection/flat.js";
 import { NoiseChunkGenerator, TestGenerator } from "./generator.js";
+import { GENERATOR_NAMES } from "./generatorNames.js";
 import { TreeGalleryGenerator } from "./trees/treeGallery.js";
 
 const ChunkGeneratorRegistry = {
@@ -13,6 +14,8 @@ const ChunkGeneratorRegistry = {
 }
 
 Object.freeze(ChunkGeneratorRegistry);
+if (Object.keys(ChunkGeneratorRegistry).join() !== GENERATOR_NAMES.join())
+    throw new Error(`gen/generatorNames.js lists ${GENERATOR_NAMES}, the registry has ${Object.keys(ChunkGeneratorRegistry)}`);
 
 export const ChunkGeneratorFactory = {
     /**

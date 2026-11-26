@@ -4,9 +4,12 @@ import { FVec3 } from "./geom.js";
 import { KeyboardInput, MouseInput } from "./input.js";
 import { BlockInteraction } from "./interaction.js";
 import { ItemBar } from "./itemBar.js";
+import { GameMenu } from "./menu/gameMenu.js";
 import { FPSCounter } from "./perf.js";
 import { Player, PlayerInput } from "./player.js";
 import { WorldRenderer } from "./render/worldRenderer.js";
+import { WorldInfo } from "./save/worldInfo.js";
+import { WorldStore } from "./save/worldStore.js";
 import { Settings } from "./settings.js";
 import { StatsOverlay } from "./statsOverlay.js";
 import { Ticker } from "./ticker.js";
@@ -14,8 +17,15 @@ import { Particles } from "./world/particles.js";
 import { World } from "./world/world.js";
 
 /**
+ * A saved world being played: what it is, where it's stored.
+ * @typedef {{info: WorldInfo, store: WorldStore}} OpenWorld
+ */
+
+/**
  * The game in a page: the world, the player and the camera, the input, and the frame loop (simulation ticks, then
- * the world update and a render per animation frame).
+ * the world update and a render per animation frame). A saved world (OpenWorld) starts where the player left it and
+ * is saved from the menu (Esc): the world worker saves its chunks, the game its record (the player); with
+ * Settings.world.saveInterval also that often and when the page is hidden.
  */
 export class Game {
     /** @type {World} */
@@ -35,6 +45,10 @@ export class Game {
     /** fragments of broken blocks */
     particles = new Particles();
     #paused = false;
+    /** @type {OpenWorld | null} null: the world isn't saved */
+    #openWorld = null;
+    /** @type {GameMenu} */
+    #menu;
 
     #keyboard;
     #mouse;
@@ -48,10 +62,13 @@ export class Game {
      * Starts the game in the page: a canvas filling the window in the container, the item bar, the stats overlay
      * (an element with id "stats", see index.html).
      * @param {HTMLElement} container
+     * @param {OpenWorld | null} [openWorld] the saved world to play (the world worker opens the same,
+     *   Settings.world.id); null: a world that isn't saved
      * @returns {Promise<Game>}
      */
-    static async start(container = document.body) {
+    static async start(container = document.body, openWorld = null) {
         const game = new Game();
+        game.#openWorld = openWorld;
         await game.#init(container);
         game.#fpsCounter.start();
         game.#frame();
@@ -89,7 +106,65 @@ export class Game {
         this.itemBar = new ItemBar(container, Settings.interaction.itemBar, textures, TEXTURE_SIZE);
         this.interaction = new BlockInteraction(this.world, this.player, this.itemBar, this.particles);
         this.#stats = new StatsOverlay(document.getElementById("stats"));
+        this.#menu = new GameMenu(container, this.#openWorld?.info.name ?? null, {
+            resume: () => {
+                this.paused = false;
+                canvas.requestPointerLock();
+            },
+            save: () => this.save(),
+        });
         this.#initInput(canvas);
+        this.#restorePlayer();
+        // Esc releases the mouse (the browser does): the menu, the game paused
+        document.addEventListener("pointerlockchange", () => {
+            if (document.pointerLockElement === null && !this.#menu.visible) {
+                this.paused = true;
+                this.#menu.show();
+            }
+        });
+        if (this.#openWorld !== null && Settings.world.saveInterval > 0) {
+            setInterval(() => this.#saveRecord().catch(err => console.error(`saving the world failed: ${err}`)),
+                Settings.world.saveInterval * 1000);
+            // leaving the page: what can be written before it's gone
+            window.addEventListener("pagehide", () => this.save());
+        }
+    }
+
+    /** a saved world: the player where it was left */
+    #restorePlayer() {
+        const state = this.#openWorld?.info.player;
+        if (state == null)
+            return;
+        const player = this.player, camera = this.camera;
+        player.setEyePosition(state.x, state.y, state.z + Settings.player.eyeHeight);
+        player.mode = state.mode;
+        player.noclip = state.noclip;
+        camera.setAngles(state.yaw, state.pitch);
+        camera.update();
+        if (state.slot < this.itemBar.size)
+            this.itemBar.select(state.slot);
+    }
+
+    /**
+     * Saves a saved world now: its changed chunks, then its record (the player). Nothing for a world that isn't saved.
+     * @returns {Promise<void>}
+     */
+    async save() {
+        if (this.#openWorld === null)
+            return;
+        await this.world.save();
+        await this.#saveRecord();
+    }
+
+    async #saveRecord() {
+        const { info, store } = this.#openWorld;
+        const player = this.player, camera = this.camera;
+        info.player = {
+            x: player.x, y: player.y, z: player.z, yaw: camera.yaw, pitch: camera.pitch,
+            mode: player.mode, noclip: player.noclip, slot: this.itemBar.selected
+        };
+        info.lastPlayed = Date.now();
+        await store.putWorld(info);
     }
 
     #initInput(canvas) {
@@ -97,7 +172,8 @@ export class Game {
         this.#mouse = new MouseInput(canvas, true);
         this.#keyboard = new KeyboardInput(document.body,
             [controls.forward, controls.back, controls.left, controls.right, controls.jump, controls.down, controls.sprint], {
-            [controls.pause]: (pressed) => pressed && (this.paused = !this.paused),
+            // not while the menu is open: it unpauses with its own button
+            [controls.pause]: (pressed) => pressed && !this.#menu.visible && (this.paused = !this.paused),
             [controls.toggleFly]: (pressed) => pressed && this.player.toggleFly(),
             [controls.toggleNoclip]: (pressed) => pressed && this.player.toggleNoclip(),
             // 1..9 select a slot of the bar

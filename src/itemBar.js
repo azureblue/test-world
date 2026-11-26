@@ -57,6 +57,11 @@ export class ItemBar {
         return this.#blocks.length;
     }
 
+    /** the selected slot's index */
+    get selected() {
+        return this.#selected;
+    }
+
     /** @param {number} index */
     select(index) {
         if (index < 0 || index >= this.#blocks.length)

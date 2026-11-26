@@ -25,6 +25,26 @@ class Camera {
         this.update();
     }
 
+    /** degrees, 0 along +x, growing clockwise seen from above (see update) */
+    get yaw() {
+        return this.#yaw;
+    }
+
+    /** degrees, -89..89, up towards +z */
+    get pitch() {
+        return this.#pitch;
+    }
+
+    /**
+     * @param {number} yaw degrees, see {@link yaw}
+     * @param {number} pitch degrees, kept in -89..89
+     */
+    setAngles(yaw, pitch) {
+        this.#yaw = this.#pitch = 0;
+        this.changeYaw(yaw);
+        this.changePitch(pitch);
+    }
+
     changeYaw(delta) {
         this.#yaw += delta;
         if (this.#yaw > 360)

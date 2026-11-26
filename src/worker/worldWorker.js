@@ -12,23 +12,47 @@ import { pos3ToKey } from "../world/chunkEntry.js";
 import { BLOCK_LIGHT_MARGIN, LIGHT_MARGIN, Lighting } from "../world/lighting.js";
 import { SkyTops } from "../world/skyTops.js";
 import { WaterFlow } from "../world/waterFlow.js";
-import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse } from "./common.js";
+import { SavedChunks } from "../save/savedChunks.js";
+import { WorldStore } from "../save/worldStore.js";
+import { BlockEdit, ChunkCancel, ChunkLoadCenter, ChunkRequest, ChunkResponse, WorldSave, WorldSaved } from "./common.js";
 import { WorkerConnection, WorkerServer } from "./worker.js";
 
 // The world worker owns the world: the block data (generated, with every edit applied), the simulation (flowing
 // water) and the meshes. Clients (the main thread now, players over the network later) request chunks, send their
 // edits and get chunk responses and updates; their own copy of the world only predicts their edits until an update
 // confirms them. Settings come from the same URL parameters as the page's (World passes them on).
+//
+// A saved world (Settings.world.id) is read from its database first: its record gives the generator and the seed,
+// its saved chunks are taken instead of generated; the chunks that change are saved whole when the page asks
+// (WorldSave), and every Settings.world.saveInterval if it's above 0. The page saves the world's record (the player).
 
 const workerId = new URL(self.location.href).searchParams.get("workerId");
 
 const logger = new Logger("world worker " + workerId);
-const generator = await ChunkGeneratorFactory.createForName(Settings.world.generator, Settings.world.seed);
 
-const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory());
+const worldId = Settings.world.id;
+const store = worldId === "" ? null : await WorldStore.open();
+const worldInfo = store === null ? null : await store.getWorld(worldId);
+if (store !== null && worldInfo === null)
+    throw new Error(`no saved world "${worldId}"`);
+const savedChunks = store === null ? null :
+    new SavedChunks(await store.loadChunks(worldId), (name) => logger.warn(() => `saved block "${name}" isn't a block any more`));
+if (savedChunks !== null)
+    logger.info(() => `world "${worldInfo.name}": ${savedChunks.size} saved chunks`);
+
+const generator = await ChunkGeneratorFactory.createForName(worldInfo?.generator ?? Settings.world.generator,
+    worldInfo?.seed ?? Settings.world.seed);
+
+const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory(), savedChunks);
 const meshOptions = { cutout: Settings.render.cutoutLeaves, cutoutBuried: Settings.render.cutoutBuriedLeaves };
 const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
 const skyTops = new SkyTops(chunkDataLoader, generator);
+// the saved chunks' highest solid blocks, above the generator's tops where something was built: the sky light's scan
+// of their columns starts there
+if (savedChunks !== null)
+    for (const { cx, cy, cz, top } of savedChunks.tops())
+        if (top !== null)
+            skyTops.onBlockChanged(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE + top, true);
 const lighting = Settings.light.enabled ? await Lighting.create(chunkDataLoader, skyTops) : null;
 
 /** what a block does to the light: solid (stops it), the block light it gives */
@@ -299,6 +323,37 @@ class ChunkLoadScheduler {
 
 const scheduler = new ChunkLoadScheduler();
 
+/**
+ * Writes the chunks changed since the last save, one save at a time (a save asked for while one is being written
+ * waits for it, then writes what changed meanwhile). Chunks that couldn't be written are written by the next save.
+ */
+class WorldSaver {
+    /** @type {Promise<number>} the save being written, resolves to the chunks written */
+    #last = Promise.resolve(0);
+
+    /** @returns {Promise<number>} the chunks written */
+    save() {
+        this.#last = this.#last.catch(() => 0).then(async () => {
+            if (!chunkDataLoader.hasChanges)
+                return 0;
+            const chunks = chunkDataLoader.saveChanged();
+            try {
+                await store.putChunks(worldId, chunks);
+            } catch (err) {
+                chunkDataLoader.markChanged(chunks.map(c => c.position));
+                throw err;
+            }
+            logger.debug(() => `saved ${chunks.length} chunks`);
+            return chunks.length;
+        });
+        return this.#last;
+    }
+}
+
+const saver = store === null ? null : new WorldSaver();
+if (saver !== null && Settings.world.saveInterval > 0)
+    setInterval(() => saver.save().catch(err => logger.error(() => `saving failed: ${err}`)), Settings.world.saveInterval * 1000);
+
 // the simulation clock, like the main thread's: ticks of a fixed length, the changed chunks sent after them
 const ticker = new Ticker(Settings.simulation.tickRate, Settings.simulation.maxTicksPerFrame);
 let lastStep = performance.now();
@@ -327,6 +382,13 @@ const workerServer = new WorkerServer(self, workerId, {
                 const edit = BlockEdit.from(data);
                 world.setBlock(edit.blockPos.x, edit.blockPos.y, edit.blockPos.z, edit.value);
                 client.editAck = edit.seq;
+            } else if (WorldSave.isType(data)) {
+                const { seq } = WorldSave.from(data);
+                const answer = (chunks, error) => WorldSaved.toMessage(new WorldSaved(seq, chunks, error)).post(connection.port);
+                if (saver === null)
+                    answer(0, null);
+                else
+                    saver.save().then(chunks => answer(chunks, null), err => answer(0, String(err)));
             } else if (ChunkLoadCenter.isType(data)) {
                 const center = ChunkLoadCenter.from(data);
                 scheduler.setCenter(center.chunkPos, center.rangeSq);

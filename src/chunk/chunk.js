@@ -301,6 +301,14 @@ export class ChunkSpec {
     }
 }
 
+/**
+ * Where a saved world's chunks are (save/savedChunks.js): the loader takes a chunk from it instead of generating it,
+ * and puts changed chunks into it.
+ * @typedef {object} ChunkStore
+ * @property {(key: string) => Uint32Array | null} blocks a chunk's blocks (a new array), null if it isn't saved
+ * @property {(key: string, data: Uint32Array) => any} put keeps a chunk's blocks, returns the saved form
+ */
+
 export class ChunkDataLoader {
     #avgTime = new MovingAverage(200);
 
@@ -315,18 +323,58 @@ export class ChunkDataLoader {
     #chunkDataFactory;
 
     /**
-     * Block edits per chunk, applied on top of every generation of the chunk.
+     * Block edits per chunk, applied on top of every generation of the chunk (or of its saved blocks), until the chunk
+     * is put into the store ({@link saveChanged}).
      * @type {Map<string, Map<number, number>>} chunk key -> (index in ChunkBlockData -> block)
      */
     #edits = new Map();
 
+    /** a saved world's chunks, taken instead of generating them; null: nothing is saved
+     * @type {ChunkStore | null} */
+    #store;
+    /** with a store, the chunks changed since they were put into it: key -> position
+     * @type {Map<string, Vec3>} */
+    #changed = new Map();
+
     /**
      * @param {ChunkGenerator} generator 
      * @param {ChunkDataFactory} chunkDataFactory
+     * @param {ChunkStore | null} [store] a saved world's chunks (save/savedChunks.js)
      */
-    constructor(generator, chunkDataFactory) {
+    constructor(generator, chunkDataFactory, store = null) {
         this.#generator = generator;
         this.#chunkDataFactory = chunkDataFactory;
+        this.#store = store;
+    }
+
+    /** whether chunks changed since they were last saved (always false without a store) */
+    get hasChanges() {
+        return this.#changed.size > 0;
+    }
+
+    /**
+     * Puts the chunks changed since the last call into the store, whole (their edits aren't needed any more: the
+     * store has them).
+     * @returns {Array<{position: Vec3, saved: any}>} the chunks and what the store made of them, to write somewhere
+     */
+    saveChanged() {
+        const out = [];
+        for (const [key, position] of this.#changed) {
+            const data = this.#loadChunkBlockData(position).data;
+            out.push({ position, saved: this.#store.put(key, data) });
+            this.#edits.delete(key);
+        }
+        this.#changed.clear();
+        return out;
+    }
+
+    /**
+     * Marks chunks changed again: what {@link saveChanged} gave couldn't be written, the next call gives them again.
+     * @param {Iterable<Vec3>} positions
+     */
+    markChanged(positions) {
+        for (const p of positions)
+            this.#changed.set(posToKey3(p.x, p.y, p.z), p);
     }
 
     /**
@@ -346,6 +394,8 @@ export class ChunkDataLoader {
             this.#edits.set(key, chunkEdits);
         }
         chunkEdits.set(index, value);
+        if (this.#store !== null && !this.#changed.has(key))
+            this.#changed.set(key, new Vec3(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN));
         const cached = this.#blockDataCache.get(key);
         if (cached !== undefined)
             cached.data[index] = value;
@@ -377,7 +427,8 @@ export class ChunkDataLoader {
         const key = posToKey3(chunkPos.x, chunkPos.y, chunkPos.z);
         let chunkBlockData = this.#blockDataCache.get(key);
         if (chunkBlockData === undefined) {
-            chunkBlockData = this.#generator.generateChunk(chunkPos);
+            const saved = this.#store?.blocks(key) ?? null;
+            chunkBlockData = saved !== null ? new ChunkBlockData(saved) : this.#generator.generateChunk(chunkPos);
             const chunkEdits = this.#edits.get(key);
             if (chunkEdits !== undefined) {
                 for (const [index, value] of chunkEdits)

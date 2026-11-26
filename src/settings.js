@@ -10,9 +10,17 @@
  */
 export const Settings = {
     world: {
-        // chunk generator, see gen/registry.js
+        // the saved world to play (save/worldStore.js; the world menu opens one with it); "": a world that isn't
+        // saved, made from generator and seed
+        id: "",
+        // without an id: the world menu first (choose, create a world); false: straight into an unsaved world (tests)
+        menu: true,
+        // seconds: a saved world's changed chunks and the player are saved this often, and when the page is hidden;
+        // 0: only from the menu (Esc: save, save and quit)
+        saveInterval: 0,
+        // chunk generator, see gen/registry.js; a saved world has its own
         generator: "default",
-        // the world's seed (an integer): every generator and scenario takes it
+        // the world's seed (an integer): every generator and scenario takes it; a saved world has its own
         seed: 1,
         // the world worker meshes with the fast, unoptimized mesher
         fastMesher: false,

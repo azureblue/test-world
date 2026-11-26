@@ -555,6 +555,71 @@ export class BlockEdit extends WorkerMessage {
 }
 
 /**
+ * Asks the world worker to save the chunks changed since its last save now (it also saves them every
+ * Settings.world.saveInterval); answered with a {@link WorldSaved} of the same seq once they're written.
+ */
+export class WorldSave extends WorkerMessage {
+
+    static get type() {
+        return "world_save";
+    }
+
+    /** @param {number} seq - Increases with every save asked for, the answer has it. */
+    constructor(seq) {
+        super();
+        this.seq = seq;
+    }
+
+    static toMessage(worldSave) {
+        return MessageTransportData.create(WorldSave.type, { seq: worldSave.seq });
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {WorldSave}
+     */
+    static from(message) {
+        checkType(this, message);
+        return new WorldSave(message.data.seq);
+    }
+}
+
+/**
+ * The world worker's answer to a {@link WorldSave}: the chunks changed before it are written (or the save failed).
+ */
+export class WorldSaved extends WorkerMessage {
+
+    static get type() {
+        return "world_saved";
+    }
+
+    /**
+     * @param {number} seq - The {@link WorldSave}'s.
+     * @param {number} chunks - How many chunks were written.
+     * @param {string | null} error - Why the save failed, null if it didn't.
+     */
+    constructor(seq, chunks, error) {
+        super();
+        this.seq = seq;
+        this.chunks = chunks;
+        this.error = error;
+    }
+
+    static toMessage(worldSaved) {
+        return MessageTransportData.create(WorldSaved.type, { seq: worldSaved.seq, chunks: worldSaved.chunks, error: worldSaved.error });
+    }
+
+    /**
+     * @param {MessageEvent} message
+     * @returns {WorldSaved}
+     */
+    static from(message) {
+        checkType(this, message);
+        return new WorldSaved(message.data.seq, message.data.chunks, message.data.error);
+    }
+}
+
+/**
  * Structured clone drops the prototype, so positions arrive as plain objects.
  * @param {{x: number, y: number, z: number}} pos
  * @returns {Vec3}

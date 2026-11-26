@@ -270,6 +270,15 @@ export function getBlockById(id) {
 }
 
 /**
+ * The bits of a block value that are its state, not given by its kind in blocks.json: the water bits (liquid for a
+ * plant in water, flowing, the level). A block value is its kind's value (BLOCK_IDS) with these (save/chunkCodec.js).
+ * @param {number} block
+ */
+export function blockState(block) {
+    return (block & WATER_BITS) >>> 0;
+}
+
+/**
  * @param {number} block
  * @returns {number} the height in 1/8 of a block, 1..8
  */
