@@ -870,15 +870,62 @@ function download(name, blob) {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-/** the edited image as a PNG: as it looks (masked, composed), or its mask while the mask is painted */
-async function savePng() {
+/**
+ * the edited image as a PNG: as it looks (masked, composed; or its own pixels), or its mask while the mask is painted
+ */
+async function savePng(asItLooks = true) {
     const { key, image } = target();
-    const shown = key.endsWith("#mask") ? image : composed.get(key);
+    const shown = key.endsWith("#mask") || !asItLooks ? image : composed.get(key);
     const canvas = new OffscreenCanvas(shown.width, shown.height);
     canvas.getContext("2d").putImageData(shown, 0, 0);
     const name = key.replace("#mask", "_mask") + ".png";
     download(name, await canvas.convertToBlob({ type: "image/png" }));
     status(`saved ${name}`);
+}
+
+/**
+ * PNG files as images, by their names: name.png an image's own pixels (the image of that name replaced, undoable, or
+ * a new one), name_mask.png the mask of a masked image name (otherwise an image of that name)
+ * @param {File[]} files
+ */
+async function loadImages(files) {
+    const loaded = [], failed = [];
+    for (const file of files) {
+        const name = file.name.replace(/\.png$/i, "");
+        try {
+            if (!/^\w+$/.test(name))
+                throw new Error("names: letters, digits and _");
+            const image = await imageDataOf(file);
+            const maskOf = name.replace(/_mask$/, "");
+            const key = maskOf !== name && doc.masks.has(maskOf) ? maskOf + "#mask" : name;
+            const old = key === name ? doc.images.get(name) : doc.masks.get(maskOf).mask;
+            const [w, h] = old === undefined ? [TEXTURE_SIZE, TEXTURE_SIZE] : [old.width, old.height];
+            if (image.width !== w || image.height !== h)
+                throw new Error(`${image.width} × ${image.height}, not ${w} × ${h}`);
+            if (old === undefined) {
+                doc.images.set(name, image);
+            } else {
+                snapshot({ key, image: old });
+                old.data.set(image.data);
+            }
+            loaded.push(key);
+        } catch (e) {
+            failed.push(`${file.name}: ${e.message}`);
+        }
+    }
+    if (loaded.length > 0) {
+        composeAll();
+        changed();
+        // the last one loaded is edited: an image, or its mask
+        const key = loaded.at(-1);
+        select("image", key.replace("#mask", ""));
+        if (key.endsWith("#mask")) {
+            selection.layer = "mask";
+            renderAll();
+        }
+    }
+    status(failed.length > 0 ? failed.join("; ") : `loaded ${loaded.map(k => k.replace("#mask", "_mask")).join(", ")}`,
+        failed.length > 0);
 }
 
 function initControls() {
@@ -914,7 +961,14 @@ function initControls() {
             renderColors();
         }, { passive: false });
     }
-    $("savePng").onclick = savePng;
+    $("savePng").onclick = () => savePng();
+    $("saveImage").onclick = () => savePng(false);
+    $("loadImages").onclick = () => $("imageFiles").click();
+    $("imageFiles").onchange = async () => {
+        const files = [...$("imageFiles").files];
+        $("imageFiles").value = "";
+        await loadImages(files);
+    };
     $("save").onclick = async () => {
         download("textures.json", new Blob([await toFile()], { type: "application/json" }));
         dirty = false;

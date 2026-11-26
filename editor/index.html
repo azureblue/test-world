@@ -329,7 +329,10 @@
             <button id="import" title="Start again from the game's textures and blocks">From game</button>
             <input type="file" id="file" accept=".json,application/json" hidden>
         </div>
-        <h2>Images <button data-copy="image" title="Copy the selected image">Copy</button></h2>
+        <h2>Images <button data-copy="image" title="Copy the selected image">Copy</button>
+            <button id="loadImages" title="PNG files as images, by their names: name.png an image (a new one, or the one of that name), name_mask.png its mask">Load</button>
+            <button id="saveImage" title="Save the edited image's own pixels as a PNG (its mask, while the mask is painted), to load again">Save</button>
+            <input type="file" id="imageFiles" accept=".png,image/png" multiple hidden></h2>
         <ul id="images"></ul>
         <h2>Blocks <button data-copy="block" title="Copy the selected block and its images">Copy</button></h2>
         <ul id="blocks"></ul>

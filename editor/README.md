@@ -16,6 +16,11 @@ itself.
   but not used: the image shows its own pixels; turned on again, it's back as it was (saved with `"off": true`).
 - **Lists:** images, blocks, plants. Copy copies the selected one as `name_copy` (`NAME_COPY`); a block's or plant's
   images are copied with it, so the copy is edited apart.
+- **Single images:** the images list's Load takes PNG files by their names: `name.png` replaces the pixels of the
+  image of that name (undoable) or is a new image, `name_mask.png` the mask of a masked image `name`; of the image's
+  size (a new one 16 × 16, `TEXTURE_SIZE`). Its Save downloads the edited image's own pixels (`name.png`; its mask
+  while the mask is painted, `name_mask.png`), so it loads back the same; the tools' save PNG is the image as it
+  looks.
 - **The selected one:** its name (editable: an image's users follow), Delete (an image only when nothing uses it). An
   image: its mask, on or off, and the base under it. A block: one image on all faces, or top, sides and bottom apart, its model
   (cube or liquid); the face edited and its image. A cube can have a cutout version: textures with holes (transparent
