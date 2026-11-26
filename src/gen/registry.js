@@ -6,11 +6,11 @@ import { GENERATOR_NAMES } from "./generatorNames.js";
 import { TreeGalleryGenerator } from "./trees/treeGallery.js";
 
 const ChunkGeneratorRegistry = {
-    "default": NoiseChunkGenerator,
+    "climate": ClimateGenerator,
+    "noise": NoiseChunkGenerator,
     "test": TestGenerator,
     "trees": TreeGalleryGenerator,
-    "flat": FlatGenerator,
-    "climate": ClimateGenerator
+    "flat": FlatGenerator
 }
 
 Object.freeze(ChunkGeneratorRegistry);

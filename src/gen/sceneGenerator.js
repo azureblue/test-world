@@ -30,7 +30,7 @@ export class SceneGenerator extends ChunkGenerator {
     }
 
     /**
-     * @param {string} baseName a generator of the registry ("flat", "default", ...)
+     * @param {string} baseName a generator of the registry ("flat", "noise", ...)
      * @param {number} seed the world's seed (the one world(seed) gets)
      * @returns {Promise<SceneGenerator>}
      */

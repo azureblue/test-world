@@ -9,7 +9,7 @@ import { WorkerConnection, WorkerServer } from "./worker.js";
 
 const params = new URL(self.location.href).searchParams;
 const workerId = params.get("workerId");
-const generatorName = params.get("gen") ?? "default";
+const generatorName = params.get("gen") ?? "climate";
 const seed = Number(params.get("seed"));
 
 const logger = new Logger("chunk generator worker " + workerId);

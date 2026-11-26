@@ -4,7 +4,7 @@
  * in {@link CONVERSIONS}; changes that don't touch the saved form (new blocks, new rules, a different generator) need
  * none. Data newer than this isn't loaded.
  */
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 
 /**
  * A conversion from one version to the next, of a world record and of a chunk's palette, in place.
@@ -18,7 +18,10 @@ export const FORMAT_VERSION = 1;
  * { world: () => {}, palette: p => p.forEach(e => { if (e[0] === "OLD") e[0] = "NEW"; }) }
  * @type {Conversion[]}
  */
-const CONVERSIONS = [];
+const CONVERSIONS = [
+    // 1 -> 2: the generator "default" renamed "noise" (climate became the default)
+    { world: w => { if (w.generator === "default") w.generator = "noise"; }, palette: () => {} },
+];
 
 if (CONVERSIONS.length !== FORMAT_VERSION - 1)
     throw new Error(`save/format.js: ${CONVERSIONS.length} conversions for format version ${FORMAT_VERSION}`);

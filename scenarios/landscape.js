@@ -4,7 +4,7 @@ import { SceneGenerator } from "../src/gen/sceneGenerator.js";
 export const settings = { "world.renderDistance": 5 };
 
 export async function world(seed) {
-    return SceneGenerator.over("default", seed);
+    return SceneGenerator.over("noise", seed);
 }
 
 /** @param {import("./testGame.js").TestGame} game */

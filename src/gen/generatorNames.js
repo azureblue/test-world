@@ -3,4 +3,4 @@
  * their WebAssembly when imported, which the page doesn't need for a list (the world menu). The registry checks that
  * this list matches it.
  */
-export const GENERATOR_NAMES = Object.freeze(["default", "test", "trees", "flat", "climate"]);
+export const GENERATOR_NAMES = Object.freeze(["climate", "noise", "test", "trees", "flat"]);
