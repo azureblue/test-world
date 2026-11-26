@@ -24,6 +24,9 @@
         { "name": "tree_leaves_cutout", "src": "tree_leaves_t" },
         { "name": "spruce_leaves_cutout", "src": "t:tree_leaves_cutout", "ops": [{ "name": "hsl", "hue": 25, "saturation": 0.7, "lightness": 0.75 }] },
         { "name": "birch_leaves_cutout", "src": "t:tree_leaves_cutout", "ops": [{ "name": "hsl", "hue": 0, "saturation": 0.7, "lightness": 1.0 }] },
+        { "name": "planks", "src": "planks" },
+        { "name": "spruce_planks", "src": "t:planks", "ops": [{ "name": "hsl", "hue": 0, "saturation": 0.80, "lightness": 0.70 }] },
+        { "name": "birch_planks", "src": "t:planks", "ops": [{ "name": "hsl", "hue": 0, "saturation": 0.7, "lightness": 1.2 }] },
         { "name": "lamp", "src": "t:sand", "ops": [{ "name": "multiply", "color": "#ffe9a0", "factor": 1.3 }] }
     ],
     "blocks": [
@@ -43,6 +46,9 @@
         { "id": 19, "name": "SPRUCE_LEAVES", "model": "cube", "textures": "spruce_leaves", "cutout": "spruce_leaves_cutout" },
         { "id": 20, "name": "BIRCH_TRUNK", "model": "cube", "textures": { "top": "birch_trunk_top", "sides": "birch_trunk", "bottom": "birch_trunk_top" } },
         { "id": 21, "name": "BIRCH_LEAVES", "model": "cube", "textures": "birch_leaves", "cutout": "birch_leaves_cutout" },
+        { "id": 30, "name": "PLANKS", "model": "cube", "textures": "planks" },
+        { "id": 31, "name": "BIRCH_PLANKS", "model": "cube", "textures": "birch_planks" },
+        { "id": 32, "name": "SPRUCE_PLANKS", "model": "cube", "textures": "spruce_planks" },
         { "id": 50, "name": "SNOW", "model": "cube", "textures": "snow" },
         { "id": 128, "name": "LAMP", "model": "cube", "textures": "lamp", "light": 15 },
         { "id": 255, "name": "CHUNK_EDGE", "model": "none" }
