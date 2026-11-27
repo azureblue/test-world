@@ -15,7 +15,7 @@ export class Block {
     /**
      * @param {number} id
      * @param {string} name
-     * @param {string} model "none", "cube" (a solid cube), "liquid", "x_quads" (plants) or "slab" (a shaped block,
+     * @param {string} model "none", "cube" (a solid cube), "liquid", "x_quads" (plants), "slab" or "stairs" (shaped blocks,
      *   docs/proposals/shaped-blocks.md)
      * @param {number[]} textureIds texture layers by face: up, front, left, back, right, down (the mesher's Direction)
      * @param {number[] | null} cutoutTextureIds a cube's textures with holes (alpha 0), by face, used instead with
@@ -97,14 +97,20 @@ const MODEL_BITS = {
     cube: 1 << SOLID_CUBE_BIT,
     liquid: 1 << LIQUID_BIT,
     x_quads: 1 << X_QUADS,
-    slab: 1 << SHAPED_BIT
+    slab: 1 << SHAPED_BIT,
+    stairs: 1 << SHAPED_BIT
 };
 
 /**
  * Shaped blocks' shapes (docs/proposals/shaped-blocks.md): the index in a block value's shape bits. A shape is the
  * octants (half blocks) of the cell it fills, octant ox | oy << 1 | oz << 2: SHAPE_OCTANTS by index.
  */
-export const SHAPES = Object.freeze({ SLAB_BOTTOM: 0, SLAB_TOP: 1, SLAB_X0: 2, SLAB_X1: 3, SLAB_Y0: 4, SLAB_Y1: 5 });
+export const SHAPES = Object.freeze({
+    SLAB_BOTTOM: 0, SLAB_TOP: 1, SLAB_X0: 2, SLAB_X1: 3, SLAB_Y0: 4, SLAB_Y1: 5,
+    // stairs rising towards the low or the high x, y (their upper step there), upright or upside down
+    STAIRS_X0: 6, STAIRS_X1: 7, STAIRS_Y0: 8, STAIRS_Y1: 9,
+    STAIRS_X0_DOWN: 10, STAIRS_X1_DOWN: 11, STAIRS_Y0_DOWN: 12, STAIRS_Y1_DOWN: 13
+});
 /** shapes are below this: 5 bits (MAX_SHAPES in mesh/cpp/blocks.hpp) */
 export const MAX_SHAPES = 32;
 /** the octants of each shape, by index (the meshers get them in their block table) */
@@ -116,6 +122,17 @@ SHAPE_OCTANTS[SHAPES.SLAB_X0] = 0b0101_0101;
 SHAPE_OCTANTS[SHAPES.SLAB_X1] = 0b1010_1010;
 SHAPE_OCTANTS[SHAPES.SLAB_Y0] = 0b0011_0011;
 SHAPE_OCTANTS[SHAPES.SLAB_Y1] = 0b1100_1100;
+// stairs: a slab and the half of the other slab towards their side (upright: the bottom slab, the top one's half)
+for (const [i, half] of [SHAPES.SLAB_X0, SHAPES.SLAB_X1, SHAPES.SLAB_Y0, SHAPES.SLAB_Y1].entries()) {
+    const side = SHAPE_OCTANTS[half];
+    SHAPE_OCTANTS[SHAPES.STAIRS_X0 + i] = SHAPE_OCTANTS[SHAPES.SLAB_BOTTOM] | (side & SHAPE_OCTANTS[SHAPES.SLAB_TOP]);
+    SHAPE_OCTANTS[SHAPES.STAIRS_X0_DOWN + i] = SHAPE_OCTANTS[SHAPES.SLAB_TOP] | (side & SHAPE_OCTANTS[SHAPES.SLAB_BOTTOM]);
+}
+/** stairs by the axis they rise along (x, y), its side (low, high), then upright or upside down */
+export const STAIRS_SHAPES = Object.freeze([
+    [[SHAPES.STAIRS_X0, SHAPES.STAIRS_X0_DOWN], [SHAPES.STAIRS_X1, SHAPES.STAIRS_X1_DOWN]],
+    [[SHAPES.STAIRS_Y0, SHAPES.STAIRS_Y0_DOWN], [SHAPES.STAIRS_Y1, SHAPES.STAIRS_Y1_DOWN]]]);
+
 /** the slabs (halves of a cell) by axis (x, y, z), then side (low, high) */
 export const HALF_SHAPES = Object.freeze([
     [SHAPES.SLAB_X0, SHAPES.SLAB_X1], [SHAPES.SLAB_Y0, SHAPES.SLAB_Y1], [SHAPES.SLAB_BOTTOM, SHAPES.SLAB_TOP]]);

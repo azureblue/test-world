@@ -1,6 +1,7 @@
 import {
     BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, blockOctants, FULL_OCTANTS, flooded, getBlockById, HALF_SHAPES, isFlowing,
-    isLiquid, isShaped, isXQuads, octantsBox, removed, shapeOfOctants, WATER_SURFACE_LEVEL, withHeight, withShape
+    isLiquid, isShaped, isXQuads, octantsBox, removed, shapeOfOctants, STAIRS_SHAPES, WATER_SURFACE_LEVEL, withHeight,
+    withShape
 } from "./blocks.js";
 import { ItemBar } from "./itemBar.js";
 import { Player } from "./player.js";
@@ -14,7 +15,7 @@ import { World } from "./world/world.js";
  * of the cell, by where on the face it's aimed at (slabShapeAt): the middle, the half against the face (on a top face
  * the bottom half, on a side a vertical slab against it); near an edge, the half towards it. Onto a slab of the same
  * kind (its inner face looked at, or in the cell the new one goes to) it adds the missing half, the two making the full
- * block.
+ * block. Stairs rise away from the player (stairsShapeAt), upside down placed on a bottom face or a side's upper half.
  */
 export class BlockInteraction {
     #world;
@@ -74,7 +75,14 @@ export class BlockInteraction {
         if (placed === BLOCK_IDS.EMPTY)
             return; // an empty slot
         if (isShaped(placed)) {
-            this.#placeSlab(t, px, py, pz, placed);
+            if (getBlockById(placed).model === "stairs") {
+                const hitZ = this.#eye.z + this.#direction.z * t.t;
+                const block = withShape(placed, stairsShapeAt(this.#direction, t.nz === -1 || (t.nz === 0 && hitZ - Math.floor(hitZ) >= 0.5)));
+                if (this.#fitsPlayer(px, py, pz, octantsBox(blockOctants(block))))
+                    world.setBlock(px, py, pz, block);
+            } else {
+                this.#placeSlab(t, px, py, pz, placed);
+            }
             return;
         }
         if (!this.#fitsPlayer(px, py, pz))
@@ -164,4 +172,17 @@ export function slabShapeAt(normal, at) {
         }
     }
     return HALF_SHAPES[half[0]][half[1]];
+}
+
+/**
+ * The stairs placed by a player looking in a direction: rising away from it, along the horizontal axis it looks along
+ * the most.
+ * @param {{x: number, y: number}} direction the look direction
+ * @param {boolean} upsideDown
+ * @returns {number} a value of SHAPES (STAIRS_SHAPES)
+ */
+export function stairsShapeAt(direction, upsideDown) {
+    const axis = Math.abs(direction.x) >= Math.abs(direction.y) ? 0 : 1;
+    const side = (axis === 0 ? direction.x : direction.y) > 0 ? 1 : 0;
+    return STAIRS_SHAPES[axis][side][upsideDown ? 1 : 0];
 }

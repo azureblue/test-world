@@ -1,4 +1,4 @@
-import { BLOCK_IDS, blockOctants, getBlockById, isLiquid, isShaped, isXQuads, octantsBox } from "./blocks.js";
+import { BLOCK_IDS, blockOctants, getBlockById, isLiquid, isShaped, isXQuads, SHAPES, withShape } from "./blocks.js";
 
 const ICON_SIZE = 48;
 /** a drag this close to the bar (pixels) drops onto its nearest slot */
@@ -9,7 +9,7 @@ export const ITEM_BAR_SLOTS = 10;
 /**
  * The bar of blocks at the bottom of the screen: one slot is selected (mouse wheel, number keys) and its block is the
  * one placed; a slot can be empty. Icons are drawn from the block textures: a small isometric cube from the top and
- * side textures (as high as the block: a slab's half), a flat tile for plants.
+ * side textures (a shaped block's octants: a slab's half, stairs), a flat tile for plants.
  *
  * While editable (the inventory open) a slot is selected by a click, and the slots take blocks dragged onto them or
  * near (the nearest slot, lit): from the inventory, or another slot (the two swap); a slot dragged away from the bar
@@ -245,35 +245,46 @@ export function drawIcon(block, layers, tileSize) {
         canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(layer.data), tileSize, tileSize), 0, 0);
         return canvas;
     };
-    // part: the texture's lower part drawn, that much of the face's height (a slab's side)
-    const face = (texId, a, b, c, d, e, f, shade, part = 1) => {
-        const height = tileSize * part;
-        ctx.setTransform(a / tileSize, b / tileSize, c / tileSize, d / tileSize, e, f);
-        ctx.drawImage(image(texId), 0, tileSize - height, tileSize, height, 0, 0, tileSize, height);
+    // a parallelogram from (ox, oy) along u and v showing the part of the texture from (s0, t0) to (s1, t1) (0..1)
+    const face = (texId, ox, oy, ux, uy, vx, vy, shade, [s0, t0, s1, t1] = [0, 0, 1, 1]) => {
+        ctx.setTransform(ux / tileSize, uy / tileSize, vx / tileSize, vy / tileSize, ox, oy);
+        ctx.drawImage(image(texId), s0 * tileSize, t0 * tileSize, (s1 - s0) * tileSize, (t1 - t0) * tileSize, 0, 0, tileSize, tileSize);
         if (shade > 0) {
             ctx.fillStyle = `rgba(0, 0, 0, ${shade})`;
-            ctx.fillRect(0, 0, tileSize, height);
+            ctx.fillRect(0, 0, tileSize, tileSize);
         }
     };
 
     if (isXQuads(block)) {
         // plants: the flat sprite
-        const pad = ICON_SIZE * 0.1;
-        face(textures[1], ICON_SIZE - 2 * pad, 0, 0, ICON_SIZE - 2 * pad, pad, pad, 0);
+        const pad = ICON_SIZE * 0.1, size = ICON_SIZE - 2 * pad;
+        face(textures[1], pad, pad, size, 0, 0, size, 0);
         return canvas;
     }
-    // an isometric cube: half width h, the top a rhombus h/2 high, the sides h high; a shaped block's is as high as its
-    // box, the top lowered by the rest
-    const h = ICON_SIZE * 0.45, q = h / 2, cx = ICON_SIZE / 2;
-    const part = isShaped(block) ? octantsBox(blockOctants(block))[5] : 1;
-    const top = (ICON_SIZE - 2 * q - h) / 2 + h * (1 - part);
+    // an isometric cube: half width h, the top a rhombus h/2 high, the sides h high; a point of it (x towards the back
+    // corner, y towards the front one, z up; 0..1) on the canvas
+    const h = ICON_SIZE * 0.45, q = h / 2, cx = ICON_SIZE / 2, top = (ICON_SIZE - 2 * q - h) / 2;
+    const at = (x, y, z) => [cx - h + (x + y) * h, top + q + (y - x) * q + (1 - z) * h];
     if (isLiquid(block))
         ctx.globalAlpha = 0.85;
-    // top: from the left corner, u towards the back corner, v towards the front corner
-    face(textures[0], h, -q, h, q, cx - h, top + q, 0);
-    // left side: from the left corner, u towards the front corner, v down
-    face(textures[1], h, q, 0, h, cx - h, top + q, 0.25, part);
-    // right side: from the front corner, u towards the right corner, v down
-    face(textures[4], h, -q, 0, h, cx, top + 2 * q, 0.45, part);
+    // a box of the cube from (x, y, z), size s: the top (u along x, v along y), the left side (u along y, v down), the
+    // right side (u along x, v down), each showing its part of its texture
+    const box = (x, y, z, s) => {
+        face(textures[0], ...at(x, y, z + s), s * h, -s * q, s * h, s * q, 0, [x, y, x + s, y + s]);
+        face(textures[1], ...at(x, y, z + s), s * h, s * q, 0, s * h, 0.25, [y, 1 - z - s, y + s, 1 - z]);
+        face(textures[4], ...at(x, y + s, z + s), s * h, -s * q, 0, s * h, 0.45, [x, 1 - z - s, x + s, 1 - z]);
+    };
+    if (!isShaped(block)) {
+        box(0, 0, 0, 1);
+        return canvas;
+    }
+    // a shaped block by its octants, the far ones first (the back, high x; the front, high y, and the top nearer); stairs
+    // rising towards the back
+    const shape = getBlockById(block).model === "stairs" ? withShape(block, SHAPES.STAIRS_X1) : block;
+    const octants = [0, 1, 2, 3, 4, 5, 6, 7].filter(o => blockOctants(shape) >> o & 1)
+        .map(o => [(o & 1) / 2, (o >> 1 & 1) / 2, (o >> 2 & 1) / 2])
+        .sort((a, b) => (a[1] + a[2] - a[0]) - (b[1] + b[2] - b[0]));
+    for (const [x, y, z] of octants)
+        box(x, y, z, 0.5);
     return canvas;
 }

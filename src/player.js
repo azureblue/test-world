@@ -510,8 +510,8 @@ export class Player {
 
     /**
      * The ledge a move along x or y meets: the move stopped (after `distance`), walk.stepHeight higher it gets further,
-     * and down from there it lands on something with room for the body (2 skins ahead: stopped skin before the ledge,
-     * the box isn't over it yet), `rise` above the feet; its top at most walk.stepHeight over the ground at its foot (a
+     * and down from just past where it stopped it lands on something with room for the body (2 skins ahead: stopped
+     * skin before the ledge, the box isn't over it yet), `rise` above the feet; its top at most walk.stepHeight over the ground at its foot (a
      * step, not a wall beyond a gap). Null if none. The box stays where it is.
      * @returns {{rise: number, distance: number} | null}
      */
@@ -529,7 +529,8 @@ export class Player {
             const up = this.z - z;
             this.#moveAxis(axis, delta);
             const further = Math.sign(delta) * ((axis === 0 ? this.x : this.y) - stoppedAt) >= 0;
-            this.#shift(axis, Math.sign(delta) * 2 * this.#settings.skin);
+            // down just past the edge (not as far as the raised move: a step half a block deep, the next one beyond)
+            this.#shift(axis, stoppedAt + Math.sign(delta) * 2 * this.#settings.skin - (axis === 0 ? this.x : this.y));
             this.#moveAxis(2, -up);
             // on the ledge there's room for the body (not a wall)
             if (further && !this.#overlapsBlocks() && this.z - z > 1e-9 && foot !== null && this.z - foot <= stepHeight + 1e-9)

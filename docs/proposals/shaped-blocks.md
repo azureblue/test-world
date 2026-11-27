@@ -39,7 +39,7 @@ block's saved state (`blockState`), so no save format change: older saves have n
 
 ### What it touches
 
-- **blocks.json**: model `"slab"` (later `"stairs"`), the material's textures, `"full"`: the block two slabs make.
+- **blocks.json**: model `"slab"` or `"stairs"`, the material's textures; a slab's `"full"`: the block two make.
 - **Mesher**: shaped blocks aren't solid cubes: the greedy mesher and the face culling stay as they are, the faces
   next to a shaped block are drawn. A shaped block's faces are drawn by quarters of a block face (an octant's face),
   merged within their plane (a slab's top is one quad), into the solid output: the same shader. The solid vertex gets
@@ -75,21 +75,23 @@ block's saved state (`blockState`), so no save format change: older saves have n
     it); within a quarter block of an edge, the half towards the nearest edge (a side's lower band: a bottom slab).
     Onto a slab of the same kind (its inner face, or in the cell the new one goes to), its missing half (the full
     block);
-  - stairs: facing from the player's yaw, upside down when the upper half is clicked; corner stairs from the
-    neighbouring stairs.
-- **Smaller**: the block outline (the shape's box), particles collide with octants, the inventory icon draws the shape,
-  water treats shaped blocks as walls.
+  - stairs (`stairsShapeAt`): rising away from the player, along the horizontal axis it looks along the most;
+    upside down placed on a bottom face or a side's upper half. Corner stairs from the neighbouring stairs: later.
+- **Smaller**: the block outline (the shape's box), particles collide with octants, the inventory icon draws the shape
+  by octants (stairs rising to the back), water treats shaped blocks as walls.
 
-Vertical slabs (`SLAB_X0`, `SLAB_X1`, `SLAB_Y0`, `SLAB_Y1`) needed only their octants and the placement: the meshers,
-collision, light and the ray cast take any shape. A seam can still show where two partial faces meet with a merged
-rectangle spanning an edge the other has a corner in the middle of (odd mixes of the shapes; not in walls, floors or
-ceilings of them): the edge blend only knows whole faces beside.
+Vertical slabs (`SLAB_X0`, `SLAB_X1`, `SLAB_Y0`, `SLAB_Y1`) and stairs (`STAIRS_X0` .. `STAIRS_Y1_DOWN`) needed only
+their octants and the placement: the meshers, collision, light and the ray cast take any shape. A stair's side is an L
+of quarters, a row and a quarter: the quarter's inner corner, in the middle of the row's edge, gets the row's blend
+there. A seam can still show where partial faces of two cells meet, a merged rectangle spanning an edge the other has
+a corner in the middle of (odd mixes of the shapes; not in walls, floors, ceilings or staircases of them): the edge
+blend across cells only knows whole faces.
 
 ## Order of work
 
 1. Slabs: the bits, the meshers, collision with step up, the ray cast, placement and merging, outline, icon; vertical
    slabs.
-2. Stairs: the shapes, placement by facing; the meshers, collision and the ray cast need nothing new.
+2. Stairs: the shapes, placement by facing; the meshers, collision and the ray cast need nothing new. Done.
 3. Corner stairs.
 
 AO and light with shaped blocks are done (after step 1).

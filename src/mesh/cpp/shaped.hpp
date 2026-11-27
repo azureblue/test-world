@@ -22,7 +22,8 @@ struct rect {
 };
 
 // The rectangles covering the quarters in a plane (bit qa | qb << 1): all 4, rows along a, columns along b, the rest
-// one by one.
+// one by one. Three (an L, a stair's side): a row or a column and a quarter, the quarter's inner corner in the middle
+// of the other's edge (see encode_octants).
 static inline uint quarter_rects(uint quarters, rect out[4]) {
     if (quarters == 0b1111) {
         out[0] = {0, 2, 0, 2};
@@ -181,6 +182,45 @@ static inline void encode_octants(uint64* __restrict& out, const array_3d<CHUNK_
                 continue;
             rect rects[4];
             const uint count = quarter_rects(quarters, rects);
+            // the rectangles' corners: their shading, where on the cell's face (a, b: half blocks, 0..2)
+            vertex_shading shading[4][4];
+            int corner_a[4][4], corner_b[4][4];
+            for (uint i = 0; i < count; i++) {
+                int local[3], size[3];
+                local[n] = layer;
+                size[n] = 1;
+                local[a] = rects[i].a;
+                size[a] = rects[i].a_size;
+                local[b] = rects[i].b;
+                size[b] = rects[i].b_size;
+                const int input_pos[3] = {input_cell[0] + local[0], input_cell[1] + local[1], input_cell[2] + local[2]};
+                for_face_vertices(dir, input_pos, size, [&](uint k, const int vertex[3], const int w[3], const int hh[3]) {
+                    shading[i][k] = shade_vertex(data, vertex, n, NORMAL_POSITIVE[d], w, hh);
+                    if (layer == outer)
+                        shading[i][k] = outer_vertex(data, own, shading[i][k], vertex, input_cell, d, octants == 0xff);
+                    corner_a[i][k] = vertex[a] - input_cell[a];
+                    corner_b[i][k] = vertex[b] - input_cell[b];
+                });
+            }
+            // a corner in the middle of another rectangle's edge (an L's inner corner): that edge's blend of its ends,
+            // else a T-junction (a seam)
+            for (uint i = 0; i < count; i++)
+                for (uint k = 0; k < 4; k++)
+                    for (uint j = 0; j < count; j++) {
+                        if (j == i)
+                            continue;
+                        // j's edges: its corners in order around it, each with the next
+                        for (uint e = 0; e < 4; e++) {
+                            const uint e1 = (e + 1) % 4;
+                            const int pa = corner_a[i][k], pb = corner_b[i][k];
+                            const bool on_a_edge = corner_b[j][e] == pb && corner_b[j][e1] == pb &&
+                                                   (pa - corner_a[j][e]) * (pa - corner_a[j][e1]) < 0;
+                            const bool on_b_edge = corner_a[j][e] == pa && corner_a[j][e1] == pa &&
+                                                   (pb - corner_b[j][e]) * (pb - corner_b[j][e1]) < 0;
+                            if (on_a_edge || on_b_edge)
+                                shading[i][k] = average(shading[j][e], shading[j][e1]);
+                        }
+                    }
             for (uint i = 0; i < count; i++) {
                 uint pos[3], size[3], local[3];
                 local[n] = layer;
@@ -198,16 +238,7 @@ static inline void encode_octants(uint64* __restrict& out, const array_3d<CHUNK_
                     u += from_cell_corner * quad_encoding::MERGE_VECTOR_W[d][k];
                     v += from_cell_corner * quad_encoding::MERGE_VECTOR_H[d][k];
                 }
-                // the corners' AO and light, in the input
-                const int input_pos[3] = {input_cell[0] + static_cast<int>(local[0]), input_cell[1] + static_cast<int>(local[1]), input_cell[2] + static_cast<int>(local[2])};
-                const int input_size[3] = {static_cast<int>(size[0]), static_cast<int>(size[1]), static_cast<int>(size[2])};
-                vertex_shading shading[4];
-                for_face_vertices(dir, input_pos, input_size, [&](uint k, const int vertex[3], const int w[3], const int hh[3]) {
-                    shading[k] = shade_vertex(data, vertex, n, NORMAL_POSITIVE[d], w, hh);
-                    if (layer == outer)
-                        shading[k] = outer_vertex(data, own, shading[k], vertex, input_cell, d, octants == 0xff);
-                });
-                quad_encoder::encode_shaped_face(out, dir, pos, size, static_cast<uint>(u), static_cast<uint>(v), textures[d], shading);
+                quad_encoder::encode_shaped_face(out, dir, pos, size, static_cast<uint>(u), static_cast<uint>(v), textures[d], shading[i]);
                 face(dir);
             }
         }
