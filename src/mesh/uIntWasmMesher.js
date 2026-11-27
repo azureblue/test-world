@@ -1,4 +1,4 @@
-import { MAX_BLOCK_ID, MAX_TEXTURES, meshTextureTable } from "../blocks.js";
+import { MAX_BLOCK_ID, MAX_TEXTURES, meshTextureTable, SHAPE_OCTANTS } from "../blocks.js";
 import { CHUNK_EXT_DATA_SIZE, ChunkDataExt } from "../chunk/extChunk.js";
 import { copyData, Resources } from "../utils.js";
 import { WASM } from "../wasm.js";
@@ -40,7 +40,7 @@ const INITIAL_PAGES = WASM.bytesToPages(TOTAL_BYTES);
 /**
  * Writes the blocks' face textures (src/blocks.json) into a mesher's memory, where its block_table() points
  * (block_table_t in mesh/cpp/blocks.hpp: the water texture, the cutout flag, MAX_BLOCK_ID * 6 face textures, as many
- * opaque ones, then a byte per texture: cutout or not).
+ * opaque ones, then a byte per texture: cutout or not, a byte per shape: its octants).
  * @param {WebAssembly.Exports} exports
  * @param {WebAssembly.Memory} mem
  * @param {boolean} cutout whether blocks with cutout textures use them (meshTextureTable)
@@ -57,6 +57,7 @@ function writeTextureTable(exports, mem, cutout, cutoutBuried) {
     table.set(faces, 2);
     table.set(opaqueFaces, 2 + faces.length);
     new Uint8Array(mem.buffer, base + table.byteLength, MAX_TEXTURES).set(cutoutTextures);
+    new Uint8Array(mem.buffer, base + table.byteLength + MAX_TEXTURES, SHAPE_OCTANTS.length).set(SHAPE_OCTANTS);
 }
 
 export class UIntExtWasmMesher extends UIntMesher {

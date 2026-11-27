@@ -1,4 +1,4 @@
-import { BLOCK_IDS, getBlockById, isLiquid, isXQuads } from "./blocks.js";
+import { BLOCK_IDS, blockOctants, getBlockById, isLiquid, isShaped, isXQuads, octantsBox } from "./blocks.js";
 
 const ICON_SIZE = 48;
 /** a drag this close to the bar (pixels) drops onto its nearest slot */
@@ -9,7 +9,7 @@ export const ITEM_BAR_SLOTS = 10;
 /**
  * The bar of blocks at the bottom of the screen: one slot is selected (mouse wheel, number keys) and its block is the
  * one placed; a slot can be empty. Icons are drawn from the block textures: a small isometric cube from the top and
- * side textures, a flat tile for plants.
+ * side textures (as high as the block: a slab's half), a flat tile for plants.
  *
  * While editable (the inventory open) a slot is selected by a click, and the slots take blocks dragged onto them or
  * near (the nearest slot, lit): from the inventory, or another slot (the two swap); a slot dragged away from the bar
@@ -245,12 +245,14 @@ export function drawIcon(block, layers, tileSize) {
         canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(layer.data), tileSize, tileSize), 0, 0);
         return canvas;
     };
-    const face = (texId, a, b, c, d, e, f, shade) => {
+    // part: the texture's lower part drawn, that much of the face's height (a slab's side)
+    const face = (texId, a, b, c, d, e, f, shade, part = 1) => {
+        const height = tileSize * part;
         ctx.setTransform(a / tileSize, b / tileSize, c / tileSize, d / tileSize, e, f);
-        ctx.drawImage(image(texId), 0, 0);
+        ctx.drawImage(image(texId), 0, tileSize - height, tileSize, height, 0, 0, tileSize, height);
         if (shade > 0) {
             ctx.fillStyle = `rgba(0, 0, 0, ${shade})`;
-            ctx.fillRect(0, 0, tileSize, tileSize);
+            ctx.fillRect(0, 0, tileSize, height);
         }
     };
 
@@ -260,15 +262,18 @@ export function drawIcon(block, layers, tileSize) {
         face(textures[1], ICON_SIZE - 2 * pad, 0, 0, ICON_SIZE - 2 * pad, pad, pad, 0);
         return canvas;
     }
-    // an isometric cube: half width h, the top a rhombus h/2 high, the sides h high
-    const h = ICON_SIZE * 0.45, q = h / 2, cx = ICON_SIZE / 2, top = (ICON_SIZE - 2 * q - h) / 2;
+    // an isometric cube: half width h, the top a rhombus h/2 high, the sides h high; a shaped block's is as high as its
+    // box, the top lowered by the rest
+    const h = ICON_SIZE * 0.45, q = h / 2, cx = ICON_SIZE / 2;
+    const part = isShaped(block) ? octantsBox(blockOctants(block))[5] : 1;
+    const top = (ICON_SIZE - 2 * q - h) / 2 + h * (1 - part);
     if (isLiquid(block))
         ctx.globalAlpha = 0.85;
     // top: from the left corner, u towards the back corner, v towards the front corner
     face(textures[0], h, -q, h, q, cx - h, top + q, 0);
     // left side: from the left corner, u towards the front corner, v down
-    face(textures[1], h, q, 0, h, cx - h, top + q, 0.25);
+    face(textures[1], h, q, 0, h, cx - h, top + q, 0.25, part);
     // right side: from the front corner, u towards the right corner, v down
-    face(textures[4], h, -q, 0, h, cx, top + 2 * q, 0.45);
+    face(textures[4], h, -q, 0, h, cx, top + 2 * q, 0.45, part);
     return canvas;
 }

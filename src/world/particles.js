@@ -1,4 +1,4 @@
-import { getBlockById, isSolid } from "../blocks.js";
+import { fillsPoint, getBlockById } from "../blocks.js";
 import { Settings } from "../settings.js";
 
 // a particle's floats in Particles.data: first what the particle shader takes per instance (the drawn size shrinks at
@@ -95,7 +95,11 @@ export class Particles {
     update(dt, world) {
         const s = this.#s, d = this.data;
         dt = Math.min(dt, 0.05);
-        const solid = (x, y, z) => isSolid(world.blockAt(Math.floor(x), Math.floor(y), Math.floor(z)));
+        // solid blocks and shaped blocks' octants: collided with by half-block cells
+        const solid = (x, y, z) => {
+            const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+            return fillsPoint(world.blockAt(ix, iy, iz), x - ix, y - iy, z - iz);
+        };
         const at = [0, 0, 0];
         let i = 0;
         while (i < this.#count) {
@@ -107,7 +111,7 @@ export class Particles {
             }
             const r = d[o + SIZE] / 2;
             d[o + VZ] -= s.gravity * dt;
-            // one axis at a time: a move into a solid block stops on its face (the particle's half size away)
+            // one axis at a time: a move into a solid half cell stops on its face (the particle's half size away)
             let onGround = false;
             for (let a = 0; a < 3; a++) {
                 const v = d[o + VX + a];
@@ -118,7 +122,8 @@ export class Particles {
                 at[0] = d[o + X]; at[1] = d[o + Y]; at[2] = d[o + Z];
                 at[a] = edge;
                 if (solid(at[0], at[1], at[2])) {
-                    d[o + X + a] = v > 0 ? Math.floor(edge) - r - 1e-3 : Math.floor(edge) + 1 + r + 1e-3;
+                    const face = Math.floor(edge * 2) / 2;
+                    d[o + X + a] = v > 0 ? face - r - 1e-3 : face + 0.5 + r + 1e-3;
                     // a small bounce, none once slow
                     d[o + VX + a] = Math.abs(v) > 1.5 ? -v * s.bounce : 0;
                     if (a === 2 && v < 0)

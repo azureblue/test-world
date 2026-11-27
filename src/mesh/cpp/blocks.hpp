@@ -4,6 +4,8 @@
 constexpr uint MAX_BLOCK_ID = 1024;
 // texture layers are below this (MAX_TEXTURES in src/blocks.js): 8 bits in the solid vertices
 constexpr uint MAX_TEXTURES = 256;
+// shaped blocks' shapes are below this (MAX_SHAPES in src/blocks.js): 5 bits of the block
+constexpr uint MAX_SHAPES = 32;
 
 // the texture layers of the blocks' faces, from src/blocks.json: written by the JS side once after instantiation
 // (UIntExtWasmMesher, meshTextureTable in src/blocks.js), at the address the exported block_table() returns
@@ -20,6 +22,8 @@ struct block_table_t {
     uint opaque_faces[MAX_BLOCK_ID][6];
     // 1: a cutout texture: its faces go to the cutout output, drawn alpha tested
     uint8 cutout_textures[MAX_TEXTURES];
+    // the octants each shape fills (SHAPE_OCTANTS in src/blocks.js), octant ox | oy << 1 | oz << 2
+    uint8 shape_octants[MAX_SHAPES];
 };
 inline block_table_t block_table;
 
@@ -29,12 +33,22 @@ static inline bool is_solid(uint block) {
     return (block & 0x8000'0000u) != 0;
 }
 
-// a block's height in 1/8 of a block (water levels, later slabs): bits 24..26 of the block, 0 meaning full (8)
+// a block's height in 1/8 of a block (water levels): bits 24..26 of the block, 0 meaning full (8)
 constexpr uint BLOCK_HEIGHT_SHIFT = 24;
 constexpr uint BLOCK_HEIGHT_FULL = 8;
 
 static inline bool is_x_quads(uint block) {
     return (block >> 29) & 1;
+}
+
+// a shaped block (slabs, docs/proposals/shaped-blocks.md): bit 28, its shape in bits 23..27 (it has no water, the
+// shape shares the water's bits)
+static inline bool is_shaped(uint block) {
+    return (block >> 28) & 1;
+}
+
+static inline uint shape_octants(uint block) {
+    return block_table.shape_octants[(block >> 23) & (MAX_SHAPES - 1)];
 }
 
 static inline uint is_solid_01(uint block) {

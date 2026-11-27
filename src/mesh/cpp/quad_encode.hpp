@@ -14,9 +14,11 @@ inline_always constexpr static T encode_value(V value) {
 
 class quad_encoder {
    public:
-    // a vertex's position: x, y, z in 6 bits each (0..32), from bit 0
+    // a vertex's position: x, y, z in 6 bits each (0..32), from bit 0; half a block more per axis in bits 61..63 (the
+    // faces of shaped blocks)
     constexpr static uint POS_Y_SHIFT = 6;
     constexpr static uint POS_Z_SHIFT = 12;
+    constexpr static uint POS_HALF_SHIFT = 61;
 
     // a merged face (the main mesher): ao_shadows 2 bits per vertex, light 12 bits per vertex (encode_layer_light_bits)
     template <Direction DIR>
@@ -56,6 +58,33 @@ class quad_encoder {
         return encode_value<uint64, 0>(x) | encode_value<uint64, POS_Y_SHIFT>(y) | encode_value<uint64, POS_Z_SHIFT>(z);
     }
 
+    // A face of a shaped block's box (shaped.hpp), in half blocks: the box's corner and size (pos, size: x, y, z), the
+    // texture coordinates of the face's first corner (u, v), the light of the cell in front of it (its LIGHT_BITS);
+    // no AO.
+    static void encode_shaped_face(uint64* __restrict& out, Direction dir, const uint pos[3], const uint size[3], uint u, uint v, uint tex_id, uint light) {
+        using namespace quad_encoding;
+        uint corner[3], w[3], h[3];
+        uint w_len = 0, h_len = 0;
+        for (uint a = 0; a < 3; a++) {
+            corner[a] = pos[a] + VERTEX_OFFSETS[dir][a] * size[a];
+            w[a] = MERGE_VECTOR_W[dir][a] * static_cast<int>(size[a]);
+            h[a] = MERGE_VECTOR_H[dir][a] * static_cast<int>(size[a]);
+            w_len += size[a] * (MERGE_VECTOR_W[dir][a] != 0);
+            h_len += size[a] * (MERGE_VECTOR_H[dir][a] != 0);
+        }
+        // the light as the sum of 4 equal cells: no AO, the shader divides by 4
+        const uint64 base_bits = encode_tex_bits(tex_id) | encode_dir_bits(dir) | encode_light_bits(light * 4);
+        const auto vertex = [&](uint dw, uint dh) {
+            uint64 bits = base_bits | (static_cast<uint64>(u + dw * w_len) << 32) | (static_cast<uint64>(v + dh * h_len) << 39);
+            for (uint a = 0; a < 3; a++) {
+                const uint p = corner[a] + dw * w[a] + dh * h[a];
+                bits |= static_cast<uint64>(p >> 1) << (a * POS_Y_SHIFT) | static_cast<uint64>(p & 1) << (POS_HALF_SHIFT + a);
+            }
+            return bits;
+        };
+        encode(out, vertex(0, 0), vertex(1, 0), vertex(1, 1), vertex(0, 1), false);
+    }
+
     template <Direction DIR>
     inline_always static uint64 encode_base_bits(uint vx_x, uint vx_y, uint vx_z, uint tex_id) {
         return encode_pos_bits(vx_x, vx_y, vx_z) + pos_offset_bits<DIR> | encode_tex_bits(tex_id) | encode_dir_bits(DIR);
@@ -82,8 +111,9 @@ class quad_encoder {
     }
 
    private:
-    constexpr static uint64 MERGE_BIT_W = 1ull << 32;
-    constexpr static uint64 MERGE_BIT_H = 1ull << 39;
+    // texture coordinates are in half blocks (a shaped block's faces), 7 bits each from bit 32 and 39
+    constexpr static uint64 MERGE_BIT_W = 2ull << 32;
+    constexpr static uint64 MERGE_BIT_H = 2ull << 39;
 
     template <Direction DIR>
     inline constexpr static uint64 POS_OFFSET_W = encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_W[DIR][0]) + encode_value<uint64, POS_Y_SHIFT>(quad_encoding::MERGE_VECTOR_W[DIR][1]) + encode_value<uint64, POS_Z_SHIFT>(quad_encoding::MERGE_VECTOR_W[DIR][2]);

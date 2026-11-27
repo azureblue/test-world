@@ -1,4 +1,4 @@
-import { BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, isLiquid, isSolid, isXQuads } from "../blocks.js";
+import { BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, blockOctants, isLiquid, isShaped, isSolid, isXQuads } from "../blocks.js";
 import { Chunk, CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, CHUNK_SIZE_MASK } from "../chunk/chunk.js";
 import { FVec3 } from "../geom.js";
 import { MeshHandler } from "../mesh/mesh.js";
@@ -83,11 +83,12 @@ export class World {
      * @param {FVec3} pos 
      * @param {FVec3} dir 
      * @param {number} maxDist - Maximum ray distance
-     * Any non-empty block except water stops the ray (solid blocks, plants as full cubes, also plants in water); the
-     * starting cell stops it only if it's solid (standing in a plant's cell doesn't keep targeting the plant).
-     * @returns {{hit: boolean, x: number, y: number, z: number, block: number, nx: number, ny: number, nz: number} | null}
-     *   the hit block and the normal of the face the ray entered through
-     *   (pointing back towards the ray origin; all 0 when the origin itself is inside the block)
+     * Any non-empty block except water stops the ray (solid blocks, plants as full cubes, also plants in water; a
+     * shaped block where the ray hits one of its octants); the starting cell stops it only if it's solid (standing in a
+     * plant's cell doesn't keep targeting the plant).
+     * @returns {{hit: boolean, x: number, y: number, z: number, block: number, nx: number, ny: number, nz: number,
+     *   t: number} | null} the hit block, the normal of the face the ray entered through (pointing back towards the ray
+     *   origin; all 0 when the origin itself is inside the block) and how far along the ray it is
      */
     raycasti(pos, dir, maxDist = 5) {
         let x = Math.floor(pos.x);
@@ -123,9 +124,12 @@ export class World {
 
         while (t <= maxDist) {
             const block = this.blockAt(x, y, z);
-            const stops = first ? isSolid(block) : block !== BLOCK_IDS.EMPTY && (!isLiquid(block) || isXQuads(block));
-            if (stops) {
-                return { hit: true, x, y, z, block, nx, ny, nz };
+            if (!first && isShaped(block)) {
+                const hit = rayOctants(pos, dir, x, y, z, blockOctants(block));
+                if (hit !== null && hit.t <= maxDist)
+                    return { hit: true, x, y, z, block, nx: hit.nx, ny: hit.ny, nz: hit.nz, t: hit.t };
+            } else if (first ? isSolid(block) : block !== BLOCK_IDS.EMPTY && (!isLiquid(block) || isXQuads(block))) {
+                return { hit: true, x, y, z, block, nx, ny, nz, t };
             }
             first = false;
 
@@ -258,4 +262,44 @@ export class Position {
     get bz() {
         return this.iz & CHUNK_SIZE_MASK;
     }
+}
+
+/**
+ * Where a ray hits the first of a cell's octants (half-block boxes), if it does.
+ * @param {FVec3} pos
+ * @param {FVec3} dir
+ * @param {number} octants bit ox | oy << 1 | oz << 2 (blockOctants)
+ * @returns {{t: number, nx: number, ny: number, nz: number} | null} how far along the ray, and the normal of the face
+ *   it enters through
+ */
+function rayOctants(pos, dir, x, y, z, octants) {
+    const origin = [pos.x, pos.y, pos.z], d = [dir.x, dir.y, dir.z], cell = [x, y, z];
+    let best = null;
+    for (let o = 0; o < 8; o++) {
+        if (!(octants >> o & 1))
+            continue;
+        // the slab method: the ray is in the box between the last entry and the first exit over the axes
+        let enter = -Infinity, exit = Infinity, axis = -1;
+        for (let a = 0; a < 3; a++) {
+            const lo = cell[a] + (o >> a & 1) / 2, hi = lo + 0.5;
+            if (d[a] === 0) {
+                if (origin[a] < lo || origin[a] > hi)
+                    exit = -Infinity;
+                continue;
+            }
+            const t0 = (lo - origin[a]) / d[a], t1 = (hi - origin[a]) / d[a];
+            const near = Math.min(t0, t1), far = Math.max(t0, t1);
+            if (near > enter) {
+                enter = near;
+                axis = a;
+            }
+            exit = Math.min(exit, far);
+        }
+        if (axis < 0 || enter > exit || enter < 0 || (best !== null && enter >= best.t))
+            continue;
+        const n = [0, 0, 0];
+        n[axis] = -Math.sign(d[axis]);
+        best = { t: enter, nx: n[0], ny: n[1], nz: n[2] };
+    }
+    return best;
 }

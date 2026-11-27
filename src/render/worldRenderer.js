@@ -1,4 +1,4 @@
-import { opaqueTextureTable } from "../blocks.js";
+import { blockOctants, isShaped, octantsBox, opaqueTextureTable } from "../blocks.js";
 import { TEXTURE_SIZE } from "../blockTextures.js";
 import { Camera, FrustumCuller } from "../camera.js";
 import { Chunk, CHUNK_SIZE } from "../chunk/chunk.js";
@@ -341,7 +341,7 @@ export class WorldRenderer {
     /**
      * Draws a frame. The camera's position and direction are the frame's (camera.update() done).
      * @param {World} world
-     * @param {{x: number, y: number, z: number} | null} highlight the block to outline
+     * @param {{x: number, y: number, z: number, block: number} | null} highlight the block to outline
      * @param {boolean} sampleOverdraw with Settings.debug.overdraw: read back this frame's overdraw
      * @param {Particles} [particles] the block fragments to draw (updated for this frame)
      * @returns {FrameStats}
@@ -440,7 +440,9 @@ export class WorldRenderer {
         if (highlight !== null) {
             gl.useProgram(blockHighlight.program);
             gl.bindBuffer(gl.ARRAY_BUFFER, this.#highlightBuffer);
-            writeVoxelWireframe(this.#highlightVertices, highlight.x, highlight.y, highlight.z);
+            // a shaped block's box (a slab's half)
+            const box = isShaped(highlight.block) ? octantsBox(blockOctants(highlight.block)) : undefined;
+            writeVoxelWireframe(this.#highlightVertices, highlight.x, highlight.y, highlight.z, box);
             gl.bufferData(gl.ARRAY_BUFFER, this.#highlightVertices, gl.DYNAMIC_DRAW);
             gl.vertexAttribPointer(this.#locations.aInHighlight, 3, gl.FLOAT, false, 0, 0);
             gl.drawArrays(gl.LINES, 0, 24);

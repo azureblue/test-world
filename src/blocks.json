@@ -49,6 +49,10 @@
         { "id": 30, "name": "PLANKS", "model": "cube", "textures": "planks" },
         { "id": 31, "name": "BIRCH_PLANKS", "model": "cube", "textures": "birch_planks" },
         { "id": 32, "name": "SPRUCE_PLANKS", "model": "cube", "textures": "spruce_planks" },
+        { "id": 40, "name": "PLANKS_SLAB", "model": "slab", "textures": "planks", "full": "PLANKS" },
+        { "id": 41, "name": "BIRCH_PLANKS_SLAB", "model": "slab", "textures": "birch_planks", "full": "BIRCH_PLANKS" },
+        { "id": 42, "name": "SPRUCE_PLANKS_SLAB", "model": "slab", "textures": "spruce_planks", "full": "SPRUCE_PLANKS" },
+        { "id": 43, "name": "ROCK_SLAB", "model": "slab", "textures": "rock", "full": "ROCK" },
         { "id": 50, "name": "SNOW", "model": "cube", "textures": "snow" },
         { "id": 128, "name": "LAMP", "model": "cube", "textures": "lamp", "light": 15 },
         { "id": 255, "name": "CHUNK_EDGE", "model": "none" }

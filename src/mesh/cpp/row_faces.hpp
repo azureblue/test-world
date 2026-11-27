@@ -13,14 +13,14 @@
 //
 // Down, front and back faces use the rows below, at y - 1 and at y + 1; left and right faces use this row's mask
 // shifted by one bit (bit x then holds the block at x - 1, x + 1). Then only the blocks with a face to draw (and the
-// x-quads and water) are visited, from the lowest x up (blocks_to_visit).
+// x-quads, water and shaped blocks) are visited, from the lowest x up (blocks_to_visit).
 
 // the masks of all rows, bit x for the block at x (bits 0 and 33: the border)
 namespace row_masks {
 constexpr uint ROWS = CHUNK_SIZE_E * CHUNK_SIZE_E;
 constexpr uint SOLID_BIT = 0x8000'0000u;
-// x-quads and water (liquid)
-constexpr uint SPECIAL_BITS = (1u << 30) | (1u << 29);
+// x-quads, water (liquid) and shaped blocks
+constexpr uint SPECIAL_BITS = (1u << 30) | (1u << 29) | (1u << 28);
 
 // hides the faces next to it: solid and not cutout
 static uint64 hides[ROWS];
@@ -28,7 +28,7 @@ static uint64 hides[ROWS];
 static uint64 solid[ROWS];
 // a cube, drawn with faces (only inside the chunk: bits 1..32)
 static uint64 cubes[ROWS];
-// x-quads or water, drawn their own way (only inside the chunk)
+// x-quads, water or shaped blocks, drawn their own way (only inside the chunk)
 static uint64 specials[ROWS];
 
 inline_always static uint row_index(uint h, uint y) {
@@ -93,7 +93,7 @@ struct row_faces {
     uint64 cutout;
     // cutout cubes solid on all 6 sides: drawn opaque instead (see is_buried in common.hpp)
     uint64 buried;
-    // x-quads and water
+    // x-quads, water and shaped blocks
     uint64 specials;
 
     inline_always uint64 blocks_to_visit() const {

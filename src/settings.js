@@ -118,6 +118,10 @@ export const Settings = {
             // seconds; holding jump, the next jump starts at the earliest this long after the last one (a new press
             // jumps at once)
             jumpCooldown: 0.5,
+            // walking on the ground into a ledge this high (a slab's 0.5, with some to spare) the player hops onto it,
+            // stepClearance higher than the ledge at the top of the hop
+            stepHeight: 0.55,
+            stepClearance: 0.05,
             maxFallSpeed: 78
         },
         swim: {

@@ -9,8 +9,8 @@ face table; textures composed at load from one image per texture, colour ops for
 ## Done: step 1
 
 - `src/blocks.json`: textures by name (for now each one a tile of the atlas `images/textures.png`, `"tile"`: its
-  layer) and blocks with stable ids, names, a `model` (`none`, `cube`, `liquid`, `x_quads`) and face textures (one
-  name, or `top` / `sides` / `bottom`).
+  layer) and blocks with stable ids, names, a `model` (`none`, `cube`, `liquid`, `x_quads`, `slab`: see
+  [shaped blocks](shaped-blocks.md)) and face textures (one name, or `top` / `sides` / `bottom`).
 - `src/blocks.js` imports it as a JSON module and builds `BLOCK_IDS` (the id with the model's kind bits, the same
   values as before) and the blocks (`getBlockById`); a missing texture, an unknown model or an invalid or repeated id
   is an error when the module loads. Block ids are below `MAX_BLOCK_ID` (1024).

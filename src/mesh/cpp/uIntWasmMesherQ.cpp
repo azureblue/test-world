@@ -1,5 +1,6 @@
 #include "quad_encode.hpp"
 #include "row_faces.hpp"
+#include "shaped.hpp"
 
 extern "C"
     __attribute__((export_name("block_table"))) block_table_t*
@@ -16,8 +17,12 @@ extern "C"
 // The fast mesher: a quad per visible face (row_faces.hpp: the faces found 32 blocks at a time), each encoded as a
 // block-by-block loop would.
 
-// x-quads and water: block by block, as they're few
+// x-quads, water and shaped blocks: block by block, as they're few
 inline_always static void encode_special(face_buffers& buffers, const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y, uint block_data) {
+    if (is_shaped(block_data)) {
+        shaped::encode(buffers.mesh_solid_cur, data, h, x, y, block_data, [](Direction) {});
+        return;
+    }
     if (is_x_quads(block_data)) {
         const uint(&block_textures)[6] = block_table.faces[decode_block_id(block_data)];
         x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, x - 1, y - 1, h - 1, block_textures[1], block_data);

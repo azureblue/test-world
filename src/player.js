@@ -1,4 +1,4 @@
-import { BLOCK_HEIGHT_FULL, blockHeight, isLiquid, isSolid } from "./blocks.js";
+import { BLOCK_HEIGHT_FULL, blockHeight, blockOctants, isLiquid } from "./blocks.js";
 import { Settings } from "./settings.js";
 
 /** @typedef {import("./world/world.js").World} World */
@@ -17,7 +17,9 @@ export class PlayerInput {
 
 /**
  * The player body: a box (width x width x height) with the feet at the bottom centre, moved by simple physics and
- * collided with solid blocks (plants and water don't block). Positions are world coordinates: x, y on the ground, z
+ * collided with solid blocks and the octants of shaped ones (slabs; plants and water don't block): the collisions are
+ * with half-block cells, each filled or not. Walking on the ground into a ledge up to walk.stepHeight high (a slab) it
+ * hops onto it. Positions are world coordinates: x, y on the ground, z
  * up (the blocks' coordinates).
  *
  * Modes: "walk" with gravity and jumping, swimming when in water; "fly" moves freely, colliding with blocks unless
@@ -25,7 +27,7 @@ export class PlayerInput {
  * 1 / Settings.player.physicsRate, so it behaves the same at any tick rate. The position of the previous tick is kept
  * for drawing the camera between ticks.
  *
- * Collisions are resolved one axis at a time: a move along an axis checks only the block layers the box enters, so a
+ * Collisions are resolved one axis at a time: a move along an axis checks only the half-block layers the box enters, so a
  * box that ends up inside blocks (noclip, a block placed into it) can always move out. The box stays Settings.player.skin
  * away from the blocks it touches. Chunks that aren't loaded yet are solid (except with noclip).
  */
@@ -95,26 +97,28 @@ export class Player {
 
     /**
      * Whether a block cell intersects the body (for not placing blocks into the player).
+     * @param {number[]} [box] the part of the cell (x0, y0, z0, x1, y1, z1, 0..1: octantsBox), the whole by default
      */
-    intersectsBlock(ix, iy, iz) {
+    intersectsBlock(ix, iy, iz, box = [0, 0, 0, 1, 1, 1]) {
         const hw = this.#halfWidth;
-        return ix < this.x + hw && ix + 1 > this.x - hw &&
-            iy < this.y + hw && iy + 1 > this.y - hw &&
-            iz < this.z + this.#settings.height && iz + 1 > this.z;
+        return ix + box[0] < this.x + hw && ix + box[3] > this.x - hw &&
+            iy + box[1] < this.y + hw && iy + box[4] > this.y - hw &&
+            iz + box[2] < this.z + this.#settings.height && iz + box[5] > this.z;
     }
 
     /**
      * Whether a block can be placed into the body (see {@link intersectsBlock}) at height iz, the physics then pushing
      * the player up onto it: walking, the block is in the lowest layer the body is in, the lift is at most
      * Settings.player.placeLiftMax (near the top of a jump, floating in water; not standing on the ground, and once per
-     * jump: at the top of it the next block would need most of a block), and the body fits on top.
+     * jump: at the top of it the next block would need most of a block; a slab even standing), and the body fits on top.
+     * @param {number} [top] the block's top in its cell (a bottom slab's 0.5)
      */
-    canStepOnto(iz) {
-        const lift = iz + 1 + this.#settings.skin - this.z;
-        if (this.mode !== "walk" || iz !== Math.floor(this.z) || lift > this.#settings.placeLiftMax)
+    canStepOnto(iz, top = 1) {
+        const lift = iz + top + this.#settings.skin - this.z;
+        if (this.mode !== "walk" || iz !== Math.floor(this.z) || lift > this.#settings.placeLiftMax + LIFT_TOLERANCE)
             return false;
         const z = this.z;
-        this.z = iz + 1 + this.#settings.skin;
+        this.z = iz + top + this.#settings.skin;
         const fits = !this.#overlapsBlocks();
         this.z = z;
         return fits;
@@ -206,11 +210,13 @@ export class Player {
         this.onGround = hitZ && this.vz < 0;
         if (hitZ)
             this.vz = 0;
-        const hitX = this.#moveAxis(0, this.vx * dt);
+        if (hitZ || this.mode !== "walk" || this.inWater)
+            this.#climbing = false;
+        const hitX = this.#moveHorizontal(0, this.vx * dt);
         this.#wallX = hitX ? Math.sign(this.vx) : 0;
         if (hitX)
             this.vx = 0;
-        const hitY = this.#moveAxis(1, this.vy * dt);
+        const hitY = this.#moveHorizontal(1, this.vy * dt);
         this.#wallY = hitY ? Math.sign(this.vy) : 0;
         if (hitY)
             this.vy = 0;
@@ -318,17 +324,18 @@ export class Player {
         for (const [dx, dy] of [[this.#wallX, 0], [0, this.#wallY]]) {
             if (dx === 0 && dy === 0)
                 continue;
-            const ix = Math.floor(this.x + dx * reach), iy = Math.floor(this.y + dy * reach);
-            // the first free cell above the wall, from the feet up
-            let top = Math.floor(this.z);
-            while (top <= this.z + maxRise && this.#blocks(ix, iy, top))
+            // in half blocks
+            const hx = Math.floor((this.x + dx * reach) * 2), hy = Math.floor((this.y + dy * reach) * 2);
+            // the first free half cell above the wall, from the feet up
+            let top = Math.floor(this.z * 2);
+            while (top <= (this.z + maxRise) * 2 && this.#blocks(hx, hy, top))
                 top++;
-            const rise = top - this.z;
+            const rise = top / 2 - this.z;
             if (rise <= 0 || rise > maxRise)
                 continue;
             let room = true;
-            for (let iz = top; iz < top + s.height; iz++)
-                room &&= !this.#blocks(ix, iy, iz);
+            for (let hz = top; hz < top + s.height * 2; hz++)
+                room &&= !this.#blocks(hx, hy, hz);
             if (room && (best === null || rise < best))
                 best = rise;
         }
@@ -379,23 +386,31 @@ export class Player {
     }
 
     /**
-     * Whether a block blocks the body. Blocks of chunks that aren't loaded yet count as solid, so the player doesn't
-     * fall or fly into terrain that isn't there yet.
+     * Whether a half-block cell is filled: a solid block's, or a shaped block's octant (half cells hx, hy, hz: the
+     * coordinates times 2, floored).
      */
-    #blocks(ix, iy, iz) {
-        const world = this.#world;
-        return !world.isLoaded(ix, iy, iz) || isSolid(world.blockAt(ix, iy, iz));
+    #fills(hx, hy, hz) {
+        const block = this.#world.blockAt(hx >> 1, hy >> 1, hz >> 1);
+        return (blockOctants(block) >> ((hx & 1) | (hy & 1) << 1 | (hz & 1) << 2) & 1) !== 0;
     }
 
     /**
-     * Whether any block of one layer (cells with coordinate `layer` on `axis`) that the box's cross-section covers
-     * blocks the body.
+     * Whether a half-block cell blocks the body. Blocks of chunks that aren't loaded yet count as solid, so the player
+     * doesn't fall or fly into terrain that isn't there yet.
+     */
+    #blocks(hx, hy, hz) {
+        return !this.#world.isLoaded(hx >> 1, hy >> 1, hz >> 1) || this.#fills(hx, hy, hz);
+    }
+
+    /**
+     * Whether any half cell of one layer (half cells with coordinate `layer` on `axis`) that the box's cross-section
+     * covers blocks the body.
      */
     #layerBlocks(axis, layer) {
         const a1 = axis === 0 ? 1 : 0;
         const a2 = axis === 2 ? 1 : 2;
-        const lo1 = Math.floor(this.#boxMin(a1)), hi1 = Math.ceil(this.#boxMax(a1)) - 1;
-        const lo2 = Math.floor(this.#boxMin(a2)), hi2 = Math.ceil(this.#boxMax(a2)) - 1;
+        const lo1 = Math.floor(this.#boxMin(a1) * 2), hi1 = Math.ceil(this.#boxMax(a1) * 2) - 1;
+        const lo2 = Math.floor(this.#boxMin(a2) * 2), hi2 = Math.ceil(this.#boxMax(a2) * 2) - 1;
         const cell = [0, 0, 0];
         cell[axis] = layer;
         for (let i = lo1; i <= hi1; i++) {
@@ -417,21 +432,22 @@ export class Player {
         if (delta === 0)
             return false;
         const skin = this.#settings.skin;
-        // layers the move gets closer than skin to count as entered, so the box never ends up nearer than skin
+        // layers (half blocks) the move gets closer than skin to count as entered, so the box never ends up nearer
+        // than skin
         if (delta > 0) {
             const max = this.#boxMax(axis);
-            // layers the box overlaps end at ceil(max) - 1, the ones entered are up to ceil(max + delta + skin) - 1
-            for (let layer = Math.ceil(max), last = Math.ceil(max + delta + skin) - 1; layer <= last; layer++) {
+            // layers the box overlaps end at ceil(2 max) - 1, the ones entered are up to ceil(2 (max + delta + skin)) - 1
+            for (let layer = Math.ceil(max * 2), last = Math.ceil((max + delta + skin) * 2) - 1; layer <= last; layer++) {
                 if (this.#layerBlocks(axis, layer)) {
-                    this.#shift(axis, Math.min(delta, layer - skin - max));
+                    this.#shift(axis, Math.min(delta, layer / 2 - skin - max));
                     return true;
                 }
             }
         } else {
             const min = this.#boxMin(axis);
-            for (let layer = Math.floor(min) - 1, last = Math.floor(min + delta - skin); layer >= last; layer--) {
+            for (let layer = Math.floor(min * 2) - 1, last = Math.floor((min + delta - skin) * 2); layer >= last; layer--) {
                 if (this.#layerBlocks(axis, layer)) {
-                    this.#shift(axis, Math.max(delta, layer + 1 + skin - min));
+                    this.#shift(axis, Math.max(delta, (layer + 1) / 2 + skin - min));
                     return true;
                 }
             }
@@ -440,33 +456,80 @@ export class Player {
         return false;
     }
 
+    /**
+     * Moves the box along x or y (see #moveAxis). Stopped while walking on the ground (or falling: into a gap before
+     * the next slab), it looks for a ledge in front:
+     * walk.stepHeight higher it gets further, and down from there it lands on something with room for the body (2 skins
+     * ahead: stopped skin before the ledge, the box isn't over it yet). Then it hops just high enough to get onto it,
+     * the horizontal speed kept while it rises along the ledge (see #climbing); the box stays where it was stopped.
+     * @returns {boolean} whether it was stopped (not when it hops)
+     */
+    #moveHorizontal(axis, delta) {
+        const x = this.x, y = this.y, z = this.z;
+        if (!this.#moveAxis(axis, delta))
+            return false;
+        if (this.#climbing)
+            return false;
+        if (this.mode !== "walk" || !(this.onGround || this.vz <= 0) || this.inWater)
+            return true;
+        const stoppedX = this.x, stoppedY = this.y;
+        this.x = x;
+        this.y = y;
+        const walk = this.#settings.walk;
+        this.#moveAxis(2, walk.stepHeight);
+        const up = this.z - z;
+        this.#moveAxis(axis, delta);
+        // along the move (the stopped one may go back: the box was nearer than skin)
+        const further = Math.sign(delta) * (axis === 0 ? this.x - stoppedX : this.y - stoppedY) >= 0;
+        const ahead = Math.sign(delta) * 2 * this.#settings.skin;
+        this.#shift(axis, ahead);
+        this.#moveAxis(2, -up);
+        // on the ledge there's room for the body (not a wall)
+        const room = !this.#overlapsBlocks();
+        const rise = this.z - z;
+        this.x = stoppedX;
+        this.y = stoppedY;
+        this.z = z;
+        if (!room || !further || rise <= 1e-9)
+            return true;
+        this.vz = Math.max(this.vz, Math.sqrt(2 * walk.gravity * (rise + walk.stepClearance)));
+        this.onGround = false;
+        this.#climbing = true;
+        return false;
+    }
+
+    /** hopping onto a ledge (#moveHorizontal): pressed against it, the horizontal speed isn't lost; until it lands */
+    #climbing = false;
+
     #overlapsBlocks() {
-        const lo = [0, 1, 2].map(a => Math.floor(this.#boxMin(a)));
-        const hi = [0, 1, 2].map(a => Math.ceil(this.#boxMax(a)) - 1);
-        for (let ix = lo[0]; ix <= hi[0]; ix++)
-            for (let iy = lo[1]; iy <= hi[1]; iy++)
-                for (let iz = lo[2]; iz <= hi[2]; iz++)
-                    if (isSolid(this.#world.blockAt(ix, iy, iz)))
+        const lo = [0, 1, 2].map(a => Math.floor(this.#boxMin(a) * 2));
+        const hi = [0, 1, 2].map(a => Math.ceil(this.#boxMax(a) * 2) - 1);
+        for (let hx = lo[0]; hx <= hi[0]; hx++)
+            for (let hy = lo[1]; hy <= hi[1]; hy++)
+                for (let hz = lo[2]; hz <= hi[2]; hz++)
+                    if (this.#fills(hx, hy, hz))
                         return true;
         return false;
     }
 
     /**
      * How far the box has to go up to get out of blocks in its lowest layer (a block placed into the feet), if that's at
-     * most placeLiftMax and it fits there; 0 otherwise (not in a block, or too deep: see #moveToFreeSpot).
+     * most placeLiftMax and it fits there (on the next half-block level above the feet, or the one above that); 0
+     * otherwise (not in a block, or too deep: see #moveToFreeSpot).
      */
     #feetLift() {
         if (!this.#overlapsBlocks())
             return 0;
         const s = this.#settings;
-        const top = Math.floor(this.z) + 1 + s.skin;
-        if (top - this.z > s.placeLiftMax)
-            return 0;
         const z = this.z;
-        this.z = top;
-        const fits = !this.#overlapsBlocks();
-        this.z = z;
-        return fits ? top - z : 0;
+        for (let top = (Math.floor(z * 2) + 1) / 2 + s.skin; top - z <= s.placeLiftMax + LIFT_TOLERANCE; top += 0.5) {
+            this.z = top;
+            const fits = !this.#overlapsBlocks();
+            this.z = z;
+            if (fits)
+                return top - z;
+        }
+        return 0;
     }
 
     /**
@@ -476,12 +539,15 @@ export class Player {
         const ix = Math.floor(this.x), iy = Math.floor(this.y), iz = Math.floor(this.z);
         if (!this.#world.isLoaded(ix, iy, iz) || !this.#world.isLoaded(ix, iy, iz + 2))
             return false;
-        for (let i = 0; i < 256 && this.#overlapsBlocks(); i++)
-            this.z = Math.floor(this.z) + 1 + this.#settings.skin;
+        for (let i = 0; i < 512 && this.#overlapsBlocks(); i++)
+            this.z = (Math.floor(this.z * 2) + 1) / 2 + this.#settings.skin;
         this.#needsFreeSpot = false;
         return true;
     }
 }
+
+/** lifts compare with placeLiftMax with this much to spare: a slab's lift is exactly 0.5, give or take the floats */
+const LIFT_TOLERANCE = 1e-6;
 
 function clampAbs(value, max) {
     return value > max ? max : value < -max ? -max : value;

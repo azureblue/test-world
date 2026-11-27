@@ -1,5 +1,6 @@
 #include "quad_encode.hpp"
 #include "row_faces.hpp"
+#include "shaped.hpp"
 
 constexpr int DIRECTION_ENCODE[40] = {
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -112,6 +113,18 @@ inline_always static uint key(uint x, uint y, uint h) {
         return base + (CHUNK_SIZE - 1 - y);
     else
         return base + (CHUNK_SIZE - 1 - x);
+}
+
+// key for a direction known at run time
+static inline uint key(Direction dir, uint x, uint y, uint h) {
+    switch (dir) {
+        case Direction::Up: return key<Direction::Up>(x, y, h);
+        case Direction::Front: return key<Direction::Front>(x, y, h);
+        case Direction::Left: return key<Direction::Left>(x, y, h);
+        case Direction::Back: return key<Direction::Back>(x, y, h);
+        case Direction::Right: return key<Direction::Right>(x, y, h);
+        default: return key<Direction::Down>(x, y, h);
+    }
 }
 
 static inline uint64* scratch_base(face_buffers& buffers) {
@@ -411,6 +424,12 @@ extern "C"
                 const uint block_data = data.get_hxy(h, x, y);
 
                 if (has(f.specials, x)) {
+                    if (is_shaped(block_data)) {
+                        shaped::encode(buffers.mesh_solid_cur, data, h, x, y, block_data, [&](Direction dir) {
+                            solid_sort::keys[solid_sort::count++] = static_cast<uint8>(solid_sort::key(dir, real_x, real_y, real_h));
+                        });
+                        continue;
+                    }
                     if (is_x_quads(block_data)) {
                         const uint(&block_textures)[6] = block_table.faces[decode_block_id(block_data)];
                         x_quads_encoder::encode_quad<Direction::Diagonal0>(buffers.mesh_cutout_x_cur, real_x, real_y, real_h, block_textures[1], block_data);

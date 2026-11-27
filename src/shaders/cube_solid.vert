@@ -1,10 +1,10 @@
 #version 300 es
 
 // a_in.x: position x, y, z (0..32), the light: b block light, d sky darkness (15 - sky light), each the sum of the 4
-//   cells around the vertex (solid ones add 0); a_in.y: texture coordinates x, y (the merged face's size), n normal,
-//   t texture, s shadow (AO)
+//   cells around the vertex (solid ones add 0); a_in.y: half a block more on z, y, x (Z, Y, X: shaped blocks' faces),
+//   texture coordinates x, y in half blocks (the merged face's size), n normal, t texture, s shadow (AO)
 //  bbbbbbddddddzzzzzzyyyyyyxxxxxx
-//   ssttttttttnnn  yyyyyyyxxxxxxx
+//ZYXssttttttttnnn  yyyyyyyxxxxxxx
 //10987654321098765432109876543210
 layout (location = 0) in uvec2 a_in;
 // Camera block: identical in every vertex shader, see README.md
@@ -63,9 +63,10 @@ void main() {
     tex_idx = u_opaque_texture[tex_idx >> 2][tex_idx & 3u];
 #endif
 
-    float m_x = float(a_in_aux_bits & 0x7Fu);
-    float m_y = float(a_in_aux_bits >> 7 & 0x7Fu);
-    vec3 pos = vec3(float(x), float(y), float(z)) + m_translation;
+    float m_x = float(a_in_aux_bits & 0x7Fu) * 0.5f;
+    float m_y = float(a_in_aux_bits >> 7 & 0x7Fu) * 0.5f;
+    vec3 half_block = vec3(uvec3(a_in_aux_bits >> 29, a_in_aux_bits >> 30, a_in_aux_bits >> 31) & 1u) * 0.5f;
+    vec3 pos = vec3(float(x), float(y), float(z)) + half_block + m_translation;
 
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 

@@ -576,17 +576,17 @@ export class Replacer {
 }
 
 /**
- * Writes a slightly padded wireframe cube directly into a Float32Array for gl.LINES.
+ * Writes a slightly padded wireframe box (a block's cell, or part of it) directly into a Float32Array for gl.LINES.
  * @param {Float32Array} target - Must have length 72 (24 vertices × 3 floats)
- * @param {number} x - Cube world X
- * @param {number} y - Cube world Y
- * @param {number} z - Cube world Z
- * @param {number} size - Cube size (default 1)
+ * @param {number} x - Cell world X
+ * @param {number} y - Cell world Y
+ * @param {number} z - Cell world Z
+ * @param {number[]} box - The box in the cell: x0, y0, z0, x1, y1, z1, 0..1 (default the whole cell)
  * @param {number} pad - Padding to push lines outward (default 0.01)
  */
-export function writeVoxelWireframe(target, x, y, z, size = 1, pad = 0.001) {
-    const x0 = x - pad, y0 = y - pad, z0 = z - pad;
-    const x1 = x + size + pad * 2, y1 = y + size + pad * 2, z1 = z + size + pad * 2;
+export function writeVoxelWireframe(target, x, y, z, box = [0, 0, 0, 1, 1, 1], pad = 0.001) {
+    const x0 = x + box[0] - pad, y0 = y + box[1] - pad, z0 = z + box[2] - pad;
+    const x1 = x + box[3] + pad * 2, y1 = y + box[4] + pad * 2, z1 = z + box[5] + pad * 2;
 
     let i = 0;
 
