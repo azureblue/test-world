@@ -195,16 +195,15 @@ export class World {
     }
 
     /**
-     * The brightness of a cell's light, 0..1, as cube_solid.vert works it out (without the faces' shading): full in
-     * chunks without light or not loaded.
+     * The brightness of a cell's light, 0..1, as cube_solid.vert works it out (without the faces' shading): in chunks
+     * without light (ChunkResponse.light null) or not loaded, full sky light's (Settings.light.sun) and no block light.
      */
     brightnessAt(ix, iy, iz) {
         const entry = this.#chunks.getLoaded(ix >> CHUNK_SIZE_BIT_LEN, iy >> CHUNK_SIZE_BIT_LEN, iz >> CHUNK_SIZE_BIT_LEN);
-        if (entry?.light == null)
-            return 1;
-        // the cell in the light, the chunk with a 1 block border
+        // the cell in the light, the chunk with a 1 block border; no light: 0, no sky darkness and no block light
         const size = CHUNK_SIZE + 2;
-        const l = entry.light[(((iz & CHUNK_SIZE_MASK) + 1) * size + (iy & CHUNK_SIZE_MASK) + 1) * size + (ix & CHUNK_SIZE_MASK) + 1];
+        const l = entry?.light == null ? 0
+            : entry.light[(((iz & CHUNK_SIZE_MASK) + 1) * size + (iy & CHUNK_SIZE_MASK) + 1) * size + (ix & CHUNK_SIZE_MASK) + 1];
         const { falloff, sun } = Settings.light;
         // sky light 0..15 from falloff ^ 7 to 1; block light 0..15 on the lightmap curve, from sky light 0's darkness
         const dark = Math.pow(falloff, 7), r = 1 - (l >> 4) / 15;
