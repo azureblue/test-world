@@ -71,7 +71,8 @@ export class Block {
 // (water that isn't a source, see world/waterFlow.js), bits 24..26 the height in 1/8 of a block (0 meaning full: water
 // levels; see mesh/cpp/blocks.hpp), bit 16 cutout (a cube with cutout textures), bits 0..15 the block id. A plant in
 // water (waterlogged) is the plant with the liquid bit, the water level and maybe the flowing bit: it's water for
-// everything that checks isLiquid. A shaped block has no water: bits 23..27 are its shape (SHAPE_OCTANTS).
+// everything that checks isLiquid. A shaped block has no water and no cutout textures: bits 23..27 are its shape's low
+// 5 bits, bit 16 the 6th (SHAPE_OCTANTS).
 const SOLID_CUBE_BIT = 31;
 const LIQUID_BIT = 30;
 const X_QUADS = 29;
@@ -83,8 +84,8 @@ const CUTOUT_BIT = 16;
 const ID_MASK = 0xFFFF;
 /** the water bits of a cell: liquid, flowing, height */
 const WATER_BITS = (1 << LIQUID_BIT) | (1 << FLOWING_BIT) | (0b111 << HEIGHT_SHIFT);
-/** a shaped block's shape bits */
-const SHAPE_BITS = 0b11111 << SHAPE_SHIFT;
+/** a shaped block's shape bits: the low 5 from SHAPE_SHIFT, the 6th the cutout bit */
+const SHAPE_BITS = (0b11111 << SHAPE_SHIFT) | (1 << CUTOUT_BIT);
 export const BLOCK_HEIGHT_FULL = 8;
 /** the level of water open to the air above, in 1/8 of a block (the generator's sea surface) */
 export const WATER_SURFACE_LEVEL = 7;
@@ -105,14 +106,35 @@ const MODEL_BITS = {
  * Shaped blocks' shapes (docs/proposals/shaped-blocks.md): the index in a block value's shape bits. A shape is the
  * octants (half blocks) of the cell it fills, octant ox | oy << 1 | oz << 2: SHAPE_OCTANTS by index.
  */
-export const SHAPES = Object.freeze({
+const shapes = {
     SLAB_BOTTOM: 0, SLAB_TOP: 1, SLAB_X0: 2, SLAB_X1: 3, SLAB_Y0: 4, SLAB_Y1: 5,
     // stairs rising towards the low or the high x, y (their upper step there), upright or upside down
     STAIRS_X0: 6, STAIRS_X1: 7, STAIRS_Y0: 8, STAIRS_Y1: 9,
     STAIRS_X0_DOWN: 10, STAIRS_X1_DOWN: 11, STAIRS_Y0_DOWN: 12, STAIRS_Y1_DOWN: 13
-});
-/** shapes are below this: 5 bits (MAX_SHAPES in mesh/cpp/blocks.hpp) */
-export const MAX_SHAPES = 32;
+};
+/** the horizontal directions, the sides stairs rise towards: -x, +x, -y, +y (axis = direction >> 1, high side = & 1) */
+const DIRECTION_NAMES = ["X0", "X1", "Y0", "Y1"];
+/**
+ * Stairs by shape: the direction they rise towards (0..3, DIRECTION_NAMES), upside down, and a corner: "straight", or
+ * "outer" (the upper step's octant towards the direction and `other`) or "inner" (the upper step's octants towards
+ * either), `other` a direction across. Corner stairs (STAIRS_X1_OUTER_Y0, ...) from 14 on.
+ * @type {Array<{direction: number, down: boolean, corner: string, other: number} | undefined>}
+ */
+export const STAIRS_INFO = [];
+for (let s = 6; s < 14; s++)
+    STAIRS_INFO[s] = { direction: (s - 6) & 3, down: s >= 10, corner: "straight", other: -1 };
+for (const down of [false, true])
+    for (let direction = 0; direction < 4; direction++)
+        for (const across of [0, 1])
+            for (const corner of ["outer", "inner"]) {
+                const shape = 14 + ((((down ? 4 : 0) + direction) * 2 + across) * 2 + (corner === "inner" ? 1 : 0));
+                const other = (direction < 2 ? 2 : 0) + across;
+                STAIRS_INFO[shape] = { direction, down, corner, other };
+                shapes[`STAIRS_${DIRECTION_NAMES[direction]}_${corner.toUpperCase()}_${DIRECTION_NAMES[other]}${down ? "_DOWN" : ""}`] = shape;
+            }
+export const SHAPES = Object.freeze(shapes);
+/** shapes are below this: 6 bits (MAX_SHAPES in mesh/cpp/blocks.hpp) */
+export const MAX_SHAPES = 64;
 /** the octants of each shape, by index (the meshers get them in their block table) */
 export const SHAPE_OCTANTS = new Uint8Array(MAX_SHAPES);
 SHAPE_OCTANTS[SHAPES.SLAB_BOTTOM] = 0b0000_1111;
@@ -122,12 +144,31 @@ SHAPE_OCTANTS[SHAPES.SLAB_X0] = 0b0101_0101;
 SHAPE_OCTANTS[SHAPES.SLAB_X1] = 0b1010_1010;
 SHAPE_OCTANTS[SHAPES.SLAB_Y0] = 0b0011_0011;
 SHAPE_OCTANTS[SHAPES.SLAB_Y1] = 0b1100_1100;
-// stairs: a slab and the half of the other slab towards their side (upright: the bottom slab, the top one's half)
-for (const [i, half] of [SHAPES.SLAB_X0, SHAPES.SLAB_X1, SHAPES.SLAB_Y0, SHAPES.SLAB_Y1].entries()) {
-    const side = SHAPE_OCTANTS[half];
-    SHAPE_OCTANTS[SHAPES.STAIRS_X0 + i] = SHAPE_OCTANTS[SHAPES.SLAB_BOTTOM] | (side & SHAPE_OCTANTS[SHAPES.SLAB_TOP]);
-    SHAPE_OCTANTS[SHAPES.STAIRS_X0_DOWN + i] = SHAPE_OCTANTS[SHAPES.SLAB_TOP] | (side & SHAPE_OCTANTS[SHAPES.SLAB_BOTTOM]);
+// stairs: a slab and of the other slab the half towards their direction (upright: the bottom slab, the top one's
+// half); a corner the quarter towards both directions (outer) or the three quarters towards either (inner)
+for (const [shape, info] of STAIRS_INFO.entries()) {
+    if (info === undefined)
+        continue;
+    const { direction, down, corner, other } = info;
+    const side = (d) => SHAPE_OCTANTS[SHAPES.SLAB_X0 + d];
+    const [base, step] = down ? [SHAPES.SLAB_TOP, SHAPES.SLAB_BOTTOM] : [SHAPES.SLAB_BOTTOM, SHAPES.SLAB_TOP];
+    const upper = corner === "straight" ? side(direction) : corner === "outer" ? side(direction) & side(other) : side(direction) | side(other);
+    SHAPE_OCTANTS[shape] = SHAPE_OCTANTS[base] | (SHAPE_OCTANTS[step] & upper);
 }
+/**
+ * The stairs shape rising towards a direction (0..3: -x, +x, -y, +y), upright or upside down, straight or a corner
+ * towards `other` (STAIRS_INFO).
+ * @param {number} direction
+ * @param {boolean} down
+ * @param {"straight" | "outer" | "inner"} [corner]
+ * @param {number} [other] a direction across
+ */
+export function stairsShape(direction, down, corner = "straight", other = -1) {
+    if (corner === "straight")
+        return SHAPES.STAIRS_X0 + direction + (down ? 4 : 0);
+    return 14 + ((((down ? 4 : 0) + direction) * 2 + (other & 1)) * 2 + (corner === "inner" ? 1 : 0));
+}
+
 /** stairs by the axis they rise along (x, y), its side (low, high), then upright or upside down */
 export const STAIRS_SHAPES = Object.freeze([
     [[SHAPES.STAIRS_X0, SHAPES.STAIRS_X0_DOWN], [SHAPES.STAIRS_X1, SHAPES.STAIRS_X1_DOWN]],
@@ -369,7 +410,7 @@ export function isShaped(block) {
  * @returns {number} its shape, a value of SHAPES
  */
 export function blockShape(block) {
-    return (block & SHAPE_BITS) >>> SHAPE_SHIFT;
+    return (block >>> SHAPE_SHIFT & 0b11111) | (block >>> CUTOUT_BIT & 1) << 5;
 }
 
 /**
@@ -378,7 +419,7 @@ export function blockShape(block) {
  * @returns {number} the block with that shape (unsigned)
  */
 export function withShape(block, shape) {
-    return ((block & ~SHAPE_BITS) | (shape << SHAPE_SHIFT)) >>> 0;
+    return ((block & ~SHAPE_BITS) | (shape & 0b11111) << SHAPE_SHIFT | (shape >> 5) << CUTOUT_BIT) >>> 0;
 }
 
 /**
@@ -432,7 +473,7 @@ export function getBlockById(id) {
  * @param {number} block
  */
 export function blockState(block) {
-    return (block & (WATER_BITS | SHAPE_BITS)) >>> 0;
+    return (block & (isShaped(block) ? SHAPE_BITS : WATER_BITS)) >>> 0;
 }
 
 /**

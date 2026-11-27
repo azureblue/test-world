@@ -31,11 +31,13 @@ The block value has no 8 free bits: ids take bits 0..9, the mesher's input puts 
 masks are a table (`SHAPE_OCTANTS` in `src/blocks.js`, written into the meshers' block table):
 
 - bit 28: shaped (the model's bit, like solid, liquid, x-quads);
-- bits 23..27: the shape index, 32 shapes. Shaped blocks have no water (no waterlogging), so they share the water's
-  level and flowing bits.
+- bits 23..27: the shape index's low 5 bits, bit 16 its 6th: 64 shapes. Shaped blocks have no water (no
+  waterlogging) and no cutout textures, so they share the water's level and flowing bits and the cutout bit.
 
-32 shapes cover slabs (2), vertical slabs (4), stairs (8), inner and outer corners (16). The shape is part of the
-block's saved state (`blockState`), so no save format change: older saves have no shaped blocks.
+46 shapes: slabs (2), vertical slabs (4), stairs (8: 4 directions, upright or upside down), corner stairs (32: each
+stair's direction kept with its corner, outer or inner towards one of the 2 directions across, so a corner goes back
+to straight when its neighbour goes). The shape is part of the block's saved state (`blockState`), so no save format
+change: older saves have no shaped blocks.
 
 ### What it touches
 
@@ -76,7 +78,11 @@ block's saved state (`blockState`), so no save format change: older saves have n
     Onto a slab of the same kind (its inner face, or in the cell the new one goes to), its missing half (the full
     block);
   - stairs (`stairsShapeAt`): rising away from the player, along the horizontal axis it looks along the most;
-    upside down placed on a bottom face or a side's upper half. Corner stairs from the neighbouring stairs: later.
+    upside down placed on a bottom face or a side's upper half. Corners from the neighbouring stairs
+    (`stairsCorner`, Minecraft's rules): behind a stair stairs the same way up rising across make it an outer corner
+    (the upper step's quarter towards both), in front of it an inner one (the three quarters towards either), unless a
+    stair like it goes on on that side. With every block placed or broken the stairs there and next to it are
+    recomputed.
 - **Smaller**: the block outline (the shape's box), particles collide with octants, the inventory icon draws the shape
   by octants (stairs rising to the back), water treats shaped blocks as walls.
 
@@ -92,6 +98,6 @@ blend across cells only knows whole faces.
 1. Slabs: the bits, the meshers, collision with step up, the ray cast, placement and merging, outline, icon; vertical
    slabs.
 2. Stairs: the shapes, placement by facing; the meshers, collision and the ray cast need nothing new. Done.
-3. Corner stairs.
+3. Corner stairs. Done; a staircase's turn can show a small AO seam where its corner meets the stairs beside it.
 
 AO and light with shaped blocks are done (after step 1).

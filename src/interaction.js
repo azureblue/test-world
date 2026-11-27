@@ -1,7 +1,7 @@
 import {
-    BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, blockOctants, FULL_OCTANTS, flooded, getBlockById, HALF_SHAPES, isFlowing,
-    isLiquid, isShaped, isXQuads, octantsBox, removed, shapeOfOctants, STAIRS_SHAPES, WATER_SURFACE_LEVEL, withHeight,
-    withShape
+    BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, blockOctants, blockShape, FULL_OCTANTS, flooded, getBlockById, HALF_SHAPES,
+    isFlowing, isLiquid, isShaped, isXQuads, octantsBox, removed, shapeOfOctants, STAIRS_INFO, STAIRS_SHAPES, stairsShape,
+    WATER_SURFACE_LEVEL, withHeight, withShape
 } from "./blocks.js";
 import { ItemBar } from "./itemBar.js";
 import { Player } from "./player.js";
@@ -15,7 +15,9 @@ import { World } from "./world/world.js";
  * of the cell, by where on the face it's aimed at (slabShapeAt): the middle, the half against the face (on a top face
  * the bottom half, on a side a vertical slab against it); near an edge, the half towards it. Onto a slab of the same
  * kind (its inner face looked at, or in the cell the new one goes to) it adds the missing half, the two making the full
- * block. Stairs rise away from the player (stairsShapeAt), upside down placed on a bottom face or a side's upper half.
+ * block. Stairs rise away from the player (stairsShapeAt), upside down placed on a bottom face or a side's upper half;
+ * with every block placed or broken the stairs there and next to it take their corners from the stairs around them
+ * (stairsCorner).
  */
 export class BlockInteraction {
     #world;
@@ -60,8 +62,10 @@ export class BlockInteraction {
     /** Removes the block looked at, throwing out its fragments; a plant in water leaves its water. */
     breakBlock() {
         const t = this.#target;
-        if (t !== null && this.#world.setBlock(t.x, t.y, t.z, removed(t.block)))
+        if (t !== null && this.#world.setBlock(t.x, t.y, t.z, removed(t.block))) {
             this.#particles?.spawnBlockBreak(t.x, t.y, t.z, t.block, this.#world);
+            this.#updateStairs(t.x, t.y, t.z);
+        }
     }
 
     /** Places the item bar's block on the face looked at. */
@@ -83,6 +87,7 @@ export class BlockInteraction {
             } else {
                 this.#placeSlab(t, px, py, pz, placed);
             }
+            this.#updateStairs(px, py, pz);
             return;
         }
         if (!this.#fitsPlayer(px, py, pz))
@@ -97,6 +102,24 @@ export class BlockInteraction {
             block = flooded(placed, blockHeight(cell), isFlowing(cell));
         }
         world.setBlock(px, py, pz, block);
+        this.#updateStairs(px, py, pz);
+    }
+
+    /** the stairs at a cell and next to it (horizontally) take their corners from the stairs around them */
+    #updateStairs(x, y, z) {
+        const world = this.#world;
+        for (const [cx, cy] of [[x, y], [x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+            const block = world.blockAt(cx, cy, z);
+            if (!isStairs(block))
+                continue;
+            const next = (d) => {
+                const n = world.blockAt(cx + DIRECTION_X[d], cy + DIRECTION_Y[d], z);
+                return isStairs(n) ? STAIRS_INFO[blockShape(n)] : null;
+            };
+            const shape = stairsCorner(blockShape(block), next);
+            if (shape !== blockShape(block))
+                world.setBlock(cx, cy, z, withShape(block, shape));
+        }
     }
 
     /**
@@ -185,4 +208,38 @@ export function stairsShapeAt(direction, upsideDown) {
     const axis = Math.abs(direction.x) >= Math.abs(direction.y) ? 0 : 1;
     const side = (axis === 0 ? direction.x : direction.y) > 0 ? 1 : 0;
     return STAIRS_SHAPES[axis][side][upsideDown ? 1 : 0];
+}
+
+/** the horizontal directions (-x, +x, -y, +y: STAIRS_INFO's) as steps */
+const DIRECTION_X = [-1, 1, 0, 0], DIRECTION_Y = [0, 0, -1, 1];
+
+function isStairs(block) {
+    return isShaped(block) && STAIRS_INFO[blockShape(block)] !== undefined;
+}
+
+/**
+ * A stair's shape by the stairs next to it (Minecraft's rules; its direction and upside down kept): behind it (towards
+ * its direction) stairs the same way up rising across: an outer corner towards their direction, unless on their other
+ * side a stair like this one goes on; else in front of it such stairs: an inner corner towards their direction, unless
+ * on that side a stair like this one goes on; else straight.
+ * @param {number} shape a stairs shape (STAIRS_INFO)
+ * @param {(direction: number) => {direction: number, down: boolean} | null} next the stairs next to it in a direction
+ *   (0..3: -x, +x, -y, +y), null if none
+ * @returns {number} a value of SHAPES
+ */
+export function stairsCorner(shape, next) {
+    const { direction, down } = STAIRS_INFO[shape];
+    const across = (n) => n !== null && n.down === down && (n.direction >> 1) !== (direction >> 1);
+    // no stair like this one that way (it would go on straight)
+    const free = (d) => {
+        const n = next(d);
+        return n === null || n.direction !== direction || n.down !== down;
+    };
+    const back = next(direction);
+    if (across(back) && free(back.direction ^ 1))
+        return stairsShape(direction, down, "outer", back.direction);
+    const front = next(direction ^ 1);
+    if (across(front) && free(front.direction))
+        return stairsShape(direction, down, "inner", front.direction);
+    return stairsShape(direction, down);
 }

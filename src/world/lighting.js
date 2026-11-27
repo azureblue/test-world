@@ -149,7 +149,7 @@ export class Lighting {
 
     /**
      * a region's cells (its size, the ranges of its margin): bit 0 solid, then a solid one's bits 1..4 the block light
-     * it gives, a shaped one's bits 1..6 its shape + 1 (mesh/cpp/light.cpp)
+     * it gives, a shaped one's bits 1..7 its shape + 1 (mesh/cpp/light.cpp)
      * @returns {boolean} whether there's a shaped block among them
      */
     #gatherCells(chunkPos, cells, size, ranges) {

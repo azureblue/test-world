@@ -41,12 +41,12 @@ constexpr uint BLOCK_STEP = 3;
 constexpr uint BLOCK_DIAGONAL_STEP = 4;
 
 // a cell (cells, block_cells): bit 0 solid; a solid one's bits 1..4 the block light it gives (block_cells), an open
-// one's bits 1..6 its shape (src/blocks.js) + 1, 0 none. Emitters are cubes, shaped blocks aren't solid: the bits are
+// one's bits 1..7 its shape (src/blocks.js) + 1, 0 none. Emitters are cubes, shaped blocks aren't solid: the bits are
 // one or the other (a solid cell's are never read as a shape: no step goes into it).
 constexpr uint SOLID = 1;
 constexpr uint SHAPE_SHIFT = 1;
-constexpr uint SHAPE_BITS = 0x3fu << SHAPE_SHIFT;
-constexpr uint MAX_SHAPES = 32;
+constexpr uint SHAPE_BITS = 0x7fu << SHAPE_SHIFT;
+constexpr uint MAX_SHAPES = 64;
 // faces: -x, +x, -y, +y, -h, +h (a face's opposite: face ^ 1)
 constexpr uint FACE_XM = 0, FACE_XP = 1, FACE_YM = 2, FACE_YP = 3, FACE_HM = 4, FACE_HP = 5;
 // above a cell, something that covers it (a sideways step into it is dearer): solid or shaped
