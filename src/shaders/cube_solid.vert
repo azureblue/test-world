@@ -2,9 +2,10 @@
 
 // a_in.x: position x, y, z (0..32), the light: b block light, d sky darkness (15 - sky light), each the sum of the 4
 //   cells around the vertex (solid ones add 0); a_in.y: half a block more on z, y, x (Z, Y, X: shaped blocks' faces),
-//   texture coordinates x, y in half blocks (the merged face's size), n normal, t texture, s shadow (AO)
+//   texture coordinates x, y in half blocks (the merged face's size), n normal, t texture, s shadow (AO; the light is
+//   divided by its open cells), S a second shadow level, the shadow the average of the two (else the same as s)
 //  bbbbbbddddddzzzzzzyyyyyyxxxxxx
-//ZYXssttttttttnnn  yyyyyyyxxxxxxx
+//ZYXssttttttttnnnSSyyyyyyyxxxxxxx
 //10987654321098765432109876543210
 layout (location = 0) in uvec2 a_in;
 // Camera block: identical in every vertex shader, see README.md
@@ -59,6 +60,7 @@ void main() {
     uint normal_idx = (a_in_aux_bits >> 16) & 0x7u;
     uint tex_idx = (a_in_aux_bits >> 19) & 0xFFu;
     uint shadow = (a_in_aux_bits >> 27) & 0x3u;
+    uint shadow_blend = (a_in_aux_bits >> 14) & 0x3u;
 #ifdef OPAQUE_CUTOUT
     tex_idx = u_opaque_texture[tex_idx >> 2][tex_idx & 3u];
 #endif
@@ -71,7 +73,7 @@ void main() {
     gl_Position = cam_projection_view * vec4(pos, 1.0f);
 
     v_to_cam = cam_pos - pos;
-    v_shadow = shadow_values[shadow];
+    v_shadow = (shadow_values[shadow] + shadow_values[shadow_blend]) * 0.5f;
     v_light = light_brightness((a_in_bits >> 18) & 0x3Fu, (a_in_bits >> 24) & 0x3Fu, shadow);
     v_tex_coord = vec3(m_x, m_y, float(tex_idx));
     o_norm = normal_idx;

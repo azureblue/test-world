@@ -52,12 +52,16 @@ block's saved state (`blockState`), so no save format change: older saves have n
   halves don't meet). The steps to edge neighbours only go between cells without shapes. The sky light falls straight down through a shaped block only with its top and bottom open (a
   vertical slab); a bottom slab's own cell sees the sky. Exact for shapes whose empty octants are connected (all of
   slabs and stairs).
-- **AO**: AO is by half-block cells
-  (`shade_vertex` in `mesh/cpp/common.hpp`): a half cell is filled in a solid block or a shaped block's octant. A
-  block face uses it when a shaped block is in the 3 x 3 cells in front of it (only in chunks with one), otherwise the
-  usual AO by cells, which it matches exactly; a shaped block's faces always. Their quarters merge only where the AO
-  and light are the same all over. A face half covered by a slab beside it has the slab's filled octant in front of
-  some vertices: that half cell gets the slab cell's light (a filled one's 0 would read as full sky light).
+- **AO**: a slab shades the blocks around it by its octants touching their faces' corners: near a slab a block's
+  face has its AO and light by half-block cells at its corners (`face_ao`), elsewhere by cells (the same values). A
+  top slab set into a floor shades the walls over it like a block; a bottom slab beside a wall doesn't shade the
+  wall's corners above it. A block's face next to a slab is drawn by the quarters the slab leaves open
+  (`shaped::encode_cube_faces`; its corners behind the slab would bring light from beyond it, the sky over a slab
+  ceiling): its AO blended from its whole face's corners (the shadow of two AO levels half way along an edge, the
+  vertex's second one in bits 46..47), its light by half-block cells. A slab's own faces have AO and light by
+  half-block cells (`shade_vertex` in `mesh/cpp/common.hpp`). Quarters merge into the largest rectangles: a corner in
+  the middle of a whole face's edge (a T-junction) would show as a seam, so a wall's strip under a slab spans its
+  block, and a corner still there (a slab's side beside a block) gets that face's blend of the edge's two corners.
 - **Collision** (`player.js`): the player's box against half-block cells; walking into a ledge up to half a block
   high (or falling into a gap before one), a hop just high enough onto it, the speed kept.
 - **Ray cast**: a shaped cell stops the ray where it hits one of its octants (the face hit, its normal).

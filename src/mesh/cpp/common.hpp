@@ -356,13 +356,14 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Down>(const
     return shadows;
 }
 
-// Whether the mesher's input has a shaped block (row_masks::compute): only then do faces look for shaped blocks'
-// octants in their AO (face_ao).
+// Whether the mesher's input has a shaped block (row_masks::compute): only then do faces look for shaped blocks next to
+// them (face_ao, row_faces::next_to_shaped).
 inline bool input_has_shaped = false;
 
-// a face vertex's AO (ao_value) and light (corner_light) by half-block cells
+// a face vertex's AO (ao_value) and light (corner_light) by half-block cells; blend: a second AO level, the shadow the
+// average of the two (half way between two corners: shaped.hpp's edge_middle), else ao
 struct vertex_shading {
-    uint ao, light;
+    uint ao, light, blend;
 };
 
 // A face vertex's AO and light by half-block cells, as ao_shadows by cells: a half cell is filled in a solid block or
@@ -389,7 +390,8 @@ static inline vertex_shading shade_vertex(const array_3d<CHUNK_SIZE_E>& data, co
     }
     // as ao_value and corner_light: both sides filled, the diagonal is behind a wall corner
     const uint sides = filled[1] + filled[2];
-    return {sides == 2 ? 3 : sides + filled[3], light[0] + light[1] + light[2] + (sides == 2 ? 0 : light[3])};
+    const uint ao = sides == 2 ? 3 : sides + filled[3];
+    return {ao, light[0] + light[1] + light[2] + (sides == 2 ? 0 : light[3]), ao};
 }
 
 // the 4 vertices of a box's face (a cell's: pos its corner, size 2): vertex k's position and steps into the face
@@ -409,7 +411,7 @@ static inline void for_face_vertices(Direction dir, const int pos[3], const int 
     }
 }
 
-// a block's face AO by half cells (next to shaped blocks): h, x, y the block in the input
+// a block's face AO by half cells at its corners: h, x, y the block in the input
 template <Direction DIR>
 static inline ao_shadows::vertex_data ao_by_half_cells(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
     const int pos[3] = {static_cast<int>(x) * 2, static_cast<int>(y) * 2, static_cast<int>(h) * 2}, size[3] = {2, 2, 2};
@@ -422,8 +424,10 @@ static inline ao_shadows::vertex_data ao_by_half_cells(const array_3d<CHUNK_SIZE
     return {ao[0], ao[1], ao[2], ao[3], light[0], light[1], light[2], light[3]};
 }
 
-// A block face's AO and light (ao_shadows::compute), by half cells when a shaped block is in the 3 x 3 cells in front
-// of it (AO_BY_HALF_CELLS: always, to test them against each other)
+// A block face's AO and light (ao_shadows::compute); with a shaped block in the 3 x 3 cells in front of it by half
+// cells at its corners: a shaped block counts by its octants touching a corner (a top slab set into a floor shades the
+// wall over it like a block, a bottom slab beside a wall doesn't shade it above). AO_BY_HALF_CELLS: always, to test
+// the two against each other.
 template <Direction DIR>
 inline_always static ao_shadows::vertex_data face_ao(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
 #ifdef AO_BY_HALF_CELLS
@@ -442,6 +446,24 @@ inline_always static ao_shadows::vertex_data face_ao(const array_3d<CHUNK_SIZE_E
     }
     return ao_shadows::compute<DIR>(data, h, x, y);
 #endif
+}
+
+// a block's face's 4 corners (face_ao, for a direction known at run time), in the face's vertex order: h, x, y the block
+// in the input
+static inline void block_face_corners(const array_3d<CHUNK_SIZE_E>& data, Direction dir, uint h, uint x, uint y, vertex_shading out[4]) {
+    ao_shadows::vertex_data v;
+    switch (dir) {
+        case Direction::Up: v = face_ao<Direction::Up>(data, h, x, y); break;
+        case Direction::Front: v = face_ao<Direction::Front>(data, h, x, y); break;
+        case Direction::Left: v = face_ao<Direction::Left>(data, h, x, y); break;
+        case Direction::Back: v = face_ao<Direction::Back>(data, h, x, y); break;
+        case Direction::Right: v = face_ao<Direction::Right>(data, h, x, y); break;
+        default: v = face_ao<Direction::Down>(data, h, x, y); break;
+    }
+    out[0] = {v.v0, v.l0, v.v0};
+    out[1] = {v.v1, v.l1, v.v1};
+    out[2] = {v.v2, v.l2, v.v2};
+    out[3] = {v.v3, v.l3, v.v3};
 }
 
 // The output areas: solid faces, water faces, x-quads, the main mesher's sort scratch, cutout cube faces (the solid

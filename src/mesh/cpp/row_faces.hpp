@@ -30,6 +30,8 @@ static uint64 solid[ROWS];
 static uint64 cubes[ROWS];
 // x-quads, water or shaped blocks, drawn their own way (only inside the chunk)
 static uint64 specials[ROWS];
+// shaped blocks (the border too)
+static uint64 shaped[ROWS];
 
 inline_always static uint row_index(uint h, uint y) {
     return h * CHUNK_SIZE_E + y;
@@ -59,7 +61,7 @@ inline_always static inner_masks inner_row(const uint* __restrict row, uint hide
         m.solid |= top_bits(blocks) << at;
         m.specials |= top_bits((blocks & special_bits) != 0) << at;
         // the shaped bit (28) to the top
-        m.shaped |= top_bits(blocks << 3);
+        m.shaped |= top_bits(blocks << 3) << at;
     }
     // every cube is solid (the "cube" model, src/blocks.js); not a block value != 0 test: air has light bits
     m.cubes = m.solid & ~m.specials;
@@ -74,7 +76,7 @@ inline_always static uint64 row_mask(uint inner, bool first, bool last) {
 static inline void compute(const uint* __restrict data) {
     // with cutout textures off cutout_flag is 0: cutout blocks hide faces like any solid one
     const uint hide_bits = SOLID_BIT | block_table.cutout_flag;
-    uint shaped = 0;
+    uint64 any_shaped = 0;
     for (uint r = 0; r < ROWS; r++) {
         const uint* __restrict row = data + r * CHUNK_SIZE_E;
         const inner_masks m = inner_row(row, hide_bits);
@@ -84,9 +86,10 @@ static inline void compute(const uint* __restrict data) {
         // the border isn't drawn
         cubes[r] = row_mask(m.cubes, false, false);
         specials[r] = row_mask(m.specials, false, false);
-        shaped |= m.shaped | ((first | last) >> 28 & 1);
+        row_masks::shaped[r] = row_mask(m.shaped, first >> 28 & 1, last >> 28 & 1);
+        any_shaped |= row_masks::shaped[r];
     }
-    input_has_shaped = shaped != 0;
+    input_has_shaped = any_shaped != 0;
 }
 }  // namespace row_masks
 
@@ -100,9 +103,12 @@ struct row_faces {
     uint64 buried;
     // x-quads, water and shaped blocks
     uint64 specials;
+    // cubes that hide faces (not cutout) next to shaped blocks: their faces toward them are drawn by quarters
+    // (shaped::encode_cube_faces), not in the ones above: only the quarters the shaped block leaves open
+    uint64 next_to_shaped;
 
     inline_always uint64 blocks_to_visit() const {
-        return up | down | front | left | back | right | specials;
+        return up | down | front | left | back | right | specials | next_to_shaped;
     }
 };
 
@@ -123,6 +129,20 @@ inline_always static row_faces faces_of_row(uint h, uint y) {
     f.cutout = cube & solid[r] & ~hides[r];
     f.buried = f.cutout & (solid[r] << 1) & (solid[r] >> 1) & solid[above] & solid[below] & solid[in_front] & solid[behind];
     f.specials = specials[r];
+    f.next_to_shaped = 0;
+    // only in the chunks with a shaped block (most have none)
+    if (input_has_shaped) {
+        const uint64 opaque = cube & hides[r];
+        const uint64 up_s = opaque & shaped[above], down_s = opaque & shaped[below], front_s = opaque & shaped[in_front],
+                     back_s = opaque & shaped[behind], left_s = opaque & (shaped[r] << 1), right_s = opaque & (shaped[r] >> 1);
+        f.up &= ~up_s;
+        f.down &= ~down_s;
+        f.front &= ~front_s;
+        f.back &= ~back_s;
+        f.left &= ~left_s;
+        f.right &= ~right_s;
+        f.next_to_shaped = up_s | down_s | front_s | back_s | left_s | right_s;
+    }
     return f;
 }
 

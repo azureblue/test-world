@@ -99,6 +99,8 @@ extern "C"
                                    has(f.left, x) << Direction::Left | has(f.back, x) << Direction::Back |
                                    has(f.right, x) << Direction::Right | has(f.down, x) << Direction::Down;
                 encode_cube(buffers, data, h, x, y, faces, has(f.buried, x));
+                if (has(f.next_to_shaped, x))
+                    shaped::encode_cube_faces(buffers.mesh_solid_cur, data, h, x, y, data.get_hxy(h, x, y), [](Direction) {});
             }
         }
     }

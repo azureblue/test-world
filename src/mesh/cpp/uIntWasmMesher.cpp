@@ -492,6 +492,12 @@ extern "C"
                     const face_shading_t shading = face_shading<Direction::Right>(data, h, x, y);
                     set_face(layers, lights, current_layer_offset + Direction::Right, real_y, CHUNK_SIZE - 1 - real_x, block_textures[4], shading);
                 }
+
+                if (has(f.next_to_shaped, x)) {
+                    shaped::encode_cube_faces(buffers.mesh_solid_cur, data, h, x, y, block_data, [&](Direction dir) {
+                        solid_sort::keys[solid_sort::count++] = static_cast<uint8>(solid_sort::key(dir, real_x, real_y, real_h));
+                    });
+                }
             }
         }
 

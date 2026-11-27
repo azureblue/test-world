@@ -55,7 +55,7 @@ class quad_encoder {
 
     // A face of a shaped block's box (shaped.hpp), in half blocks: the box's corner and size (pos, size: x, y, z), the
     // texture coordinates of the face's first corner (u, v), its vertices' AO and light (shade_vertex).
-    static void encode_shaped_face(uint64* __restrict& out, Direction dir, const uint pos[3], const uint size[3], uint u, uint v, uint tex_id, const uint ao[4], const uint light[4]) {
+    static void encode_shaped_face(uint64* __restrict& out, Direction dir, const uint pos[3], const uint size[3], uint u, uint v, uint tex_id, const vertex_shading shading[4]) {
         using namespace quad_encoding;
         uint corner[3], w[3], h[3];
         uint w_len = 0, h_len = 0;
@@ -69,7 +69,7 @@ class quad_encoder {
         const uint64 base_bits = encode_tex_bits(tex_id) | encode_dir_bits(dir);
         const auto vertex = [&](uint dw, uint dh) {
             const uint k = dh ? 3 - dw : dw;
-            uint64 bits = base_bits | encode_ao_bits(ao[k]) | encode_light_bits(light[k]) |
+            uint64 bits = base_bits | encode_ao_bits(shading[k].ao, shading[k].blend) | encode_light_bits(shading[k].light) |
                           (static_cast<uint64>(u + dw * w_len) << 32) | (static_cast<uint64>(v + dh * h_len) << 39);
             for (uint a = 0; a < 3; a++) {
                 const uint p = corner[a] + dw * w[a] + dh * h[a];
@@ -77,7 +77,7 @@ class quad_encoder {
             }
             return bits;
         };
-        encode(out, vertex(0, 0), vertex(1, 0), vertex(1, 1), vertex(0, 1), ao[0] + ao[2] > ao[1] + ao[3]);
+        encode(out, vertex(0, 0), vertex(1, 0), vertex(1, 1), vertex(0, 1), shading[0].ao + shading[2].ao > shading[1].ao + shading[3].ao);
     }
 
     template <Direction DIR>
@@ -116,8 +116,14 @@ class quad_encoder {
     template <Direction DIR>
     inline constexpr static uint64 POS_OFFSET_H = encode_value<uint64, 0>(quad_encoding::MERGE_VECTOR_H[DIR][0]) + encode_value<uint64, POS_Y_SHIFT>(quad_encoding::MERGE_VECTOR_H[DIR][1]) + encode_value<uint64, POS_Z_SHIFT>(quad_encoding::MERGE_VECTOR_H[DIR][2]);
 
+    // the AO level in bits 59..60 (the shadow, and the open cells the light is divided by), the one the shadow is
+    // blended with in bits 46..47 (the same but half way between two corners: vertex_shading)
+    inline_always static uint64 encode_ao_bits(uint ao, uint blend) {
+        return encode_value<uint64, 59>(ao) | encode_value<uint64, 46>(blend);
+    }
+
     inline_always static uint64 encode_ao_bits(uint ao) {
-        return encode_value<uint64, 59>(ao);
+        return encode_ao_bits(ao, ao);
     }
 
     inline_always static uint64 encode_tex_bits(uint tex_id) {

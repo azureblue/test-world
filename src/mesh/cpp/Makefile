@@ -1,6 +1,6 @@
 all: ../uIntWasmMesher.wasm ../uIntWasmMesherQ.wasm ../light.wasm
 
-headers := int.h blocks.hpp common.hpp quad_encode.hpp row_faces.hpp
+headers := int.h blocks.hpp common.hpp quad_encode.hpp row_faces.hpp shaped.hpp
 
 ../uIntWasmMesher.wasm: uIntWasmMesher.cpp $(headers)
 	clang --target=wasm32 \
