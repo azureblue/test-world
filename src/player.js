@@ -18,8 +18,8 @@ export class PlayerInput {
 /**
  * The player body: a box (width x width x height) with the feet at the bottom centre, moved by simple physics and
  * collided with solid blocks and the octants of shaped ones (slabs; plants and water don't block): the collisions are
- * with half-block cells, each filled or not. Walking on the ground into a ledge up to walk.stepHeight high (a slab) it
- * hops onto it. Positions are world coordinates: x, y on the ground, z
+ * with half-block cells, each filled or not. Walking on the ground, a step of up to walk.stepHeight (a slab) is a 45°
+ * ramp, up and down. Positions are world coordinates: x, y on the ground, z
  * up (the blocks' coordinates).
  *
  * Modes: "walk" with gravity and jumping, swimming when in water; "fly" moves freely, colliding with blocks unless
@@ -210,17 +210,17 @@ export class Player {
         this.onGround = hitZ && this.vz < 0;
         if (hitZ)
             this.vz = 0;
-        if (hitZ || this.mode !== "walk" || this.inWater)
-            this.#climbing = false;
-        const hitX = this.#moveHorizontal(0, this.vx * dt);
-        this.#wallX = hitX ? Math.sign(this.vx) : 0;
-        if (hitX)
-            this.vx = 0;
-        const hitY = this.#moveHorizontal(1, this.vy * dt);
-        this.#wallY = hitY ? Math.sign(this.vy) : 0;
-        if (hitY)
-            this.vy = 0;
+        // on the ground, or going up a ramp (#moveHorizontal: lifted the substep before, gravity has taken it a bit
+        // under the ramp since)
+        const standing = this.onGround || this.#onRamp;
+        this.#onRamp = false;
+        // a wall stops the move, not the walking speed (it goes on once there's room: up a ledge's ramp)
+        this.#wallX = this.#moveHorizontal(0, this.vx * dt, standing) ? Math.sign(this.vx) : 0;
+        this.#wallY = this.#moveHorizontal(1, this.vy * dt, standing) ? Math.sign(this.vy) : 0;
     }
+
+    /** lifted up a ledge's ramp in the last substep (#moveHorizontal) */
+    #onRamp = false;
 
     /** the side (-1, 0, 1 on x and y) of the walls the last step ran into */
     #wallX = 0;
@@ -457,49 +457,89 @@ export class Player {
     }
 
     /**
-     * Moves the box along x or y (see #moveAxis). Stopped while walking on the ground (or falling: into a gap before
-     * the next slab), it looks for a ledge in front:
-     * walk.stepHeight higher it gets further, and down from there it lands on something with room for the body (2 skins
-     * ahead: stopped skin before the ledge, the box isn't over it yet). Then it hops just high enough to get onto it,
-     * the horizontal speed kept while it rises along the ledge (see #climbing); the box stays where it was stopped.
-     * @returns {boolean} whether it was stopped (not when it hops)
+     * Moves the box along x or y (see #moveAxis). Walking (standing: on the ground or on a ramp), a step of at most
+     * walk.stepHeight is a 45° ramp. Up: a ledge ahead, the feet at least its top less the distance to it, lifted at
+     * most twice as much as the move (pressed against the ledge: up at twice the walking speed). Down: off an edge, ground at most
+     * walk.stepHeight under the feet, they follow it down at most as much as the move (deeper: a fall). Stairs are one
+     * slope, either way.
+     * @param {boolean} standing on the ground or on a ramp
+     * @returns {boolean} whether it was stopped
      */
-    #moveHorizontal(axis, delta) {
-        const x = this.x, y = this.y, z = this.z;
-        if (!this.#moveAxis(axis, delta))
-            return false;
-        if (this.#climbing)
-            return false;
-        if (this.mode !== "walk" || !(this.onGround || this.vz <= 0) || this.inWater)
-            return true;
-        const stoppedX = this.x, stoppedY = this.y;
-        this.x = x;
-        this.y = y;
+    #moveHorizontal(axis, delta, standing) {
         const walk = this.#settings.walk;
-        this.#moveAxis(2, walk.stepHeight);
-        const up = this.z - z;
-        this.#moveAxis(axis, delta);
-        // along the move (the stopped one may go back: the box was nearer than skin)
-        const further = Math.sign(delta) * (axis === 0 ? this.x - stoppedX : this.y - stoppedY) >= 0;
-        const ahead = Math.sign(delta) * 2 * this.#settings.skin;
-        this.#shift(axis, ahead);
-        this.#moveAxis(2, -up);
-        // on the ledge there's room for the body (not a wall)
-        const room = !this.#overlapsBlocks();
-        const rise = this.z - z;
-        this.x = stoppedX;
-        this.y = stoppedY;
-        this.z = z;
-        if (!room || !further || rise <= 1e-9)
-            return true;
-        this.vz = Math.max(this.vz, Math.sqrt(2 * walk.gravity * (rise + walk.stepClearance)));
-        this.onGround = false;
-        this.#climbing = true;
-        return false;
+        if (this.mode !== "walk" || !standing || this.inWater || delta === 0)
+            return this.#moveAxis(axis, delta);
+        const step = Math.abs(delta);
+        const ledge = this.#ledgeAhead(axis, Math.sign(delta) * (walk.stepHeight + step));
+        if (ledge !== null) {
+            // up: the ramp's height where the move ends; at most twice the move (room to make up for gravity, which
+            // takes the feet a bit under the ramp every substep)
+            const lift = Math.min(ledge.rise - Math.max(ledge.distance - step, 0), 2 * step);
+            if (lift > 0) {
+                this.#moveAxis(2, lift);
+                this.#rampStep();
+            }
+            return this.#moveAxis(axis, delta);
+        }
+        const stopped = this.#moveAxis(axis, delta);
+        // down: no ledge ahead (on the way up one the feet are over the ground before it)
+        const ground = this.#groundUnder(walk.stepHeight);
+        if (ground !== null && ground < this.z - 1e-9) {
+            this.z = Math.max(ground, this.z - step);
+            this.#rampStep();
+        }
+        return stopped;
     }
 
-    /** hopping onto a ledge (#moveHorizontal): pressed against it, the horizontal speed isn't lost; until it lands */
-    #climbing = false;
+    /** a step along a ramp (#moveHorizontal): standing on it, not falling */
+    #rampStep() {
+        this.vz = Math.max(this.vz, 0);
+        this.onGround = true;
+        this.#onRamp = true;
+    }
+
+    /** the height the feet would stand at on what's at most `depth` under them, null if nothing (the box moved down
+     * there and back) */
+    #groundUnder(depth) {
+        const z = this.z;
+        const hit = this.#moveAxis(2, -depth);
+        const ground = this.z;
+        this.z = z;
+        return hit ? ground : null;
+    }
+
+    /**
+     * The ledge a move along x or y meets: the move stopped (after `distance`), walk.stepHeight higher it gets further,
+     * and down from there it lands on something with room for the body (2 skins ahead: stopped skin before the ledge,
+     * the box isn't over it yet), `rise` above the feet; its top at most walk.stepHeight over the ground at its foot (a
+     * step, not a wall beyond a gap). Null if none. The box stays where it is.
+     * @returns {{rise: number, distance: number} | null}
+     */
+    #ledgeAhead(axis, delta) {
+        const x = this.x, y = this.y, z = this.z;
+        const stepHeight = this.#settings.walk.stepHeight;
+        let ledge = null;
+        if (this.#moveAxis(axis, delta)) {
+            const stoppedAt = axis === 0 ? this.x : this.y;
+            const distance = Math.abs(stoppedAt - (axis === 0 ? x : y));
+            const foot = this.#groundUnder(stepHeight);
+            this.x = x;
+            this.y = y;
+            this.#moveAxis(2, stepHeight);
+            const up = this.z - z;
+            this.#moveAxis(axis, delta);
+            const further = Math.sign(delta) * ((axis === 0 ? this.x : this.y) - stoppedAt) >= 0;
+            this.#shift(axis, Math.sign(delta) * 2 * this.#settings.skin);
+            this.#moveAxis(2, -up);
+            // on the ledge there's room for the body (not a wall)
+            if (further && !this.#overlapsBlocks() && this.z - z > 1e-9 && foot !== null && this.z - foot <= stepHeight + 1e-9)
+                ledge = { rise: this.z - z, distance };
+        }
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        return ledge;
+    }
 
     #overlapsBlocks() {
         const lo = [0, 1, 2].map(a => Math.floor(this.#boxMin(a) * 2));

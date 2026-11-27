@@ -96,7 +96,7 @@ export const Settings = {
         // camera height above the feet
         eyeHeight: 1.7,
         // the box always stays this far from blocks it touches, in blocks (> 0: no exact contact, no float trouble)
-        skin: 0.1,
+        skin: 0.001,
         // a block can be placed into the body if it lifts the player onto it by at most this much, in blocks: near the top
         // of a jump (one block per jump), floating in water; not when standing
         placeLiftMax: 0.5,
@@ -118,10 +118,8 @@ export const Settings = {
             // seconds; holding jump, the next jump starts at the earliest this long after the last one (a new press
             // jumps at once)
             jumpCooldown: 0.5,
-            // walking on the ground into a ledge this high (a slab's 0.5, with some to spare) the player hops onto it,
-            // stepClearance higher than the ledge at the top of the hop
+            // walking on the ground, a step up or down of at most this (a slab's 0.5, with some to spare) is a 45° ramp
             stepHeight: 0.55,
-            stepClearance: 0.05,
             maxFallSpeed: 78
         },
         swim: {

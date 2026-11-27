@@ -62,8 +62,12 @@ block's saved state (`blockState`), so no save format change: older saves have n
   half-block cells (`shade_vertex` in `mesh/cpp/common.hpp`). Quarters merge into the largest rectangles: a corner in
   the middle of a whole face's edge (a T-junction) would show as a seam, so a wall's strip under a slab spans its
   block, and a corner still there (a slab's side beside a block) gets that face's blend of the edge's two corners.
-- **Collision** (`player.js`): the player's box against half-block cells; walking into a ledge up to half a block
-  high (or falling into a gap before one), a hop just high enough onto it, the speed kept.
+- **Collision** (`player.js`): the player's box against half-block cells; walking on the ground, a ledge ahead up to
+  `walk.stepHeight` high over the ground at its foot (a step, not a wall beyond a gap) is a 45° ramp up to its top:
+  the feet at least its top less the distance to it, lifted at most twice the move (room to make up for gravity's
+  pull; pressed against the ledge, up at twice the walking speed). Down the same: off an edge, ground at most
+  `walk.stepHeight` under the feet, they follow it down at most as much as the move (deeper: a fall). Stairs, a step
+  of 0.5 every 0.5, are one slope either way. A wall stops the move, not the walking speed.
 - **Ray cast**: a shaped cell stops the ray where it hits one of its octants (the face hit, its normal).
 - **Placement** (`interaction.js`):
   - slab: on a top face the bottom half, on a bottom face the top half, on a side the half clicked; onto a slab of the
