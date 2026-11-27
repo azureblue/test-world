@@ -23,6 +23,18 @@ constexpr uint X = 0;
 constexpr uint Y = 1;
 constexpr uint Z = 2;
 
+// A face of a box by direction: its first vertex (the box's corner, plus these times the box's size), then the
+// vertices along W, along W and H, along H (the encoders' vertex order, and the AO's v0..v3)
+namespace quad_encoding {
+constexpr int VERTEX_OFFSETS[8][3] = {{0, 0, 1}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 0}, {0, 1, 0}};
+constexpr int MERGE_VECTOR_W[8][3] = {{1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {-1, 0, 0}, {0, 1, 0}, {1, 0, 0}, {1, 1, 0}, {1, -1, 0}};
+constexpr int MERGE_VECTOR_H[8][3] = {{0, 1, 0}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, -1, 0}, {0, 0, 1}, {0, 0, 1}};
+}  // namespace quad_encoding
+
+// by direction (up, front, left, back, right, down): the axis of its normal and whether the normal points along it
+constexpr uint NORMAL_AXIS[6] = {Z, Y, X, Y, X, Z};
+constexpr bool NORMAL_POSITIVE[6] = {true, false, false, true, true, false};
+
 namespace data_size {
 constexpr uint DATA_INPUT_SIZE_IN_UINT32 = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 constexpr uint MAX_VISIBLE_FACES = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE * 3;
@@ -342,6 +354,92 @@ inline_always ao_shadows::vertex_data ao_shadows::compute<Direction::Down>(const
     shadows.v1 = ao_value(c6, c4, c7);
     shadows.l1 = corner_light(front, c6, c4, c7);
     return shadows;
+}
+
+// Whether the mesher's input has a shaped block (row_masks::compute): only then do faces look for shaped blocks'
+// octants in their AO (face_ao).
+inline bool input_has_shaped = false;
+
+// a face vertex's AO (ao_value) and light (corner_light) by half-block cells
+struct vertex_shading {
+    uint ao, light;
+};
+
+// A face vertex's AO and light by half-block cells, as ao_shadows by cells: a half cell is filled in a solid block or
+// in a shaped block's octant, and a filled one has no light. vertex: in half blocks, in the input; n, n_positive: the
+// normal's axis and side; w, h: unit steps (-1, 0, 1 per axis) from the vertex along the face's two edges into it.
+// The 4 half cells in front of the vertex: in the face's corner (front), across the edge along h (a), across the
+// one along w (b), diagonal (c).
+static inline vertex_shading shade_vertex(const array_3d<CHUNK_SIZE_E>& data, const int vertex[3], uint n, bool n_positive, const int w[3], const int h[3]) {
+    uint filled[4], light[4];
+    for (uint i = 0; i < 4; i++) {
+        const int sw = (i & 1) ? -1 : 1, sh = (i & 2) ? -1 : 1;
+        int half[3];
+        for (uint k = 0; k < 3; k++) {
+            // a point inside the half cell, in quarter blocks: a quarter off the vertex along the normal and the edges
+            const int quarter = vertex[k] * 2 + (k == n ? (n_positive ? 1 : -1) : 0) + sw * w[k] + sh * h[k];
+            half[k] = quarter >> 1;
+        }
+        const uint block = data.get_hxy(half[2] >> 1, half[0] >> 1, half[1] >> 1);
+        const uint octant = (half[0] & 1) | (half[1] & 1) << 1 | (half[2] & 1) << 2;
+        filled[i] = is_solid_01(block) | (static_cast<uint>(is_shaped(block)) & (shape_octants(block) >> octant & 1));
+        light[i] = filled[i] ? 0 : block & LIGHT_BITS;
+    }
+    // as ao_value and corner_light: both sides filled, the diagonal is behind a wall corner
+    const uint sides = filled[1] + filled[2];
+    return {sides == 2 ? 3 : sides + filled[3], light[0] + light[1] + light[2] + (sides == 2 ? 0 : light[3])};
+}
+
+// the 4 vertices of a box's face (a cell's: pos its corner, size 2): vertex k's position and steps into the face
+// (shade_vertex), in half blocks
+template <typename Shade>
+static inline void for_face_vertices(Direction dir, const int pos[3], const int size[3], Shade shade) {
+    using namespace quad_encoding;
+    for (uint k = 0; k < 4; k++) {
+        const int dw = k == 1 || k == 2, dh = k >= 2;
+        int vertex[3], w[3], h[3];
+        for (uint a = 0; a < 3; a++) {
+            vertex[a] = pos[a] + VERTEX_OFFSETS[dir][a] * size[a] + dw * MERGE_VECTOR_W[dir][a] * size[a] + dh * MERGE_VECTOR_H[dir][a] * size[a];
+            w[a] = (dw ? -1 : 1) * MERGE_VECTOR_W[dir][a];
+            h[a] = (dh ? -1 : 1) * MERGE_VECTOR_H[dir][a];
+        }
+        shade(k, vertex, w, h);
+    }
+}
+
+// a block's face AO by half cells (next to shaped blocks): h, x, y the block in the input
+template <Direction DIR>
+static inline ao_shadows::vertex_data ao_by_half_cells(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+    const int pos[3] = {static_cast<int>(x) * 2, static_cast<int>(y) * 2, static_cast<int>(h) * 2}, size[3] = {2, 2, 2};
+    uint ao[4], light[4];
+    for_face_vertices(DIR, pos, size, [&](uint k, const int vertex[3], const int w[3], const int hh[3]) {
+        const vertex_shading s = shade_vertex(data, vertex, NORMAL_AXIS[DIR], NORMAL_POSITIVE[DIR], w, hh);
+        ao[k] = s.ao;
+        light[k] = s.light;
+    });
+    return {ao[0], ao[1], ao[2], ao[3], light[0], light[1], light[2], light[3]};
+}
+
+// A block face's AO and light (ao_shadows::compute), by half cells when a shaped block is in the 3 x 3 cells in front
+// of it (AO_BY_HALF_CELLS: always, to test them against each other)
+template <Direction DIR>
+inline_always static ao_shadows::vertex_data face_ao(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
+#ifdef AO_BY_HALF_CELLS
+    return ao_by_half_cells<DIR>(data, h, x, y);
+#else
+    if (input_has_shaped) {
+        constexpr uint step[3] = {1, CHUNK_SIZE_E, PLANE_SIZE_E};
+        constexpr uint n = NORMAL_AXIS[DIR], a = (n + 1) % 3, b = (n + 2) % 3;
+        const uint front = h * PLANE_SIZE_E + y * CHUNK_SIZE_E + x + (NORMAL_POSITIVE[DIR] ? step[n] : -step[n]);
+        uint any = 0;
+        for (uint i = front - step[a] - step[b], ia = 0; ia < 3; ia++, i += step[a])
+            for (uint j = i, ib = 0; ib < 3; ib++, j += step[b])
+                any |= data.get_idx(j);
+        if (any >> 28 & 1)
+            return ao_by_half_cells<DIR>(data, h, x, y);
+    }
+    return ao_shadows::compute<DIR>(data, h, x, y);
+#endif
 }
 
 // The output areas: solid faces, water faces, x-quads, the main mesher's sort scratch, cutout cube faces (the solid

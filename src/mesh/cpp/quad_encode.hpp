@@ -1,11 +1,6 @@
 #pragma once
 #include "common.hpp"
 
-namespace quad_encoding {
-constexpr int VERTEX_OFFSETS[8][3] = {{0, 0, 1}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 0}, {0, 1, 0}};
-constexpr int MERGE_VECTOR_W[8][3] = {{1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {-1, 0, 0}, {0, 1, 0}, {1, 0, 0}, {1, 1, 0}, {1, -1, 0}};
-constexpr int MERGE_VECTOR_H[8][3] = {{0, 1, 0}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, -1, 0}, {0, 0, 1}, {0, 0, 1}};
-}  // namespace quad_encoding
 
 template <typename T, int shift, typename V>
 inline_always constexpr static T encode_value(V value) {
@@ -59,9 +54,8 @@ class quad_encoder {
     }
 
     // A face of a shaped block's box (shaped.hpp), in half blocks: the box's corner and size (pos, size: x, y, z), the
-    // texture coordinates of the face's first corner (u, v), the light of the cell in front of it (its LIGHT_BITS);
-    // no AO.
-    static void encode_shaped_face(uint64* __restrict& out, Direction dir, const uint pos[3], const uint size[3], uint u, uint v, uint tex_id, uint light) {
+    // texture coordinates of the face's first corner (u, v), its vertices' AO and light (shade_vertex).
+    static void encode_shaped_face(uint64* __restrict& out, Direction dir, const uint pos[3], const uint size[3], uint u, uint v, uint tex_id, const uint ao[4], const uint light[4]) {
         using namespace quad_encoding;
         uint corner[3], w[3], h[3];
         uint w_len = 0, h_len = 0;
@@ -72,17 +66,18 @@ class quad_encoder {
             w_len += size[a] * (MERGE_VECTOR_W[dir][a] != 0);
             h_len += size[a] * (MERGE_VECTOR_H[dir][a] != 0);
         }
-        // the light as the sum of 4 equal cells: no AO, the shader divides by 4
-        const uint64 base_bits = encode_tex_bits(tex_id) | encode_dir_bits(dir) | encode_light_bits(light * 4);
+        const uint64 base_bits = encode_tex_bits(tex_id) | encode_dir_bits(dir);
         const auto vertex = [&](uint dw, uint dh) {
-            uint64 bits = base_bits | (static_cast<uint64>(u + dw * w_len) << 32) | (static_cast<uint64>(v + dh * h_len) << 39);
+            const uint k = dh ? 3 - dw : dw;
+            uint64 bits = base_bits | encode_ao_bits(ao[k]) | encode_light_bits(light[k]) |
+                          (static_cast<uint64>(u + dw * w_len) << 32) | (static_cast<uint64>(v + dh * h_len) << 39);
             for (uint a = 0; a < 3; a++) {
                 const uint p = corner[a] + dw * w[a] + dh * h[a];
                 bits |= static_cast<uint64>(p >> 1) << (a * POS_Y_SHIFT) | static_cast<uint64>(p & 1) << (POS_HALF_SHIFT + a);
             }
             return bits;
         };
-        encode(out, vertex(0, 0), vertex(1, 0), vertex(1, 1), vertex(0, 1), false);
+        encode(out, vertex(0, 0), vertex(1, 0), vertex(1, 1), vertex(0, 1), ao[0] + ao[2] > ao[1] + ao[3]);
     }
 
     template <Direction DIR>
@@ -97,7 +92,7 @@ class quad_encoder {
     template <Direction DIR>
     inline_always static void encode_face_q(uint64* __restrict& out, const array_3d<CHUNK_SIZE_E>& data, uint e_x, uint e_y, uint e_z, uint tex) {
         uint64 pos_bits = quad_encoder::encode_pos_bits(e_x - 1, e_y - 1, e_z - 1);
-        const ao_shadows::vertex_data& aos = ao_shadows::compute<DIR>(data, e_z, e_x, e_y);
+        const ao_shadows::vertex_data& aos = face_ao<DIR>(data, e_z, e_x, e_y);
 
         uint64 base_bits = (pos_bits + pos_offset_bits<DIR>) | encode_tex_bits(tex) | encode_dir_bits(DIR);
 

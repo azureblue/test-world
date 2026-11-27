@@ -75,7 +75,7 @@ struct face_shading_t {
 
 template <Direction DIR>
 static inline face_shading_t face_shading(const array_3d<CHUNK_SIZE_E>& data, uint h, uint x, uint y) {
-    const ao_shadows::vertex_data v = ao_shadows::compute<DIR>(data, h, x, y);
+    const ao_shadows::vertex_data v = face_ao<DIR>(data, h, x, y);
     return {v.v0 | v.v1 << 2 | v.v2 << 4 | v.v3 << 6,
             layer_vertex_light(v.l0) | layer_vertex_light(v.l1) << 12 | layer_vertex_light(v.l2) << 24 | layer_vertex_light(v.l3) << 36};
 }

@@ -42,7 +42,7 @@ typedef uint u32x4 __attribute__((vector_size(16), aligned(4)));
 typedef int i32x4 __attribute__((vector_size(16), aligned(4)));
 
 struct inner_masks {
-    uint hides, solid, cubes, specials;
+    uint hides, solid, cubes, specials, shaped;
 };
 
 inline_always static uint top_bits(u32x4 blocks) {
@@ -51,13 +51,15 @@ inline_always static uint top_bits(u32x4 blocks) {
 
 inline_always static inner_masks inner_row(const uint* __restrict row, uint hide_bits) {
     const u32x4 hide_test = hide_bits - u32x4{}, solid_bit = SOLID_BIT - u32x4{}, special_bits = SPECIAL_BITS - u32x4{};
-    inner_masks m{0, 0, 0, 0};
+    inner_masks m{0, 0, 0, 0, 0};
     for (uint k = 0; k < CHUNK_SIZE / 4; k++) {
         const u32x4 blocks = *reinterpret_cast<const u32x4*>(row + 1 + k * 4);
         const uint at = k * 4;
         m.hides |= top_bits((blocks & hide_test) == solid_bit) << at;
         m.solid |= top_bits(blocks) << at;
         m.specials |= top_bits((blocks & special_bits) != 0) << at;
+        // the shaped bit (28) to the top
+        m.shaped |= top_bits(blocks << 3);
     }
     // every cube is solid (the "cube" model, src/blocks.js); not a block value != 0 test: air has light bits
     m.cubes = m.solid & ~m.specials;
@@ -72,6 +74,7 @@ inline_always static uint64 row_mask(uint inner, bool first, bool last) {
 static inline void compute(const uint* __restrict data) {
     // with cutout textures off cutout_flag is 0: cutout blocks hide faces like any solid one
     const uint hide_bits = SOLID_BIT | block_table.cutout_flag;
+    uint shaped = 0;
     for (uint r = 0; r < ROWS; r++) {
         const uint* __restrict row = data + r * CHUNK_SIZE_E;
         const inner_masks m = inner_row(row, hide_bits);
@@ -81,7 +84,9 @@ static inline void compute(const uint* __restrict data) {
         // the border isn't drawn
         cubes[r] = row_mask(m.cubes, false, false);
         specials[r] = row_mask(m.specials, false, false);
+        shaped |= m.shaped | ((first | last) >> 28 & 1);
     }
+    input_has_shaped = shaped != 0;
 }
 }  // namespace row_masks
 
