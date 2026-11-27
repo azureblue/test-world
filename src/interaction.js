@@ -1,6 +1,6 @@
 import {
-    BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, blockOctants, blockShape, flooded, getBlockById, isFlowing, isLiquid, isShaped,
-    isXQuads, octantsBox, removed, SHAPES, WATER_SURFACE_LEVEL, withHeight, withShape
+    BLOCK_HEIGHT_FULL, BLOCK_IDS, blockHeight, blockOctants, FULL_OCTANTS, flooded, getBlockById, HALF_SHAPES, isFlowing,
+    isLiquid, isShaped, isXQuads, octantsBox, removed, shapeOfOctants, WATER_SURFACE_LEVEL, withHeight, withShape
 } from "./blocks.js";
 import { ItemBar } from "./itemBar.js";
 import { Player } from "./player.js";
@@ -10,10 +10,11 @@ import { World } from "./world/world.js";
 
 /**
  * Breaking and placing blocks: the block the camera looks at ({@link target}, updated every frame), removed with the
- * left mouse button, the item bar's block placed on the face looked at with the right one. A slab is placed by
- * halves: on a top face the bottom half, on a bottom face the top one, on a side the half looked at; onto a slab of
- * the same kind (its inner face looked at, or in the cell the new one goes to) it adds the missing half, the two making
- * the full block.
+ * left mouse button, the item bar's block placed on the face looked at with the right one. A slab is placed as a half
+ * of the cell, by where on the face it's aimed at (slabShapeAt): the middle, the half against the face (on a top face
+ * the bottom half, on a side a vertical slab against it); near an edge, the half towards it. Onto a slab of the same
+ * kind (its inner face looked at, or in the cell the new one goes to) it adds the missing half, the two making the full
+ * block.
  */
 export class BlockInteraction {
     #world;
@@ -98,9 +99,12 @@ export class BlockInteraction {
         const world = this.#world;
         const full = getBlockById(placed).full;
         const sameKind = (block) => isShaped(block) && getBlockById(block) === getBlockById(placed);
+        // where the ray hit
+        const hit = ["x", "y", "z"].map(k => this.#eye[k] + this.#direction[k] * t.t);
+        const normal = [t.nx, t.ny, t.nz], axis = normal.findIndex(n => n !== 0);
         if (full !== null) {
-            // the slab looked at, its inner face (a bottom slab's top, a top slab's bottom)
-            if (sameKind(t.block) && t.nz === (blockShape(t.block) === SHAPES.SLAB_BOTTOM ? 1 : -1)) {
+            // the slab looked at, its inner face (in the middle of its cell: a bottom slab's top, a vertical one's side)
+            if (sameKind(t.block) && Math.abs(hit[axis] - [t.x, t.y, t.z][axis] - 0.5) < 1e-6) {
                 this.#completeSlab(t.x, t.y, t.z, t.block, full);
                 return;
             }
@@ -110,17 +114,15 @@ export class BlockInteraction {
                 return;
             }
         }
-        const hitZ = this.#eye.z + this.#direction.z * t.t;
-        const top = t.nz === -1 || (t.nz === 0 && hitZ - Math.floor(hitZ) >= 0.5);
-        const block = withShape(placed, top ? SHAPES.SLAB_TOP : SHAPES.SLAB_BOTTOM);
+        const block = withShape(placed, slabShapeAt(normal, [hit[0] - px, hit[1] - py, hit[2] - pz]));
         if (this.#fitsPlayer(px, py, pz, octantsBox(blockOctants(block))))
             world.setBlock(px, py, pz, block);
     }
 
-    /** a slab's missing half added: the full block (its name) */
+    /** a slab's missing half added: the full block (its name), if the slab is a half */
     #completeSlab(x, y, z, slab, full) {
-        const missing = blockShape(slab) === SHAPES.SLAB_BOTTOM ? SHAPES.SLAB_TOP : SHAPES.SLAB_BOTTOM;
-        if (this.#fitsPlayer(x, y, z, octantsBox(blockOctants(withShape(slab, missing)))))
+        const missing = shapeOfOctants(~blockOctants(slab) & FULL_OCTANTS);
+        if (missing >= 0 && this.#fitsPlayer(x, y, z, octantsBox(blockOctants(withShape(slab, missing)))))
             this.#world.setBlock(x, y, z, BLOCK_IDS[full]);
     }
 
@@ -134,4 +136,32 @@ export class BlockInteraction {
         const intoPlayer = player.intersectsBlock(px, py, pz, box) && !(player.mode === "fly" && player.noclip);
         return !intoPlayer || player.canStepOnto(pz, box[5]);
     }
+}
+
+/** aimed this close to an edge of a face (of 1), a slab goes towards that edge */
+const EDGE_BAND = 0.25;
+
+/**
+ * The half of a cell a slab placed into it fills, by where the face it's placed on is aimed at: in the middle the half
+ * against the face, within EDGE_BAND of an edge the half towards the nearest edge.
+ * @param {number[]} normal the face's normal (x, y, z), out of the block clicked into the cell
+ * @param {number[]} at where it's aimed at in the cell (x, y, z, 0..1), on the face
+ * @returns {number} a value of SHAPES (HALF_SHAPES)
+ */
+export function slabShapeAt(normal, at) {
+    const axis = normal.findIndex(n => n !== 0);
+    // the face is at the cell's low side when the normal points up the axis
+    let half = [axis, normal[axis] > 0 ? 0 : 1], nearest = EDGE_BAND;
+    for (const edgeAxis of [0, 1, 2]) {
+        if (edgeAxis === axis)
+            continue;
+        for (const side of [0, 1]) {
+            const distance = side === 0 ? at[edgeAxis] : 1 - at[edgeAxis];
+            if (distance < nearest) {
+                nearest = distance;
+                half = [edgeAxis, side];
+            }
+        }
+    }
+    return HALF_SHAPES[half[0]][half[1]];
 }

@@ -70,16 +70,25 @@ block's saved state (`blockState`), so no save format change: older saves have n
   of 0.5 every 0.5, are one slope either way. A wall stops the move, not the walking speed.
 - **Ray cast**: a shaped cell stops the ray where it hits one of its octants (the face hit, its normal).
 - **Placement** (`interaction.js`):
-  - slab: on a top face the bottom half, on a bottom face the top half, on a side the half clicked; onto a slab of the
-    same kind, its missing half (the full block);
+  - slab: a half of the cell by where the face it's placed on is aimed at (`slabShapeAt`): the middle, the half
+    against the face (on a top face the bottom half, on a bottom face the top one, on a side a vertical slab against
+    it); within a quarter block of an edge, the half towards the nearest edge (a side's lower band: a bottom slab).
+    Onto a slab of the same kind (its inner face, or in the cell the new one goes to), its missing half (the full
+    block);
   - stairs: facing from the player's yaw, upside down when the upper half is clicked; corner stairs from the
     neighbouring stairs.
 - **Smaller**: the block outline (the shape's box), particles collide with octants, the inventory icon draws the shape,
   water treats shaped blocks as walls.
 
+Vertical slabs (`SLAB_X0`, `SLAB_X1`, `SLAB_Y0`, `SLAB_Y1`) needed only their octants and the placement: the meshers,
+collision, light and the ray cast take any shape. A seam can still show where two partial faces meet with a merged
+rectangle spanning an edge the other has a corner in the middle of (odd mixes of the shapes; not in walls, floors or
+ceilings of them): the edge blend only knows whole faces beside.
+
 ## Order of work
 
-1. Slabs: the bits, the meshers, collision with step up, the ray cast, placement and merging, outline, icon.
+1. Slabs: the bits, the meshers, collision with step up, the ray cast, placement and merging, outline, icon; vertical
+   slabs.
 2. Stairs: the shapes, placement by facing; the meshers, collision and the ray cast need nothing new.
 3. Corner stairs.
 

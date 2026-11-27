@@ -104,13 +104,32 @@ const MODEL_BITS = {
  * Shaped blocks' shapes (docs/proposals/shaped-blocks.md): the index in a block value's shape bits. A shape is the
  * octants (half blocks) of the cell it fills, octant ox | oy << 1 | oz << 2: SHAPE_OCTANTS by index.
  */
-export const SHAPES = Object.freeze({ SLAB_BOTTOM: 0, SLAB_TOP: 1 });
+export const SHAPES = Object.freeze({ SLAB_BOTTOM: 0, SLAB_TOP: 1, SLAB_X0: 2, SLAB_X1: 3, SLAB_Y0: 4, SLAB_Y1: 5 });
 /** shapes are below this: 5 bits (MAX_SHAPES in mesh/cpp/blocks.hpp) */
 export const MAX_SHAPES = 32;
 /** the octants of each shape, by index (the meshers get them in their block table) */
 export const SHAPE_OCTANTS = new Uint8Array(MAX_SHAPES);
 SHAPE_OCTANTS[SHAPES.SLAB_BOTTOM] = 0b0000_1111;
 SHAPE_OCTANTS[SHAPES.SLAB_TOP] = 0b1111_0000;
+// vertical slabs: the half at the low or the high x, y
+SHAPE_OCTANTS[SHAPES.SLAB_X0] = 0b0101_0101;
+SHAPE_OCTANTS[SHAPES.SLAB_X1] = 0b1010_1010;
+SHAPE_OCTANTS[SHAPES.SLAB_Y0] = 0b0011_0011;
+SHAPE_OCTANTS[SHAPES.SLAB_Y1] = 0b1100_1100;
+/** the slabs (halves of a cell) by axis (x, y, z), then side (low, high) */
+export const HALF_SHAPES = Object.freeze([
+    [SHAPES.SLAB_X0, SHAPES.SLAB_X1], [SHAPES.SLAB_Y0, SHAPES.SLAB_Y1], [SHAPES.SLAB_BOTTOM, SHAPES.SLAB_TOP]]);
+
+/**
+ * @param {number} octants a mask (blockOctants)
+ * @returns {number} the shape filling them, -1 if none
+ */
+export function shapeOfOctants(octants) {
+    for (const shape of Object.values(SHAPES))
+        if (SHAPE_OCTANTS[shape] === octants)
+            return shape;
+    return -1;
+}
 /** all 8 octants: a solid cube */
 export const FULL_OCTANTS = 0xFF;
 
