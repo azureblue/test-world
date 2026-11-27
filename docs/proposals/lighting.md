@@ -130,7 +130,8 @@ Under a long strip, the sky light under its middle (of 15):
 ### Sky top: a per-column heightmap
 
 Chunks are cubic and the world has no top, so "open to the sky" can't be found by scanning up. The world worker keeps
-a **sky top** per block column: the highest solid block, which stops sky light (`world/skyTops.js`).
+a **sky top** per block column: the highest cell its sky light doesn't reach straight down, under the highest block that
+stops it (`world/skyTops.js`): a solid one, or a slab ([shaped blocks](shaped-blocks.md): a bottom slab's own cell sees the sky).
 
 - **Scanned from the generator's tops.** `ChunkGenerator.solidTops(cx, cy)` gives, per block column, a height with no
   generated solid block above it (`NO_TOP`: none in the column):

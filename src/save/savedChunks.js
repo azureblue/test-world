@@ -51,7 +51,8 @@ export class SavedChunks {
     }
 
     /**
-     * Every saved chunk's position and its highest solid block (world/skyTops.js starts the sky light's scan there).
+     * Every saved chunk's position and its highest block that stops the sky light (world/skyTops.js starts the sky
+     * light's scan there).
      * @returns {Iterable<{cx: number, cy: number, cz: number, top: number | null}>}
      */
     *tops() {

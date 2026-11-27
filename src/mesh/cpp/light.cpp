@@ -13,7 +13,10 @@
 // - The spread is in thirds of a level (units): a step to an edge neighbour (diagonal, past 2 open cells) costs 4/3
 //   of a step to a face neighbour (about sqrt 2), so light spreads round, not in diamonds. The output is the level,
 //   rounded up.
-// Solid cells stop both; their own light stays 0 (the mesher counts them as such).
+// Solid cells stop both; their own light stays 0 (the mesher counts them as such). A shaped block's cell (a slab) is
+// lit, and light crosses a face between two cells where a quarter of it is open on both sides (shape_open: a bottom
+// slab's open upper half against a top slab's open lower half is closed); the steps to edge neighbours only go
+// between cells without shapes (no corners of shapes to slip past).
 
 #define export_name(name) __attribute__((export_name(name)))
 #define inline_always __attribute__((always_inline)) inline
@@ -36,6 +39,27 @@ constexpr uint SKY_STEP = 3;
 constexpr uint SKY_DIAGONAL_STEP = 4;
 constexpr uint BLOCK_STEP = 3;
 constexpr uint BLOCK_DIAGONAL_STEP = 4;
+
+// a cell (cells, block_cells): bit 0 solid; a solid one's bits 1..4 the block light it gives (block_cells), an open
+// one's bits 1..6 its shape (src/blocks.js) + 1, 0 none. Emitters are cubes, shaped blocks aren't solid: the bits are
+// one or the other (a solid cell's are never read as a shape: no step goes into it).
+constexpr uint SOLID = 1;
+constexpr uint SHAPE_SHIFT = 1;
+constexpr uint SHAPE_BITS = 0x3fu << SHAPE_SHIFT;
+constexpr uint MAX_SHAPES = 32;
+// faces: -x, +x, -y, +y, -h, +h (a face's opposite: face ^ 1)
+constexpr uint FACE_XM = 0, FACE_XP = 1, FACE_YM = 2, FACE_YP = 3, FACE_HM = 4, FACE_HP = 5;
+// above a cell, something that covers it (a sideways step into it is dearer): solid or shaped
+constexpr uint COVERS = SOLID | SHAPE_BITS;
+
+// input, written once by the JS side (Lighting): by shape + 1 (0: no shape) and face, the quarters of the face its
+// octants leave open, bit qa | qb << 1 over the face's two other axes (in axis order), the same for a face and its
+// opposite: light crosses between two cells where the two faces have an open quarter in common
+static uint8 shape_open[MAX_SHAPES + 1][6];
+
+inline_always static uint cell_shape(uint cell) {
+    return (cell & SHAPE_BITS) >> SHAPE_SHIFT;
+}
 
 constexpr uint MAX_LIGHT = 15;
 constexpr uint MAX_BLOCK_LIGHT = 15;
@@ -78,8 +102,10 @@ struct light_field {
         }
     }
 
-    // spreads the seeds' light through the open cells (bit 0 of cells: solid); steps sideways into a cell under a
-    // block cost twice as much with under_block
+    // spreads the seeds' light through the open cells (bit 0 of cells: solid) and their open faces; steps sideways
+    // into a cell under a block cost twice as much with under_block. SHAPED: some cells have a shape (without, the
+    // steps don't look for them)
+    template <bool SHAPED>
     void spread(const uint8* cells, bool under_block) {
         for (uint u = 0; u < MAX_UNITS + 2; u++)
             seed_start[u] = 0;
@@ -100,29 +126,37 @@ struct light_field {
             for (uint q = 0; q < lengths[slot]; q++) {
                 const uint i = lists[slot][q];
                 if (light[i] == level)
-                    spread_from(cells, under_block, i, level);
+                    spread_from<SHAPED>(cells, under_block, i, level);
             }
             lengths[slot] = 0;
         }
     }
 
    private:
+    template <bool SHAPED>
     inline_always void spread_from(const uint8* cells, bool under_block, uint i, uint level) {
         const uint x = i % SZ, y = i / SZ % SZ, h = i / PL;
         const bool xm = x > 0, xp = x < SZ - 1, ym = y > 0, yp = y < SZ - 1, hm = h > 0, hp = h < SZ - 1;
-        auto open = [&](uint j) { return !(cells[j] & 1); };
+        auto open = [&](uint j) { return !(cells[j] & SOLID); };
+        // no solid block, no shape: what an edge step passes and goes between
+        auto clear = [&](uint j) { return !(cells[j] & (SOLID | SHAPE_BITS)); };
         auto reach = [&](uint j, uint cost) {
             if (level > cost && open(j))
                 raise(j, level - cost);
         };
         // a step with a sideways part: dearer into a cell under a block (nothing above the region's top)
         auto sideways = [&](uint j, uint cost, bool below_top) {
-            reach(j, under_block && below_top && (cells[j + PL] & 1) ? cost * 2 : cost);
+            reach(j, under_block && below_top && (cells[j + PL] & COVERS) ? cost * 2 : cost);
+        };
+        // through the face of the cell and the neighbour's opposite one: a quarter open in both
+        auto through = [&](uint face, uint j) {
+            return !SHAPED || (shape_open[cell_shape(cells[i])][face] & shape_open[cell_shape(cells[j])][face ^ 1]) != 0;
         };
         // to an edge neighbour past both cells beside the way (no light through two blocks touching at an edge)
+        const bool from_clear = !SHAPED || !(cells[i] & SHAPE_BITS);
         auto diagonal = [&](int a, int b, bool side, bool below_top) {
-            if (open(i + a) && open(i + b)) {
-                const uint j = i + a + b;
+            const uint j = i + a + b;
+            if (SHAPED ? from_clear && clear(i + a) && clear(i + b) && !(cells[j] & SHAPE_BITS) : open(i + a) && open(i + b)) {
                 if (side)
                     sideways(j, DIAGONAL, below_top);
                 else
@@ -130,17 +164,17 @@ struct light_field {
             }
         };
         constexpr int X = 1, Y = SZ, H = PL;
-        if (xm)
+        if (xm && through(FACE_XM, i - X))
             sideways(i - X, STEP, hp);
-        if (xp)
+        if (xp && through(FACE_XP, i + X))
             sideways(i + X, STEP, hp);
-        if (ym)
+        if (ym && through(FACE_YM, i - Y))
             sideways(i - Y, STEP, hp);
-        if (yp)
+        if (yp && through(FACE_YP, i + Y))
             sideways(i + Y, STEP, hp);
-        if (hm)
+        if (hm && through(FACE_HM, i - H))
             reach(i - H, STEP);
-        if (hp)
+        if (hp && through(FACE_HP, i + H))
             reach(i + H, STEP);
         if (xm && ym)
             diagonal(-X, -Y, true, hp);
@@ -171,9 +205,9 @@ struct light_field {
     }
 };
 
-// input, per region cell: bit 0 solid (stops light)
+// input, per region cell: bit 0 solid (stops light), the shape (SHAPE_SHIFT)
 static uint8 cells[VOLUME];
-// input, per block light region cell: bit 0 solid, bits 1..4 the block light it gives
+// input, per block light region cell: bit 0 solid, then the block light it gives or the shape
 static uint8 block_cells[BLOCK_SIZE * BLOCK_SIZE * BLOCK_SIZE];
 // input, per region column (y * SIZE + x): the lowest h of the cells that see the sky straight up (SIZE: none)
 static uint8 sky_from[PLANE];
@@ -183,6 +217,10 @@ static uint8 out[OUT_VOLUME];
 
 static light_field<SIZE, MAX_LIGHT * UNITS, SKY_STEP, SKY_DIAGONAL_STEP> sky;
 static light_field<BLOCK_SIZE, MAX_BLOCK_LIGHT * UNITS, BLOCK_STEP, BLOCK_DIAGONAL_STEP> block;
+extern "C" export_name("shape_open") uint8* get_shape_open() {
+    return &shape_open[0][0];
+}
+
 extern "C" export_name("cells") uint8* get_cells() {
     return cells;
 }
@@ -208,7 +246,7 @@ extern "C" export_name("region_size") uint get_region_size() {
 }
 
 inline_always static bool is_solid(uint i) {
-    return cells[i] & 1;
+    return cells[i] & SOLID;
 }
 
 // whether a column beside (x, y) doesn't see the sky straight up at height h
@@ -245,9 +283,13 @@ inline_always static uint level_of(uint units) {
 
 // Computes the sky light from cells and sky_from into out (no block light). Returns whether there is any light that
 // isn't full sky light.
-extern "C" export_name("compute") uint compute() {
+// shaped: some cells have a shape.
+extern "C" export_name("compute") uint compute(uint shaped) {
     seed_sky();
-    sky.spread(cells, true);
+    if (shaped)
+        sky.spread<true>(cells, true);
+    else
+        sky.spread<false>(cells, true);
 
     uint any = 0;
     for (uint h = 0; h < OUT_SIZE; h++) {
@@ -265,36 +307,40 @@ extern "C" export_name("compute") uint compute() {
 }
 
 // Adds the block light from block_cells to out: to the sky light compute wrote (with_sky), or to full sky light.
-// Returns whether out has any light that isn't full sky light.
-extern "C" export_name("compute_block") uint compute_block(uint with_sky) {
+// Returns whether out has any light that isn't full sky light. shaped: some cells have a shape.
+extern "C" export_name("compute_block") uint compute_block(uint with_sky, uint shaped) {
     constexpr uint B = BLOCK_SIZE, BP = B * B, BV = BP * B;
     block.n_seeds = 0;
     for (uint i = 0; i < BV; i++)
         block.light[i] = 0;
-    // the emitters' level in the open cells next to them
+    // the emitters' level in the open cells next to them (their face toward it open)
     for (uint i = 0; i < BV; i++) {
-        const uint emits = block_cells[i] >> 1;
+        const uint emits = block_cells[i] & SOLID ? block_cells[i] >> 1 & 15 : 0;
         if (emits == 0)
             continue;
         const uint x = i % B, y = i / B % B, h = i / BP;
-        auto seed = [&](uint j) {
-            if (!(block_cells[j] & 1))
+        // j: at the emitter's face (its own face toward the emitter is the opposite)
+        auto seed = [&](uint j, uint face) {
+            if (!(block_cells[j] & SOLID) && shape_open[cell_shape(block_cells[j])][face ^ 1] != 0)
                 block.seed(j, emits * UNITS);
         };
         if (x > 0)
-            seed(i - 1);
+            seed(i - 1, FACE_XM);
         if (x < B - 1)
-            seed(i + 1);
+            seed(i + 1, FACE_XP);
         if (y > 0)
-            seed(i - B);
+            seed(i - B, FACE_YM);
         if (y < B - 1)
-            seed(i + B);
+            seed(i + B, FACE_YP);
         if (h > 0)
-            seed(i - BP);
+            seed(i - BP, FACE_HM);
         if (h < B - 1)
-            seed(i + BP);
+            seed(i + BP, FACE_HP);
     }
-    block.spread(block_cells, false);
+    if (shaped)
+        block.spread<true>(block_cells, false);
+    else
+        block.spread<false>(block_cells, false);
 
     uint any = 0;
     for (uint h = 0; h < OUT_SIZE; h++) {

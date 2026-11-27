@@ -383,7 +383,9 @@ static inline vertex_shading shade_vertex(const array_3d<CHUNK_SIZE_E>& data, co
         const uint block = data.get_hxy(half[2] >> 1, half[0] >> 1, half[1] >> 1);
         const uint octant = (half[0] & 1) | (half[1] & 1) << 1 | (half[2] & 1) << 2;
         filled[i] = is_solid_01(block) | (static_cast<uint>(is_shaped(block)) & (shape_octants(block) >> octant & 1));
-        light[i] = filled[i] ? 0 : block & LIGHT_BITS;
+        // the front one in a shaped block's octant (a face half covered by a slab beside it): the shader takes it as
+        // open, a 0 would be full sky light; the shaped block's cell's light (its open part's) instead
+        light[i] = filled[i] ? (i == 0 && !is_solid(block) ? block & LIGHT_BITS : 0) : block & LIGHT_BITS;
     }
     // as ao_value and corner_light: both sides filled, the diagonal is behind a wall corner
     const uint sides = filled[1] + filled[2];

@@ -1,4 +1,4 @@
-import { BLOCK_IDS, blockState, getBlockById, isLiquid } from "../blocks.js";
+import { BLOCK_IDS, blockState, getBlockById, isLiquid, stopsSkyLight } from "../blocks.js";
 import { CHUNK_SIZE } from "../chunk/chunk.js";
 import { FORMAT_VERSION, upgrade } from "./format.js";
 
@@ -11,8 +11,8 @@ const CELLS = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
  * @property {number} version the format version it was saved with (save/format.js)
  * @property {Array<[string, number]>} palette block name (a key of BLOCK_IDS) and state (blockState)
  * @property {Uint16Array} runs pairs of a run length and a palette index, in the chunk's cell order (ChunkBlockData)
- * @property {number | null} top the highest solid block's height in the chunk (0..31), null if none: the sky light's
- *   scan starts above it (world/skyTops.js) without reading the chunk
+ * @property {number | null} top the height of the chunk's highest block that stops the sky light (0..31,
+ *   stopsSkyLight), null if none: the sky light's scan starts above it (world/skyTops.js) without reading the chunk
  */
 
 /**
@@ -29,7 +29,7 @@ export function encodeChunk(data) {
     let runValue = -1, runLength = 0;
     for (let i = 0; i < CELLS; i++) {
         const block = data[i] >>> 0;
-        if (block >>> 31)
+        if (stopsSkyLight(block))
             top = Math.max(top ?? 0, Math.floor(i / (CHUNK_SIZE * CHUNK_SIZE)));
         let index = indices.get(block);
         if (index === undefined) {

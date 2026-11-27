@@ -296,6 +296,33 @@ export function removed(block) {
     return isXQuads(block) && isLiquid(block) ? flooded(BLOCK_IDS.EMPTY, blockHeight(block), isFlowing(block)) : BLOCK_IDS.EMPTY;
 }
 
+/**
+ * The faces of a cell octants close: all 4 octants at the face filled. Bits by face: 0 -x, 1 +x, 2 -y, 3 +y, 4 -z, 5 +z;
+ * the octants at each.
+ */
+const FACE_OCTANTS = [0b0101_0101, 0b1010_1010, 0b0011_0011, 0b1100_1100, 0b0000_1111, 0b1111_0000];
+export const FACE_UP = 1 << 5, FACE_DOWN = 1 << 4;
+/** by shape, the faces its octants close */
+const SHAPE_CLOSED_FACES = SHAPE_OCTANTS.map(octants => FACE_OCTANTS.reduce((faces, f, i) => faces | ((octants & f) === f ? 1 << i : 0), 0));
+
+/**
+ * The faces of a shaped block's cell its octants close (bits: 0 -x, 1 +x, 2 -y, 3 +y, 4 -z, 5 +z): light passes
+ * through the others (docs/proposals/lighting.md; the empty octants of a shape are connected). 0 for anything else.
+ * @param {number} block
+ */
+export function closedFaces(block) {
+    return isShaped(block) ? SHAPE_CLOSED_FACES[blockShape(block)] : 0;
+}
+
+/**
+ * Whether a block stops the sky light falling straight down: a solid one, a shaped one with its top or bottom closed
+ * (a slab; not a vertical slab).
+ * @param {number} block
+ */
+export function stopsSkyLight(block) {
+    return isSolid(block) || (closedFaces(block) & (FACE_UP | FACE_DOWN)) !== 0;
+}
+
 /** a shaped block (a slab): it fills the octants of its shape (blockOctants) */
 export function isShaped(block) {
     return (block >>> SHAPED_BIT & 1) !== 0;

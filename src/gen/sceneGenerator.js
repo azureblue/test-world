@@ -1,4 +1,4 @@
-import { BLOCK_IDS } from "../blocks.js";
+import { BLOCK_IDS, stopsSkyLight } from "../blocks.js";
 import { CHUNK_SIZE, ChunkBlockData, ChunkGenerator, NO_TOP } from "../chunk/chunk.js";
 import { Vec3 } from "../geom.js";
 import { ChunkGeneratorFactory } from "./registry.js";
@@ -38,12 +38,12 @@ export class SceneGenerator extends ChunkGenerator {
         return new SceneGenerator(await ChunkGeneratorFactory.createForName(baseName, seed));
     }
 
-    /** the base's, or the top of the highest box of solid blocks over the column */
+    /** the base's, or the top of the highest box of blocks that stop the sky light over the column */
     solidTops(cx, cy) {
         const tops = this.#base?.solidTops(cx, cy) ?? new Int32Array(CHUNK_SIZE * CHUNK_SIZE).fill(NO_TOP);
         const sx = cx * CHUNK_SIZE, sy = cy * CHUNK_SIZE;
         for (const b of this.#boxes) {
-            if (!(b.value >>> 31))
+            if (!stopsSkyLight(b.value))
                 continue;
             for (let y = Math.max(b.y0, sy); y <= Math.min(b.y1, sy + CHUNK_SIZE - 1); y++)
                 for (let x = Math.max(b.x0, sx); x <= Math.min(b.x1, sx + CHUNK_SIZE - 1); x++) {

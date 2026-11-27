@@ -7,7 +7,7 @@ import { UIntExtWasmMesher } from "../mesh/uIntWasmMesher.js";
 import { Settings } from "../settings.js";
 import { Ticker } from "../ticker.js";
 import { perfDiff } from "../utils.js";
-import { BLOCK_LIGHT, MAX_BLOCK_ID } from "../blocks.js";
+import { BLOCK_LIGHT, blockShape, isShaped, MAX_BLOCK_ID } from "../blocks.js";
 import { pos3ToKey } from "../world/chunkEntry.js";
 import { BLOCK_LIGHT_MARGIN, LIGHT_MARGIN, Lighting } from "../world/lighting.js";
 import { SkyTops } from "../world/skyTops.js";
@@ -47,17 +47,17 @@ const chunkDataLoader = new ChunkDataLoader(generator, new ChunkExtDataFactory()
 const meshOptions = { cutout: Settings.render.cutoutLeaves, cutoutBuried: Settings.render.cutoutBuriedLeaves };
 const mesher = await (Settings.world.fastMesher ? UIntExtWasmMesher.createFastMesher(meshOptions) : UIntExtWasmMesher.createMesher(meshOptions));
 const skyTops = new SkyTops(chunkDataLoader, generator);
-// the saved chunks' highest solid blocks, above the generator's tops where something was built: the sky light's scan
-// of their columns starts there
+// the saved chunks' highest blocks that stop the sky light, above the generator's tops where something was built: the
+// sky light's scan of their columns starts there
 if (savedChunks !== null)
     for (const { cx, cy, cz, top } of savedChunks.tops())
         if (top !== null)
-            skyTops.onBlockChanged(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE + top, true);
+            skyTops.addTop(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE + top);
 const lighting = Settings.light.enabled ? await Lighting.create(chunkDataLoader, skyTops) : null;
 
-/** what a block does to the light: solid (stops it), the block light it gives */
+/** what a block does to the light: solid (stops it), the block light it gives, a shaped one's shape */
 function lightKind(block) {
-    return (block >>> 31) | BLOCK_LIGHT[block & (MAX_BLOCK_ID - 1)] << 1;
+    return (block >>> 31) | BLOCK_LIGHT[block & (MAX_BLOCK_ID - 1)] << 1 | (isShaped(block) ? blockShape(block) + 1 : 0) << 5;
 }
 
 /**
@@ -151,7 +151,7 @@ class WorldState {
             const emitter = BLOCK_LIGHT[old & (MAX_BLOCK_ID - 1)] > 0 || BLOCK_LIGHT[value & (MAX_BLOCK_ID - 1)] > 0;
             const margin = emitter ? BLOCK_LIGHT_MARGIN : lighting?.marginAt(ix, iy, iz) ?? LIGHT_MARGIN;
             this.#changedAround(ix, iy, iz, iz, margin);
-            const top = skyTops.onBlockChanged(ix, iy, iz, (value >>> 31) === 1);
+            const top = skyTops.onBlockChanged(ix, iy, iz, value);
             if (top !== null)
                 this.#changedAround(ix, iy, Math.min(top.from, top.to), Math.max(top.from, top.to), LIGHT_MARGIN);
         }

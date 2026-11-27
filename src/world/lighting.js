@@ -1,4 +1,4 @@
-import { BLOCK_LIGHT, MAX_BLOCK_ID } from "../blocks.js";
+import { BLOCK_LIGHT, blockShape, isShaped, MAX_BLOCK_ID, MAX_SHAPES, SHAPE_OCTANTS } from "../blocks.js";
 import { CHUNK_SIZE, CHUNK_SIZE_BIT_LEN, ChunkDataLoader, posToKey3 } from "../chunk/chunk.js";
 import { Vec3 } from "../geom.js";
 import { Resources } from "../utils.js";
@@ -60,6 +60,7 @@ export class Lighting {
         this.#blockCells = new Uint8Array(buffer, exports.block_cells(), BLOCK_SIZE ** 3);
         this.#skyFrom = new Uint8Array(buffer, exports.sky_from(), SIZE * SIZE);
         this.#out = new Uint8Array(buffer, exports.out(), OUT_SIZE ** 3);
+        new Uint8Array(buffer, exports.shape_open(), (MAX_SHAPES + 1) * 6).set(shapeOpenTable());
     }
 
     /**
@@ -86,15 +87,15 @@ export class Lighting {
             return null;
         let sky = false;
         if (!open) {
-            this.#gatherCells(chunkPos, this.#cells, SIZE, RANGES);
+            const shaped = this.#gatherCells(chunkPos, this.#cells, SIZE, RANGES);
             // the chunk (with its border) solid: nothing to light
             if (this.#allSolid())
                 return null;
-            sky = this.#exports.compute() !== 0;
+            sky = this.#exports.compute(shaped ? 1 : 0) !== 0;
         }
         if (emitters) {
-            this.#gatherCells(chunkPos, this.#blockCells, BLOCK_SIZE, BLOCK_RANGES);
-            return this.#exports.compute_block(open ? 0 : 1) ? this.#out : null;
+            const shaped = this.#gatherCells(chunkPos, this.#blockCells, BLOCK_SIZE, BLOCK_RANGES);
+            return this.#exports.compute_block(open ? 0 : 1, shaped ? 1 : 0) ? this.#out : null;
         }
         return sky ? this.#out : null;
     }
@@ -146,9 +147,14 @@ export class Lighting {
         return has;
     }
 
-    /** a region's cells (its size, the ranges of its margin): bit 0 solid, bits 1..4 the block light it gives */
+    /**
+     * a region's cells (its size, the ranges of its margin): bit 0 solid, then a solid one's bits 1..4 the block light
+     * it gives, a shaped one's bits 1..6 its shape + 1 (mesh/cpp/light.cpp)
+     * @returns {boolean} whether there's a shaped block among them
+     */
     #gatherCells(chunkPos, cells, size, ranges) {
         const idMask = MAX_BLOCK_ID - 1;
+        let shaped = false;
         for (const [dz, [h0, h1, rh]] of ranges) {
             for (const [dy, [y0, y1, ry]] of ranges) {
                 for (const [dx, [x0, x1, rx]] of ranges) {
@@ -160,12 +166,17 @@ export class Lighting {
                             for (let x = x0; x < x1; x++, i++, r++) {
                                 const block = data[i];
                                 cells[r] = (block >>> 31) | BLOCK_LIGHT[block & idMask] << 1;
+                                if (isShaped(block)) {
+                                    cells[r] |= (blockShape(block) + 1) << 1;
+                                    shaped = true;
+                                }
                             }
                         }
                     }
                 }
             }
         }
+        return shaped;
     }
 
     /** whether the mesher's input cells (the chunk with a 1 block border) are all solid */
@@ -201,4 +212,28 @@ export class Lighting {
         }
         return open;
     }
+}
+
+/**
+ * The light pass's table (shape_open in mesh/cpp/light.cpp): by shape + 1 (0: no shape, all open) and face (-x, +x,
+ * -y, +y, -z, +z), the quarters of the face the shape's octants leave open, bit qa | qb << 1 over the face's two other
+ * axes in axis order. Light crosses between two cells where their faces have an open quarter in common.
+ * @returns {Uint8Array} (MAX_SHAPES + 1) * 6
+ */
+function shapeOpenTable() {
+    const table = new Uint8Array((MAX_SHAPES + 1) * 6);
+    for (let s = 0; s <= MAX_SHAPES; s++) {
+        const octants = s === 0 ? 0 : SHAPE_OCTANTS[s - 1];
+        for (let face = 0; face < 6; face++) {
+            const axis = face >> 1, a = axis === 0 ? 1 : 0, b = axis === 2 ? 1 : 2;
+            let open = 0;
+            for (let q = 0; q < 4; q++) {
+                const octant = (face & 1) << axis | (q & 1) << a | (q >> 1) << b;
+                if (!(octants >> octant & 1))
+                    open |= 1 << q;
+            }
+            table[s * 6 + face] = open;
+        }
+    }
+    return table;
 }
