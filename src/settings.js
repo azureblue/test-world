@@ -70,7 +70,7 @@ export const Settings = {
         startYaw: 0,
         startPitch: 0,
         // vertical, degrees
-        fieldOfView: 60,
+        fieldOfView: 64,
         near: 0.1,
         far: 640,
         // degrees per pixel of mouse movement
@@ -92,11 +92,11 @@ export const Settings = {
         mode: "walk",
         // the body is a box: width x width x height, the feet at the bottom centre
         width: 0.6,
-        height: 1.8,
+        height: 1.78,
         // camera height above the feet
-        eyeHeight: 1.62,
+        eyeHeight: 1.7,
         // the box always stays this far from blocks it touches, in blocks (> 0: no exact contact, no float trouble)
-        skin: 0.001,
+        skin: 0.1,
         // a block can be placed into the body if it lifts the player onto it by at most this much, in blocks: near the top
         // of a jump (one block per jump), floating in water; not when standing
         placeLiftMax: 0.5,
