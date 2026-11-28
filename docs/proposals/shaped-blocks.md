@@ -89,15 +89,16 @@ change: older saves have no shaped blocks.
 Vertical slabs (`SLAB_X0`, `SLAB_X1`, `SLAB_Y0`, `SLAB_Y1`) and stairs (`STAIRS_X0` .. `STAIRS_Y1_DOWN`) needed only
 their octants and the placement: the meshers, collision, light and the ray cast take any shape. A stair's side is an L
 of quarters, a row and a quarter: the quarter's inner corner, in the middle of the row's edge, gets the row's blend
-there. A seam can still show where partial faces of two cells meet, a merged rectangle spanning an edge the other has
-a corner in the middle of (odd mixes of the shapes; not in walls, floors, ceilings or staircases of them): the edge
-blend across cells only knows whole faces.
+there. A corner in the middle of a block face's edge gets the blend of that edge's ends whenever the face across it
+(any block's: a whole face, or a rectangle of a stair's or a slab's quarters spanning the edge) has no vertex there.
+Blends of blends are as near as two AO levels make them (a staircase's turn: 0.05 of shadow off); odd mixes of the
+shapes can still show small seams.
 
 ## Order of work
 
 1. Slabs: the bits, the meshers, collision with step up, the ray cast, placement and merging, outline, icon; vertical
    slabs.
 2. Stairs: the shapes, placement by facing; the meshers, collision and the ray cast need nothing new. Done.
-3. Corner stairs. Done; a staircase's turn can show a small AO seam where its corner meets the stairs beside it.
+3. Corner stairs. Done.
 
 AO and light with shaped blocks are done (after step 1).

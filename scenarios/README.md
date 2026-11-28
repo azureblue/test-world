@@ -27,3 +27,5 @@ The page keeps the `TestGame` in `window.testGame`, for the console.
 | `landscape` | the default terrain from above, towards the horizon (fog, sky) |
 | `trees` | every tree species (`src/gen/trees/`), a few seeds of each, on flat grass |
 | `dig` | flat rock and a whole chunk of solid rock on it, to dig tunnels into (the light in them) |
+| `stairs` | stairs on flat grass: a ring around a platform (outer corners), a ring around a pit (inner corners), a staircase up to a landing |
+| `stairsRoom` | a closed room lit by a lamp, a row of stairs ending next to a column of stairs: where a stair's L-shaped side meets the tall side of the next (the AO at x 10, y 6, z 1.5) |
