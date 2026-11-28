@@ -56,27 +56,10 @@ static inline uint open_cells(uint ao) {
     return ao == 3 ? 1 : 4 - ao;
 }
 
-// the shadow of an AO level, as cube_solid.vert's shadow_values, in hundredths
-constexpr int SHADOW[4] = {0, 30, 40, 50};
-
-// Two vertices' shading averaged, as the shader would show it half way between them: the shadow the mean of both's
-// (each the mean of its two AO levels: ao, blend), as near as any two levels make it; the light per open cell
-// (divided by the first level's)
+// Two vertices' shading averaged, as the shader would show it half way between them: the shadow of both AO levels
+// (blend), the light per open cell (divided by the first's)
 static inline vertex_shading average(vertex_shading v0, vertex_shading v1) {
-    const int want = SHADOW[v0.ao] + SHADOW[v0.blend] + SHADOW[v1.ao] + SHADOW[v1.blend];
-    // the pair of levels nearest to it: 2 levels' sum doubled against 4 levels' sum
-    uint first = v0.ao, second = v1.ao;
-    int best = 1 << 30;
-    for (uint l0 = 0; l0 < 4; l0++)
-        for (uint l1 = l0; l1 < 4; l1++) {
-            const int off = 2 * (SHADOW[l0] + SHADOW[l1]) - want;
-            if ((off < 0 ? -off : off) < best) {
-                best = off < 0 ? -off : off;
-                first = l0;
-                second = l1;
-            }
-        }
-    const uint o0 = open_cells(v0.ao), o1 = open_cells(v1.ao), o = open_cells(first);
+    const uint o0 = open_cells(v0.ao), o1 = open_cells(v1.ao), o = o0;
     uint light = 0;
     constexpr uint shifts[2] = {SKY_DARKNESS_SHIFT, BLOCK_LIGHT_SHIFT};
     for (const uint shift : shifts) {
@@ -84,45 +67,17 @@ static inline vertex_shading average(vertex_shading v0, vertex_shading v1) {
         const uint num = ((v0.light >> shift & 0x3f) * o1 + (v1.light >> shift & 0x3f) * o0) * o, den = 2 * o0 * o1;
         light |= (num + den / 2) / den << shift;
     }
-    return {first, light, second};
+    return {v0.ao, light, v1.ao};
 }
 
-// The quarters of a block's face (direction d) its octants show in the plane of its cell's face (the outer layer):
-// those of its outer octants the block in front doesn't cover (a shaped one by its octants), bit qa | qb << 1 (qa, qb
-// across the normal in axis order, as encode_octants); a cutout block's whole face as long as it's drawn. h, x, y: the
-// block in the input.
-static inline uint plane_quarters(const array_3d<CHUNK_SIZE_E>& data, uint d, int h, int x, int y) {
-    const uint block = data.get_hxy(h, x, y);
-    const uint octants = is_solid(block) ? 0xff : is_shaped(block) ? shape_octants(block) : 0;
-    const uint n = NORMAL_AXIS[d], a = (n + 1) % 3, b = (n + 2) % 3;
-    int front[3] = {x, y, h};
-    front[n] += NORMAL_POSITIVE[d] ? 1 : -1;
-    const uint in_front = data.get_hxy(front[2], front[0], front[1]);
-    if (octants == 0 || hides_face(in_front))
-        return 0;
-    const uint front_octants = is_shaped(in_front) && !(is_solid(block) && !hides_face(block)) ? shape_octants(in_front) : 0;
-    const uint outer = NORMAL_POSITIVE[d] ? 1 : 0;
-    uint quarters = 0;
-    for (uint q = 0; q < 4; q++) {
-        uint c[3];
-        c[n] = outer;
-        c[a] = q & 1;
-        c[b] = q >> 1;
-        const uint octant = c[0] | c[1] << 1 | c[2] << 2;
-        if ((octants >> octant & 1) && !(front_octants >> (octant ^ (1u << n)) & 1))
-            quarters |= 1u << q;
-    }
-    return quarters;
-}
-
-// A vertex of a quarter in the plane of its cell's face (the outer layer), in the middle of an edge of that face, where
-// the face of the block across the edge (in the same plane) has no vertex: a whole face, or a rectangle of its
-// quarters spanning the edge (a stair's side beside the L of another's). That face blends the edge's two corners
-// there; the vertex gets the same, else the two don't meet (a T-junction: a seam). vertex, cell: in half blocks in
-// the input (cell: the block's corner).
+// A vertex of a quarter in the plane of its cell's face (the outer layer), in the middle of an edge of that face, next
+// to the block across the edge drawing its whole face in the same plane (a wall's face under the one a slab half
+// covers): that face has no vertex there, it blends the edge's two corners. The vertex gets the same, else the two
+// faces don't meet (AO fading over half a block above the edge, over a whole one under it). vertex, cell: in half
+// blocks in the input (cell: the block's corner).
 static inline vertex_shading edge_middle(const array_3d<CHUNK_SIZE_E>& data, vertex_shading shading, const int vertex[3], const int cell[3], uint d) {
-    const uint n = NORMAL_AXIS[d], a = (n + 1) % 3, b = (n + 2) % 3;
-    const uint across[2] = {a, b};
+    const uint n = NORMAL_AXIS[d];
+    const uint across[2] = {(n + 1) % 3, (n + 2) % 3};
     for (uint e = 0; e < 2; e++) {
         // the edge is across axis `on` (at its 0 or 2), the vertex in its middle along `along`
         const uint on = across[e], along = across[1 - e];
@@ -131,21 +86,13 @@ static inline vertex_shading edge_middle(const array_3d<CHUNK_SIZE_E>& data, ver
             continue;
         int next[3] = {cell[0] / 2, cell[1] / 2, cell[2] / 2};
         next[on] += at == 0 ? -1 : 1;
-        rect rects[4];
-        const uint count = quarter_rects(plane_quarters(data, d, next[2], next[0], next[1]), rects);
-        // the vertex on the neighbour's face (half blocks, a and b): on its side of the edge
-        int p[3];
-        p[on] = at == 0 ? 2 : 0;
-        p[along] = 1;
-        bool spans = false;
-        for (uint i = 0; i < count; i++) {
-            const int a0 = rects[i].a, a1 = a0 + rects[i].a_size, b0 = rects[i].b, b1 = b0 + rects[i].b_size;
-            spans |= ((p[a] == a0 || p[a] == a1) && b0 < p[b] && p[b] < b1) || ((p[b] == b0 || p[b] == b1) && a0 < p[a] && p[a] < a1);
-        }
-        if (!spans)
+        int front[3] = {next[0], next[1], next[2]};
+        front[n] += NORMAL_POSITIVE[d] ? 1 : -1;
+        const uint block = data.get_hxy(next[2], next[0], next[1]), in_front = data.get_hxy(front[2], front[0], front[1]);
+        // a whole face: a solid block's not hidden, not by quarters (a shaped block in front, unless it's cutout)
+        if (!is_solid(block) || hides_face(in_front) || (is_shaped(in_front) && hides_face(block)))
             continue;
-        // the edge's ends as the neighbour's face has them (its corners: by cells, or half cells near shaped blocks;
-        // not this face's own, which differ with a shaped block in front of one of them)
+        // its corners on the edge, as it has them (by cells)
         vertex_shading next_corners[4], corners[2];
         block_face_corners(data, static_cast<Direction>(d), next[2], next[0], next[1], next_corners);
         const int next_pos[3] = {next[0] * 2, next[1] * 2, next[2] * 2}, size[3] = {2, 2, 2};
